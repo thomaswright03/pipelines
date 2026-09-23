@@ -9,6 +9,11 @@ on:
 jobs:
   typecheck-and-lint:
     runs-on: ubuntu-latest
+    env:
+      # `prisma generate` (this project's postinstall) only needs this var
+      # to resolve, never an actual connection — CI never talks to a real
+      # database.
+      PIPELINES_DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci"
     steps:
       - uses: actions/checkout@v4
 
