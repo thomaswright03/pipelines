@@ -80,7 +80,7 @@ export default function DataleadsellControls() {
       <p className="text-xs text-zinc-500">
         Only agents an email was actually found for get saved — no-email results are dropped rather than
         cluttering the table. Neither Yelp nor ADRE gives a website, so each run guesses one from the
-        business's name (a handful of plausible domains, checked directly — no search engine involved)
+        business&apos;s name (a handful of plausible domains, checked directly — no search engine involved)
         before looking for an email on it. This is a low-accuracy heuristic, so most runs will still add
         fewer leads than they scrape. No automatic reply/bounce detection yet — when an agent replies or
         an email bounces, open their page and click &quot;Mark replied&quot; or &quot;Mark bounced&quot;.

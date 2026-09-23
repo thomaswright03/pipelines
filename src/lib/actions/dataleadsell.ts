@@ -13,7 +13,7 @@ import { isSuppressed, suppressEmail } from "@/lib/email-suppression";
 import { buildAgentOutreachEmail } from "@/lib/dataleadsell-email-template";
 import { pickNextAgentCity, markAgentCityUsed } from "@/lib/agent-city-picker";
 import { withRetry } from "@/lib/with-retry";
-import { digitsOnly, formatPhone } from "@/lib/phone";
+import { formatPhone } from "@/lib/phone";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 
 const BUSINESS_TYPE = "real estate agent";
