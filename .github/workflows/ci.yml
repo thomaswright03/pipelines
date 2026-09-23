@@ -26,6 +26,12 @@ jobs:
       # database — it only reads prisma/schema.prisma, never connects.
       - run: npm ci
 
-      - run: npx tsc --noEmit
+      # `next build` runs the real TypeScript check itself — a bare `tsc
+      # --noEmit` misses Next's generated route types (LayoutProps etc.),
+      # which only exist after a build has run at least once. Confirmed
+      # this needs no real secrets, only the dummy PIPELINES_DIRECT_URL
+      # above — instrumentation.ts's env validation only runs when a
+      # server actually starts, not at build time.
+      - run: npm run build
 
       - run: npm run lint
