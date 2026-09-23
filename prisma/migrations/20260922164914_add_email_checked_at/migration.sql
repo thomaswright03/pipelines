@@ -1,0 +1,2 @@
+ALTER TABLE "AgentLead" ADD COLUMN "emailCheckedAt" TIMESTAMP(3);
+ALTER TABLE "Lead" ADD COLUMN "emailCheckedAt" TIMESTAMP(3);

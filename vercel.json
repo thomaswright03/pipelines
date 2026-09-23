@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/stale-contacts",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/vault-daily",
+      "schedule": "33 15 * * *"
+    }
+  ]
+}

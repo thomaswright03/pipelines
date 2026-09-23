@@ -1,0 +1,13 @@
+# Local secrets/config never belong in the deployment bundle — Vercel's own
+# env vars (set via `vercel env add` / the dashboard) are what the deployed
+# app actually reads. Uploading .env here previously caused Next.js to warn
+# "Detected .env file, it is strongly recommended to use Vercel's env
+# handling instead" during the build.
+.env
+.env.local
+.env.vercel.local
+.env*.local
+
+# Local scraper interpreter — meaningless in a serverless deployment that
+# has no Python/Chrome anyway (see src/lib/local-only.ts).
+scripts/__pycache__

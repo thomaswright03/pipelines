@@ -1,0 +1,205 @@
+// Prisma schema for Pipelines — local host for email/SMS marketing pipelines.
+// Each pipeline that needs its own data gets its own model prefix
+// (AgentLead/AgentEmailLog/ScrapedAgentCity for dataleadsell) so pipelines
+// stay independent within this one shared database.
+//
+// Backed by Neon Postgres (not a local SQLite file) so the same data is
+// visible from both this Mac and the Vercel deployment — see .env for
+// which Neon database this points at.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Postgres (Neon, via Vercel) instead of a local SQLite file — a deployed
+// serverless function has no persistent local disk, so this has to be a
+// real network database reachable from both this Mac and Vercel.
+//
+// Prisma 7 moved connection URLs out of the schema entirely — see
+// prisma.config.ts for PIPELINES_DATABASE_URL/PIPELINES_DIRECT_URL (deliberately
+// not the generic DATABASE_URL the Vercel Neon integration itself injects,
+// which points at "neondb", another project's (budget-app) database on
+// this same Neon store) and db.ts for the actual runtime connection, which
+// goes through Neon's driver adapter rather than this datasource block at
+// all.
+datasource db {
+  provider = "postgresql"
+}
+
+// Editable copy for each dashboard card. Keyed by the pipeline id in
+// lib/pipelines.ts (technical wiring — cwd, ports, hrefs — stays in code,
+// only the human-facing description is editable). A pipeline with no row
+// here yet falls back to the defaults in lib/pipeline-meta-defaults.ts, so
+// nothing has to be pre-seeded.
+model PipelineMeta {
+  id                  String   @id
+  name                String
+  company             String
+  productDescription  String
+  pipelineDescription String
+  updatedAt           DateTime @updatedAt
+}
+
+// A recipient who replied "STOP"/"unsubscribe" to any pipeline's outreach.
+// Checked before every send (both pipelines, plus the daily automated
+// run) — CAN-SPAM requires honoring an opt-out, and the outreach email
+// templates now promise one, so this is what makes that promise true
+// rather than just text nobody enforces.
+model SuppressedEmail {
+  email     String   @id
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+// Desired daily-automation schedule per pipeline, editable from that
+// pipeline's own page. This is the operator's "what I want it set to"
+// record, not the live trigger itself — the actual Vercel Cron fire time
+// lives in vercel.json (Vercel Hobby cron can't be changed without a
+// redeploy), so a change saved here takes effect once vercel.json is
+// updated to match and redeployed.
+model PipelineSchedule {
+  id        String   @id // pipeline id, e.g. "vault-pipeline"
+  enabled   Boolean  @default(true)
+  hour      Int      @default(8) // local Arizona time (MST, UTC-7, no DST)
+  minute    Int      @default(33)
+  leadCount Int      @default(30)
+  updatedAt DateTime @updatedAt
+}
+
+// --- dataleadsell.com outreach pipeline ---
+// Sells Probate Property Leads subscriptions (by county) to real estate
+// agents. Same shape as Vault's own outreach pipeline (bizhub's Lead model)
+// — discover via Google Maps scrape, find contact info, email/SMS outreach,
+// track replies/bounces — just targeting real estate agents instead of
+// generic small businesses, and scoped to the counties dataleadsell.com
+// currently sells: Maricopa County AZ, Salt Lake County UT, Utah County UT.
+model AgentLead {
+  id           String    @id @default(cuid())
+  name         String
+  brokerage    String?
+  email        String?
+  phone        String?
+  address      String?
+  city         String? // the city the scrape query targeted
+  county       String? // Maricopa | Salt Lake | Utah
+  state        String?
+  website      String?
+  source       String?
+  status       String    @default("new") // new|contacted|responded|subscribed|not_interested|lost
+  starred      Boolean   @default(false)
+  emailCheckedAt DateTime? // set whenever a bulk/individual email lookup ran, found or not — lets a sweep skip leads already tried
+  lastEmailedAt DateTime?
+  lastTextedAt DateTime?
+  repliedAt    DateTime?
+  ourReplyAt   DateTime?
+  notes        String?
+  nextFollowUpDate DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  emailLogs EmailSendLog[]
+}
+
+model EmailSendLog {
+  id                String     @id @default(cuid())
+  leadId            String?
+  lead              AgentLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  email             String
+  sentAt            DateTime   @default(now())
+  bounced           Boolean    @default(false)
+  bouncedAt         DateTime?
+  // The sending provider's id for this specific send (currently just
+  // nodemailer's locally-generated Message-ID via ZeptoMail's SMTP relay —
+  // see send-email.ts for why that's not yet useful for bounce-webhook
+  // correlation the way it was with Resend's HTTP API). Bounces are marked
+  // via the manual "Mark bounced" button until a real webhook is wired up.
+  providerMessageId String?    @unique
+}
+
+// Tracks which (city, county) targets the scraper has already covered, so
+// "Run pipeline" cycles through the county pool instead of re-scraping the
+// same city — same pattern as Vault's ScrapedCity.
+model ScrapedAgentCity {
+  id        String   @id @default(cuid())
+  city      String
+  county    String
+  state     String
+  queriedAt DateTime @default(now())
+
+  @@unique([city, county, state])
+}
+
+// --- Cold Outreach pipeline (Vault, ported as-is) ---
+// This is Vault's own client-acquisition pipeline (bizhub's Lead model and
+// stage machine), copied in full so it runs standalone here rather than
+// only being reachable by linking out to bizhub. Generic small-business
+// outreach for Wright AI Solutions, not scoped to a single product the way
+// dataleadsell is. See LEAD_GEN_PIPELINE_SPEC.md for the exact stage
+// transition rules this implements.
+model Lead {
+  id               String    @id @default(cuid())
+  name             String
+  company          String?
+  email            String?
+  phone            String?
+  address          String?
+  city             String? // the city the scrape query targeted, not parsed from address
+  state            String?
+  website          String?
+  source           String?
+  status           String    @default("new")
+  // new | contacted | responded | appointment_set | working_for | paying_client
+  // | cold_call_list | contactless_list | lost
+  callOutcome      String? // interested|not_interested|too_busy|no_answer|no_need|unable_to_contact
+  starred          Boolean   @default(false)
+  emailCheckedAt   DateTime? // set whenever a bulk/individual email lookup ran, found or not — lets a sweep skip leads already tried
+  lastEmailedAt    DateTime?
+  repliedAt        DateTime? // a REAL reply was detected (automated or manual override)
+  ourReplyAt       DateTime? // we replied back — always manual, never auto-set
+  estimatedValue   Float?
+  notes            String?
+  nextFollowUpDate DateTime?
+  appointmentAt    DateTime? // set when status moves to appointment_set
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  activities LeadActivity[]
+  emailLogs  LeadEmailSendLog[]
+}
+
+model LeadActivity {
+  id     String   @id @default(cuid())
+  leadId String
+  lead   Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type   String // call | email | meeting | note
+  notes  String
+  date   DateTime @default(now())
+}
+
+// One row per outreach send attempt for the Lead model — separate from
+// AgentLead's EmailSendLog above so each pipeline's send history and stats
+// stay independent, same as their other data.
+model LeadEmailSendLog {
+  id                String    @id @default(cuid())
+  leadId            String?
+  lead              Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  email             String
+  sentAt            DateTime  @default(now())
+  bounced           Boolean   @default(false)
+  bouncedAt         DateTime?
+  // See EmailSendLog.providerMessageId above.
+  providerMessageId String?   @unique
+}
+
+// Tracks which "city, state" pairs the scraper has already used for the
+// Lead pipeline, so the random picker for the next scrape target never
+// repeats one until the whole pool is exhausted.
+model ScrapedCity {
+  id        String   @id @default(cuid())
+  city      String
+  state     String
+  queriedAt DateTime @default(now())
+
+  @@unique([city, state])
+}
