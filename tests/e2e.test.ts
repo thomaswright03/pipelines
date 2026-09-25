@@ -68,7 +68,7 @@ describe("Cold Outreach, end to end", () => {
     const bravo = await prisma.lead.findFirstOrThrow({ where: { name: "Bravo Dental" } });
     expect(await markBouncedAction("cold-outreach", bravo.id)).toEqual({
       ok: true,
-      message: "Marked Bravo Dental as bounced — moved to Lost.",
+      message: "Marked Bravo Dental as bounced — moved from Contacted to Lost.",
     });
 
     const alpha = await prisma.lead.findFirstOrThrow({ where: { name: "Alpha Plumbing" } });
@@ -109,7 +109,7 @@ describe("dataleadsell, end to end", () => {
       data: { name: "Eli Evans", brokerage: "Desert Realty", phone: "(602) 555-0122", county: "Maricopa", state: "AZ" },
     });
     const sweep = await findEmailsChunkAction("dataleadsell");
-    expect(sweep).toMatchObject({ ok: true, result: { checked: 1, found: 0, remaining: 0 } });
+    expect(sweep).toMatchObject({ ok: true, result: { checked: 1, found: 0, unreachable: 0, remaining: 0 } });
     expect((await prisma.agentLead.findUniqueOrThrow({ where: { id: eli.id } })).status).toBe("cold_call_list");
 
     expect(await confirmColdCallAction("dataleadsell", eli.id, "interested", "Wants the Maricopa plan")).toEqual({
@@ -118,7 +118,12 @@ describe("dataleadsell, end to end", () => {
     });
     const after = await prisma.agentLead.findUniqueOrThrow({ where: { id: eli.id } });
     expect(after).toMatchObject({ status: "responded", callOutcome: "interested" });
-    expect(after.notes).toMatch(/Wants the Maricopa plan/);
+    // The call is in the lead's history, not its notes.
+    expect(after.notes).toBeNull();
+    expect(await prisma.agentLeadActivity.findFirstOrThrow({ where: { leadId: eli.id } })).toMatchObject({
+      type: "call",
+      notes: "Cold call — Interested: Wants the Maricopa plan",
+    });
 
     const stats = await getDataleadsellStats();
     expect(stats).toMatchObject({ emailsSentTotal: 1, leadsEmailed: 1, replied: 0, replyRate: 0 });

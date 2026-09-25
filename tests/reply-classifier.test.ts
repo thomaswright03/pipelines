@@ -27,6 +27,11 @@ describe("classifyReply — not opt-outs", () => {
     ["'never stop sending these'", "Never stop sending these, they're gold."],
     ["'not asking to unsubscribe'", "I'm not asking to unsubscribe — just send pricing."],
     ["'do not want to opt out'", "I do not want to opt out, call me."],
+    ["'please don't stop sending these'", "Please don't stop sending these."],
+    ["'don't hesitate to email me'", "Don't hesitate to email me with the details."],
+    ["'don't remove me from your list'", "Don't remove me from your list, I want the updates."],
+    ["'I'm not asking you to leave me alone'", "I'm not asking you to leave me alone — just send less often."],
+    ["'don't contact me until March'", "Busy season — don't contact me until March, then yes."],
   ];
   for (const [label, text] of cases) {
     it(label, () => {
@@ -48,6 +53,21 @@ describe("classifyReply — genuine opt-outs", () => {
     ["a negation earlier in the sentence doesn't hide a real request", "I'm not interested, stop emailing me.", "I'm not interested, stop emailing me."],
     ["a negated phrase followed by a real one", "Don't stop by. Please stop emailing me.", "Don't stop by. Please stop emailing me."],
     ["please stop emailing me", "Please stop emailing me", "Please stop emailing me"],
+    // Plain requests not to be contacted, with or without "again".
+    ["don't email me", "Don't email me.", "Don't email me."],
+    ["do not contact me", "Do not contact me.", "Do not contact me."],
+    ["not interested plus don't reach out again", "I'm not interested. Please don't reach out again.", "I'm not interested. Please don't reach out again."],
+    ["quit emailing me", "Quit emailing me", "Quit emailing me"],
+    ["cease contacting", "Cease contacting this office.", "Cease contacting this office."],
+    ["please remove from list", "please remove from list", "please remove from list"],
+    ["remove this address from your list", "Remove this address from your mailing list.", "Remove this address from your mailing list."],
+    ["delete my email address", "Delete my email address", "Delete my email address"],
+    ["cease and desist", "This is a cease and desist.", "This is a cease and desist."],
+    ["leave me alone", "Leave me alone", "Leave me alone"],
+    ["don't contact us", "We're all set, don't contact us", "We're all set, don't contact us"],
+    ["don't send me emails", "Please don't send me emails.", "Please don't send me emails."],
+    ["don't message me anymore", "don't message me anymore thanks", "don't message me anymore thanks"],
+    ["stop it", "Stop it!", "Stop it!"],
   ];
   for (const [label, text, trigger] of cases) {
     it(label, () => {
@@ -66,5 +86,30 @@ describe("classifyReply — genuine opt-outs", () => {
 describe("extractNewReplyText", () => {
   it("keeps only the replier's words", () => {
     expect(extractNewReplyText(`Great, call me.\r\n\r\n-- \r\nJoe\r\n> quoted`)).toBe("Great, call me.");
+  });
+});
+
+describe("classifyReply — replies that need a human look", () => {
+  const cases: [string, string, RegExp][] = [
+    ["a bare 'not interested'", "Not interested.", /not interested/],
+    ["'no thanks'", "No thanks, I have a lead source already.", /no thanks/],
+    ["wrong person", "You have the wrong person, Jane left the brokerage.", /wrong person/],
+    ["how did you get my email", "How did you get my email?", /how we got their address/],
+    ["spam", "This is spam.", /spam/],
+  ];
+  for (const [label, text, reason] of cases) {
+    it(label, () => {
+      const result = classifyReply({ subject: "Re: Probate leads", text });
+      expect(result.optOut).toBe(false);
+      expect(result.review).toMatch(reason);
+    });
+  }
+
+  it("an interested reply needs no look", () => {
+    expect(classifyReply({ text: "Yes, send pricing please." }).review).toBeNull();
+  });
+
+  it("an opt-out wins over 'not interested'", () => {
+    expect(classifyReply({ text: "Not interested, remove me." })).toMatchObject({ optOut: true, review: null });
   });
 });

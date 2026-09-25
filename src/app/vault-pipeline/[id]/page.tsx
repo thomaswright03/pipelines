@@ -4,12 +4,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import LeadActions from "@/components/LeadActions";
 import ColdOutreachStagePanel from "@/components/ColdOutreachStagePanel";
-import VaultActivityLog from "@/components/VaultActivityLog";
+import LeadActivityLog from "@/components/LeadActivityLog";
 import { DetailField, EmailPreview, LedgerNotice, SendHistory } from "@/components/LeadDetailParts";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { loadLeadContext } from "@/lib/lead-page";
 import { formatDate, formatDateTime, toZonedInputValue } from "@/lib/time";
-import { formatCurrency } from "@/lib/format";
+import { formatCents } from "@/lib/format";
 import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +64,7 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
               <DetailField label="We replied back" value={formatDateTime(lead.ourReplyAt)} />
               <DetailField label="Appointment" value={formatDateTime(lead.appointmentAt)} />
               <DetailField label="Call outcome" value={lead.callOutcome ? (CALL_OUTCOME_LABEL[lead.callOutcome] ?? lead.callOutcome) : "—"} />
-              <DetailField label="Estimated value" value={formatCurrency(lead.estimatedValue)} />
+              <DetailField label="Estimated value" value={formatCents(lead.estimatedValueCents)} />
             </dl>
             {lead.notes && (
               <div className="mt-3 border-t border-zinc-200 pt-3 text-sm dark:border-zinc-800">
@@ -76,9 +76,10 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
 
           <EmailPreview subject={preview.subject} body={preview.body} />
           <SendHistory logs={lead.emailLogs} />
-          <VaultActivityLog
+          <LeadActivityLog
+            pipeline="cold-outreach"
             leadId={lead.id}
-            activities={lead.activities.map((a) => ({ id: a.id, type: a.type, notes: a.notes, date: formatDate(a.date) }))}
+            activities={lead.activities.map((a) => ({ id: a.id, type: a.type, notes: a.notes, date: formatDateTime(a.date) }))}
           />
         </div>
 
@@ -94,9 +95,11 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
               email: lead.email,
               sendBlockedReason: lead.sendBlockedReason,
               emailed: lead.emailLogs.length > 0,
+              bounced: lead.emailLogs.length > 0 && lead.emailLogs.every((log) => log.bounced),
               replied: lead.repliedAt !== null,
               ourReplied: lead.ourReplyAt !== null,
               replyNeedsReview: lead.replyNeedsReview,
+              replyReviewReason: lead.replyReviewReason,
             }}
           />
           <ColdOutreachStagePanel

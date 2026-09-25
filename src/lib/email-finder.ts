@@ -5,9 +5,12 @@
 // business had no website or nothing findable on it. That fallback is
 // gone: it needed local Python + Chrome, which don't exist on Vercel, and
 // per-lookup email-finder APIs (Hunter.io etc.) were deliberately skipped
-// on cost grounds. A lead this can't find an email for just has no email; callers
-// route it to phone outreach the same way they already do for any other
-// "couldn't find one" case.
+// on cost grounds. A lead this can't find an email for just has no email;
+// callers route it to phone outreach — but only when the site was actually
+// read. A site that timed out or errored is reported as `unreachable`, so
+// the lead is left alone and tried again later.
+import { classifyFetchError, classifyStatus, type FetchFailure } from "@/lib/fetch-failure";
+
 const FETCH_TIMEOUT_MS = 8000;
 const CONTACT_PATHS = ["/contact", "/contact-us"];
 
@@ -104,8 +107,10 @@ function findContactLink(html: string, base: URL): string | null {
   return null;
 }
 
-async function fetchPage(url: string, outer?: AbortSignal): Promise<string | null> {
-  if (outer?.aborted) return null;
+type PageResult = { html: string; failure: null } | { html: null; failure: FetchFailure };
+
+async function fetchPage(url: string, outer?: AbortSignal): Promise<PageResult> {
+  if (outer?.aborted) return { html: null, failure: "unreachable" };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -113,13 +118,12 @@ async function fetchPage(url: string, outer?: AbortSignal): Promise<string | nul
       signal: outer ? AbortSignal.any([controller.signal, outer]) : controller.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; PipelinesOutreachBot/1.0)" },
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { html: null, failure: classifyStatus(res.status) };
     const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("html")) return null;
-    return await res.text();
-  } catch {
-    // Unreachable site, timeout, TLS failure — all mean "no email here".
-    return null;
+    if (!contentType.includes("html")) return { html: null, failure: "missing" };
+    return { html: await res.text(), failure: null };
+  } catch (err) {
+    return { html: null, failure: classifyFetchError(err) };
   } finally {
     clearTimeout(timer);
   }
@@ -130,6 +134,12 @@ export type WebsiteScan = {
   emails: string[];
   /** The HTML of every page that was fetched, so callers can check whose site it is. */
   pages: string[];
+  /**
+   * True when the homepage couldn't be reached (timeout, connection error,
+   * 5xx) and no page was read at all: the scan says nothing about whether
+   * the site lists an address.
+   */
+  unreachable: boolean;
 };
 
 /**
@@ -143,21 +153,22 @@ export async function scanWebsite(website: string, signal?: AbortSignal): Promis
   try {
     base = new URL(website);
   } catch {
-    return { emails: [], pages: [] };
+    return { emails: [], pages: [], unreachable: false };
   }
 
   const pages: string[] = [];
   const candidates: string[] = [];
   const read = async (url: string) => {
-    const html = await fetchPage(url, signal);
-    if (html) {
-      pages.push(html);
-      candidates.push(...extractEmails(html));
+    const result = await fetchPage(url, signal);
+    if (result.html) {
+      pages.push(result.html);
+      candidates.push(...extractEmails(result.html));
     }
-    return html;
+    return result;
   };
 
-  const homepage = await read(base.toString());
+  const home = await read(base.toString());
+  const homepage = home.html;
 
   if (candidates.length === 0 && homepage) {
     const contactLink = findContactLink(homepage, base);
@@ -177,24 +188,5 @@ export async function scanWebsite(website: string, signal?: AbortSignal): Promis
   const emails = [...counts.entries()]
     .sort((a, b) => b[1] + scoreEmail(b[0]) - (a[1] + scoreEmail(a[0])))
     .map(([email]) => email);
-  return { emails, pages };
-}
-
-/** The addresses on a site, best first (see scanWebsite). */
-export async function findEmailCandidatesOnWebsite(website: string, signal?: AbortSignal): Promise<string[]> {
-  return (await scanWebsite(website, signal)).emails;
-}
-
-/**
- * The best address on the site that `accept` allows (every address, if no
- * filter is given), or null.
- */
-export async function findEmailForBusiness(
-  website: string | null,
-  accept: (email: string) => boolean = () => true,
-  signal?: AbortSignal,
-): Promise<string | null> {
-  if (!website) return null;
-  const candidates = await findEmailCandidatesOnWebsite(website, signal);
-  return candidates.find(accept) ?? null;
+  return { emails, pages, unreachable: home.failure === "unreachable" && pages.length === 0 };
 }

@@ -53,7 +53,7 @@ type Route = { status?: number; body: string; contentType?: string };
 
 /**
  * Replaces fetch with fixture responses keyed by URL (exact match, or a
- * function). Unknown URLs behave like an unreachable host.
+ * function). Unknown URLs behave like a domain that doesn't exist.
  */
 export function stubFetch(routes: Record<string, Route | ((url: string) => Route | null)>) {
   const calls: string[] = [];
@@ -69,7 +69,8 @@ export function stubFetch(routes: Record<string, Route | ((url: string) => Route
       }
       if (route) break;
     }
-    if (!route) throw new TypeError(`fetch failed (no fixture for ${url})`);
+    // Like a domain that doesn't resolve — a definite "no such site".
+    if (!route) throw Object.assign(new TypeError(`fetch failed (no fixture for ${url})`), { cause: { code: "ENOTFOUND" } });
     return new Response(route.body, {
       status: route.status ?? 200,
       headers: { "content-type": route.contentType ?? "text/html; charset=utf-8" },

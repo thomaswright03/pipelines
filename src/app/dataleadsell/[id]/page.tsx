@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import LeadActions from "@/components/LeadActions";
+import LeadActivityLog from "@/components/LeadActivityLog";
 import { DetailField, EmailPreview, LedgerNotice, SendHistory } from "@/components/LeadDetailParts";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { loadLeadContext } from "@/lib/lead-page";
@@ -20,7 +21,10 @@ export async function generateMetadata({ params }: PageProps<"/dataleadsell/[id]
 
 export default async function AgentLeadDetail({ params }: PageProps<"/dataleadsell/[id]">) {
   const { id } = await params;
-  const lead = await prisma.agentLead.findUnique({ where: { id }, include: { emailLogs: { orderBy: { sentAt: "desc" } } } });
+  const lead = await prisma.agentLead.findUnique({
+    where: { id },
+    include: { emailLogs: { orderBy: { sentAt: "desc" } }, activities: { orderBy: { date: "desc" } } },
+  });
   if (!lead) notFound();
 
   const { suppression, paused, ledgerNote } = await loadLeadContext("dataleadsell", lead.id, lead.email);
@@ -65,6 +69,11 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
 
           <EmailPreview subject={preview.subject} body={preview.body} />
           <SendHistory logs={lead.emailLogs} />
+          <LeadActivityLog
+            pipeline="dataleadsell"
+            leadId={lead.id}
+            activities={lead.activities.map((a) => ({ id: a.id, type: a.type, notes: a.notes, date: formatDateTime(a.date) }))}
+          />
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -79,9 +88,11 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
               email: lead.email,
               sendBlockedReason: lead.sendBlockedReason,
               emailed: lead.emailLogs.length > 0,
+              bounced: lead.emailLogs.length > 0 && lead.emailLogs.every((log) => log.bounced),
               replied: lead.repliedAt !== null,
               ourReplied: lead.ourReplyAt !== null,
               replyNeedsReview: lead.replyNeedsReview,
+              replyReviewReason: lead.replyReviewReason,
             }}
           />
         </div>

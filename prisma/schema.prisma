@@ -85,15 +85,15 @@ model OutreachRecipient {
 // One row per automated (cron) run, so every run has a visible outcome on
 // the page — including runs that were skipped or failed.
 model PipelineRun {
-  id         String    @id @default(cuid())
-  pipeline   String // "cold-outreach" | "dataleadsell" | "all"
-  kind       String // "daily" | "stale-contacts"
-  status     String    @default("running") // running | succeeded | partial | failed | skipped
-  startedAt  DateTime  @default(now())
-  finishedAt DateTime?
-  summary    String?
+  id                String    @id @default(cuid())
+  pipeline          String // "cold-outreach" | "dataleadsell" | "all"
+  kind              String // "daily" | "stale-contacts"
+  status            String    @default("running") // running | succeeded | partial | failed | skipped
+  startedAt         DateTime  @default(now())
+  finishedAt        DateTime?
+  summary           String?
   // Per-lead failure reasons, one per line.
-  errors     String?
+  errors            String?
   // What a daily Cold Outreach run actually did, shown beside its settings:
   // Yelp businesses checked, new leads saved with an address, emails sent.
   businessesChecked Int?
@@ -107,26 +107,48 @@ model PipelineRun {
 // transaction as its effects (reply time, status, opt-out). A re-delivery
 // of the same reply finds its row here and changes nothing again.
 model InboundReply {
-  id         String   @id @default(cuid())
+  id           String    @id @default(cuid())
   // "mid:<Message-ID>" when the Worker sends one, otherwise
   // "hash:<sha256 of sender, subject and body>" (matched within a window).
-  dedupeKey  String
-  fromEmail  String
-  subject    String?
-  optedOut   Boolean
+  dedupeKey    String
+  fromEmail    String
+  subject      String?
+  optedOut     Boolean
   // "pipeline:leadId" for each lead the reply was recorded on.
-  matched    String[]
+  matched      String[]
   // The replier's own words (quoted history and signature removed), so an
   // unmatched reply can be read and attached to the right lead.
-  text       String?
-  receivedAt DateTime @default(now())
+  text         String?
+  receivedAt   DateTime  @default(now())
   // Set when the operator attached an unmatched reply to a lead
   // ("attached:<pipeline>:<leadId>") or dismissed it ("dismissed").
-  resolvedAt DateTime?
-  resolution String?
+  resolvedAt   DateTime?
+  resolution   String?
+  // Set when the reply wasn't read as an opt-out but may be one ("not
+  // interested", "wrong person"…): the lead is flagged for a look instead
+  // of being moved to Responded.
+  reviewReason String?
 
   @@index([dedupeKey, receivedAt])
   @@index([receivedAt])
+}
+
+// An operator correcting one of the automatic heuristics — the production
+// signal for how often they get it wrong (shown on the Replies page):
+// opt_out_reversed  an auto-detected opt-out removed from the do-not-email list
+// opt_out_missed    "Mark opted out" on a lead whose reply wasn't read as one
+// wrong_address     "Mark bounced" on an address the lookup found (not typed in)
+model OutreachCorrection {
+  id        String   @id @default(cuid())
+  kind      String
+  pipeline  String?
+  leadId    String?
+  email     String?
+  // What the heuristic had decided (e.g. the opt-out trigger words).
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
 }
 
 // Daily-automation settings per pipeline, editable from that pipeline's
@@ -150,44 +172,66 @@ model PipelineSchedule {
 // Lake County UT, Utah County UT. Agents come from Yelp and (for Maricopa)
 // Arizona's ADRE license roster.
 model AgentLead {
-  id                String    @id @default(cuid())
-  name              String
-  brokerage         String?
-  email             String? // lower-case
-  phone             String?
-  address           String?
-  city              String? // the city the discovery query targeted
-  county            String? // Maricopa | Salt Lake | Utah
-  state             String? // two-letter code
-  website           String?
-  source            String?
-  status            String    @default("new") // see src/lib/lead-status.ts
-  callOutcome       String? // last cold-call outcome, see src/lib/lead-status.ts
-  starred           Boolean   @default(false)
-  emailCheckedAt    DateTime? // set whenever an email lookup ran, found or not — lets a sweep skip leads already tried
+  id                  String    @id @default(cuid())
+  name                String
+  brokerage           String?
+  email               String? // lower-case
+  phone               String?
+  address             String?
+  city                String? // the city the discovery query targeted
+  county              String? // Maricopa | Salt Lake | Utah
+  state               String? // two-letter code
+  website             String?
+  source              String?
+  status              String    @default("new") // see src/lib/lead-status.ts
+  callOutcome         String? // last cold-call outcome, see src/lib/lead-status.ts
+  starred             Boolean   @default(false)
+  emailCheckedAt      DateTime? // set whenever an email lookup finished, found or not — lets a sweep skip leads already tried
+  // Set when a lookup couldn't reach the lead's website (timeout, 5xx…):
+  // the lead isn't counted as checked, and the sweep retries it later.
+  emailLookupFailedAt DateTime?
   // Why the address is believed to be this lead's: the site it was found on
   // showed the lead's phone/street/city, or it was entered by hand.
-  emailEvidence     String?
+  emailEvidence       String?
   // Set when this lead must never be auto-sent (e.g. its address is
   // already held by another lead). Shown on the lead page.
-  sendBlockedReason String?
-  lastEmailedAt     DateTime?
-  lastTextedAt      DateTime? // unused (SMS was never built) — drop in a follow-up migration, see README
-  repliedAt         DateTime?
-  ourReplyAt        DateTime?
+  sendBlockedReason   String?
+  lastEmailedAt       DateTime?
+  lastTextedAt        DateTime? // unused (SMS was never built) — drop in a follow-up migration, see README
+  repliedAt           DateTime?
+  ourReplyAt          DateTime?
   // A reply arrived while the lead was in a status a reply doesn't move it
   // out of automatically (Lost, Not interested). Shown as "Replied — needs
   // review" until the operator moves the lead or dismisses it.
-  replyNeedsReview  Boolean   @default(false)
-  notes             String?
-  nextFollowUpDate  DateTime? // unused — drop in a follow-up migration, see README
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  replyNeedsReview    Boolean   @default(false)
+  // Why the reply needs a look, shown with the flag: it arrived while the
+  // lead was Lost / Not interested, or it may be asking not to be emailed.
+  replyReviewReason   String?
+  notes               String?
+  nextFollowUpDate    DateTime? // unused — drop in a follow-up migration, see README
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  emailLogs EmailSendLog[]
+  emailLogs  EmailSendLog[]
+  activities AgentLeadActivity[]
 
   @@index([status])
   @@index([email])
+}
+
+// Reply and call history for a dataleadsell lead, plus notes the operator
+// logs — the same as Cold Outreach's LeadActivity. Kept apart from the
+// lead's own Notes field, so automatically recorded history never counts
+// against the operator's notes limit.
+model AgentLeadActivity {
+  id     String    @id @default(cuid())
+  leadId String
+  lead   AgentLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type   String // call | email | meeting | note
+  notes  String
+  date   DateTime  @default(now())
+
+  @@index([leadId, date])
 }
 
 model EmailSendLog {
@@ -222,20 +266,23 @@ model ScrapedAgentCity {
 // checked once, including the ones no email was found for — instead of
 // re-downloading the file and re-checking the same first rows every time.
 model AdreLicensee {
-  id          String    @id // ADRE license number when the roster has one, else a hash of name/type/address
-  county      String
-  position    Int // order in the roster, so processing order is stable
-  name        String
-  brokerage   String?
-  phone       String?
-  address     String?
-  city        String?
-  licenseType String // Broker | Salesperson
-  checkedAt   DateTime?
-  // created | no_email | unverified_site | address_in_use | opted_out | existing_name | error
-  outcome     String?
-  leadId      String?
-  loadedAt    DateTime  @default(now())
+  id             String    @id // ADRE license number when the roster has one, else a hash of name/type/address
+  county         String
+  position       Int // order in the roster, so processing order is stable
+  name           String
+  brokerage      String?
+  phone          String?
+  address        String?
+  city           String?
+  licenseType    String // Broker | Salesperson
+  checkedAt      DateTime?
+  // created | no_email | unverified_site | address_in_use | opted_out | existing_name | unreachable | error
+  outcome        String?
+  // Set when the licensee's website couldn't be reached; they stay
+  // unchecked and are tried again an hour later.
+  lookupFailedAt DateTime?
+  leadId         String?
+  loadedAt       DateTime  @default(now())
 
   @@index([county, checkedAt, position])
 }
@@ -252,33 +299,41 @@ model AdreRoster {
 // Yelp, pitched by email, non-responders routed to a cold-call deck. Stage
 // transitions are defined in src/lib/lead-status.ts.
 model Lead {
-  id                String    @id @default(cuid())
-  name              String
-  company           String?
-  email             String? // lower-case
-  phone             String?
-  address           String?
-  city              String? // the city the discovery query targeted, not parsed from address
-  state             String? // two-letter code
-  website           String?
-  source            String?
-  status            String    @default("new") // see src/lib/lead-status.ts
-  callOutcome       String? // see src/lib/lead-status.ts
-  starred           Boolean   @default(false)
-  emailCheckedAt    DateTime? // set whenever an email lookup ran, found or not — lets a sweep skip leads already tried
-  emailEvidence     String? // see AgentLead.emailEvidence
+  id                  String    @id @default(cuid())
+  name                String
+  company             String?
+  email               String? // lower-case
+  phone               String?
+  address             String?
+  city                String? // the city the discovery query targeted, not parsed from address
+  state               String? // two-letter code
+  website             String?
+  source              String?
+  status              String    @default("new") // see src/lib/lead-status.ts
+  callOutcome         String? // see src/lib/lead-status.ts
+  starred             Boolean   @default(false)
+  emailCheckedAt      DateTime? // set whenever an email lookup finished, found or not — lets a sweep skip leads already tried
+  emailLookupFailedAt DateTime? // see AgentLead.emailLookupFailedAt
+  emailEvidence       String? // see AgentLead.emailEvidence
   // See AgentLead.sendBlockedReason.
-  sendBlockedReason String?
-  lastEmailedAt     DateTime?
-  repliedAt         DateTime? // a real reply was detected (inbound webhook or "Mark replied")
-  ourReplyAt        DateTime? // we replied back — always manual
-  replyNeedsReview  Boolean   @default(false) // see AgentLead.replyNeedsReview
-  estimatedValue    Float?
-  notes             String?
-  nextFollowUpDate  DateTime? // unused — drop in a follow-up migration, see README
-  appointmentAt     DateTime? // set when status moves to appointment_set
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  sendBlockedReason   String?
+  lastEmailedAt       DateTime?
+  repliedAt           DateTime? // a real reply was detected (inbound webhook or "Mark replied")
+  ourReplyAt          DateTime? // we replied back — always manual
+  replyNeedsReview    Boolean   @default(false) // see AgentLead.replyNeedsReview
+  replyReviewReason   String? // see AgentLead.replyReviewReason
+  // Whole cents, so totals never pick up floating-point error.
+  estimatedValueCents Int?
+  // Unused since estimatedValueCents (copied over by migration
+  // 20260927100000). Kept so the previous deployment keeps working while
+  // this release rolls out; drop in a follow-up migration (README →
+  // "Changing the database schema").
+  estimatedValue      Float?
+  notes               String?
+  nextFollowUpDate    DateTime? // unused — drop in a follow-up migration, see README
+  appointmentAt       DateTime? // set when status moves to appointment_set
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   activities LeadActivity[]
   emailLogs  LeadEmailSendLog[]
@@ -294,6 +349,8 @@ model LeadActivity {
   type   String // call | email | meeting | note
   notes  String
   date   DateTime @default(now())
+
+  @@index([leadId, date])
 }
 
 // One row per outreach send for the Lead model — separate from AgentLead's

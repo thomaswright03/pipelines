@@ -10,10 +10,18 @@
 //   flagged "Replied — needs review" (it may have got there by a bounce or
 //   an old call outcome rather than a decision about this reply).
 // - Any other status → reply time set if missing; status kept.
+// A reply that isn't an opt-out but reads like a brush-off or complaint
+// ("not interested", "wrong person" — see reply-classifier.ts) sets the
+// reply time and flags the lead "Reply needs a look" with the reason,
+// instead of moving it to Responded; the operator decides.
 // An opt-out reply suppresses the address (from any status) and moves a
 // lead we were working — Contacted, Responded, on the call deck — to Lost
 // (Not interested in dataleadsell). New leads just become unsendable;
 // customers keep their status.
+//
+// The reply's text is added to the lead's history (AgentLeadActivity /
+// LeadActivity), never to its Notes, so it can't push the operator's notes
+// past their limit.
 //
 // Everything happens in one transaction together with an InboundReply row,
 // so a re-delivered reply is recognised and changes nothing, and a failure
@@ -39,7 +47,9 @@ export type InboundResult = {
   matched: string[];
   optedOut: boolean;
   trigger: string | null;
-  /** Leads the reply landed on that need a human look (Lost / Not interested). */
+  /** Why the reply was flagged for a look instead of counted as a positive reply, if it was. */
+  review: string | null;
+  /** Leads the reply landed on that need a human look. */
   needsReview: string[];
   /** True when this reply was already recorded; nothing was changed. */
   duplicate: boolean;
@@ -76,7 +86,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
   const dedupeKey = inboundDedupeKey(message);
 
   const replyText = classification.newText.slice(0, MAX_STORED_REPLY_CHARS);
-  const note = replyNote(now, message.subject ?? null, replyText || null, classification.optOut ? classification.trigger : null);
+  const note = replyNote(now, message.subject ?? null, replyText || null, classification);
 
   return prisma.$transaction(
     async (tx) => {
@@ -94,6 +104,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           matched: earlier.matched,
           optedOut: earlier.optedOut,
           trigger: classification.trigger,
+          review: earlier.reviewReason,
           needsReview: [],
           duplicate: true,
         };
@@ -111,7 +122,13 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
       const needsReview: string[] = [];
       for (const pipeline of ALL_PIPELINES) {
         for (const lead of await pipeline.findLeadsByEmail(tx, fromEmail)) {
-          const flagged = await recordOnLead(tx, pipeline, lead, { optOut: classification.optOut, fromEmail, note, now });
+          const flagged = await recordOnLead(tx, pipeline, lead, {
+            optOut: classification.optOut,
+            review: classification.review,
+            fromEmail,
+            note,
+            now,
+          });
           matched.push(`${pipeline.id}:${lead.id}`);
           if (flagged) needsReview.push(`${pipeline.id}:${lead.id}`);
         }
@@ -123,12 +140,20 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           fromEmail,
           subject: message.subject?.slice(0, 500) ?? null,
           optedOut: classification.optOut,
+          reviewReason: classification.review,
           matched,
           text: replyText || null,
           receivedAt: now,
         },
       });
-      return { matched, optedOut: classification.optOut, trigger: classification.trigger, needsReview, duplicate: false };
+      return {
+        matched,
+        optedOut: classification.optOut,
+        trigger: classification.trigger,
+        review: classification.review,
+        needsReview,
+        duplicate: false,
+      };
     },
     { timeout: 20_000 },
   );
@@ -138,7 +163,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
 export function replyUpdateFor(
   pipelineId: PipelineAdapter["id"],
   lead: Pick<OutreachLead, "status" | "repliedAt">,
-  reply: { optOut: boolean; pitched: boolean; fromEmail: string; now: Date },
+  reply: { optOut: boolean; review?: string | null; pitched: boolean; fromEmail: string; now: Date },
 ): { data: LeadUpdate; needsReview: boolean } {
   const data: LeadUpdate = {};
   // Only a lead that was actually emailed counts toward the reply rate.
@@ -155,22 +180,36 @@ export function replyUpdateFor(
   }
 
   if (!reply.pitched) return { data, needsReview: false };
+  if (reply.review && lead.status !== "new") {
+    // Possibly a "no" or a complaint: the operator decides, the status stays.
+    data.replyNeedsReview = true;
+    data.replyReviewReason = `The reply ${reply.review}. It may be asking not to be emailed.`;
+    return { data, needsReview: true };
+  }
   if (REPLY_MOVES_TO_RESPONDED.includes(lead.status)) {
     data.status = "responded";
     return { data, needsReview: false };
   }
   if (REPLY_FLAGS_FOR_REVIEW.includes(lead.status)) {
     data.replyNeedsReview = true;
+    data.replyReviewReason = `A reply arrived while this lead was ${statusLabel(lead.status)}.`;
     return { data, needsReview: true };
   }
   return { data, needsReview: false };
 }
 
-function replyNote(receivedAt: Date, subject: string | null, text: string | null, trigger: string | null, from?: string): string {
+function replyNote(
+  receivedAt: Date,
+  subject: string | null,
+  text: string | null,
+  verdict: { optOut: boolean; trigger: string | null; review: string | null },
+  from?: string,
+): string {
   return [
-    `[Reply received ${formatDateTime(receivedAt)}${from ? ` from ${from}` : ""}]${subject ? ` ${subject}` : ""}`,
+    `Reply received ${formatDateTime(receivedAt)}${from ? ` from ${from}` : ""}${subject ? ` — ${subject}` : ""}`,
     text,
-    trigger ? `→ Read as an opt-out because of: "${trigger}"` : null,
+    verdict.optOut && verdict.trigger ? `→ Read as an opt-out because of: "${verdict.trigger}"` : null,
+    !verdict.optOut && verdict.review ? `→ Flagged for a look: the reply ${verdict.review}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -233,6 +272,7 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
       if (!lead) return { ok: false as const, error: "That lead no longer exists." };
 
       const trigger = reply.optedOut ? classifyReply({ subject: reply.subject, text: reply.text }).trigger : null;
+      const verdict = { optOut: reply.optedOut, trigger, review: reply.optedOut ? null : reply.reviewReason };
       if (reply.optedOut && lead.email) {
         await suppressEmail(
           lead.email,
@@ -244,9 +284,10 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
           tx,
         );
       }
-      const note = replyNote(reply.receivedAt, reply.subject, reply.text, trigger, reply.fromEmail);
+      const note = replyNote(reply.receivedAt, reply.subject, reply.text, verdict, reply.fromEmail);
       await recordOnLead(tx, pipeline, lead, {
         optOut: reply.optedOut,
+        review: verdict.review,
         fromEmail: lead.email ?? reply.fromEmail,
         note,
         now: reply.receivedAt,
@@ -280,7 +321,7 @@ async function recordOnLead(
   tx: Db,
   pipeline: PipelineAdapter,
   initial: OutreachLead,
-  reply: { optOut: boolean; fromEmail: string; note: string; now: Date },
+  reply: { optOut: boolean; review: string | null; fromEmail: string; note: string; now: Date },
 ): Promise<boolean> {
   // Contacted always means "was emailed" (only a send puts a lead there).
   const pitched =
@@ -291,11 +332,8 @@ async function recordOnLead(
   // move, the stale-contacts job) is never overwritten: re-read and retry.
   for (let attempt = 0; lead && attempt < MAX_ATTEMPTS_PER_LEAD; attempt++) {
     const { data, needsReview } = replyUpdateFor(pipeline.id, lead, { ...reply, pitched });
-    if (pipeline.id === "dataleadsell") data.notes = [lead.notes, reply.note].filter(Boolean).join("\n\n");
     if (await pipeline.updateIfStatus(tx, lead.id, [lead.status], data)) {
-      if (pipeline.id === "cold-outreach") {
-        await tx.leadActivity.create({ data: { leadId: lead.id, type: "email", notes: reply.note } });
-      }
+      await pipeline.addActivity(tx, lead.id, { type: "email", notes: reply.note, date: reply.now });
       return needsReview;
     }
     lead = await pipeline.findLead(tx, lead.id);

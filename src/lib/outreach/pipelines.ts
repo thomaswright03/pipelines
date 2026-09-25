@@ -17,6 +17,9 @@ import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outre
 
 export type Db = PrismaClient | Prisma.TransactionClient;
 
+export const ACTIVITY_TYPES = ["note", "call", "email", "meeting"] as const;
+export type ActivityType = (typeof ACTIVITY_TYPES)[number];
+
 /** The fields every send/discovery rule needs, in both pipelines. */
 export type OutreachLead = {
   id: string;
@@ -32,6 +35,8 @@ export type OutreachLead = {
   lastEmailedAt: Date | null;
   repliedAt: Date | null;
   notes: string | null;
+  /** Why the address is believed to be the lead's (see AgentLead.emailEvidence). */
+  emailEvidence: string | null;
   company: string | null; // Cold Outreach only
   brokerage: string | null; // dataleadsell only
   county: string | null; // dataleadsell only
@@ -44,6 +49,7 @@ export type LeadUpdate = {
   emailEvidence?: string | null;
   website?: string | null;
   emailCheckedAt?: Date | null;
+  emailLookupFailedAt?: Date | null;
   sendBlockedReason?: string | null;
   lastEmailedAt?: Date | null;
   repliedAt?: Date | null;
@@ -52,6 +58,7 @@ export type LeadUpdate = {
   notes?: string | null;
   starred?: boolean;
   replyNeedsReview?: boolean;
+  replyReviewReason?: string | null;
 };
 
 export type NewLeadData = {
@@ -106,8 +113,12 @@ export type PipelineAdapter = {
   /** New leads with an address that can't be sent (flagged), for the "why nothing to send" hint. */
   countBlockedNew(db: Db): Promise<number>;
   listStaleContacted(db: Db, cutoff: Date): Promise<OutreachLead[]>;
-  listNeedingEmailLookup(db: Db, limit: number): Promise<OutreachLead[]>;
-  countNeedingEmailLookup(db: Db): Promise<number>;
+  /**
+   * Leads with no address that were never checked, leaving out any whose
+   * site was unreachable at or after `retryBefore` (they're retried later).
+   */
+  listNeedingEmailLookup(db: Db, limit: number, retryBefore?: Date): Promise<OutreachLead[]>;
+  countNeedingEmailLookup(db: Db, retryBefore?: Date): Promise<number>;
   /** Leads matching a name/email search, for attaching an unmatched reply. */
   search(db: Db, query: string, limit: number): Promise<OutreachLead[]>;
   clearSendBlockedByPrefix(db: Db, email: string, prefix: string): Promise<void>;
@@ -117,13 +128,25 @@ export type PipelineAdapter = {
    * be changed under a send in flight). Returns whether it applied.
    */
   updateIfUnchanged(db: Db, id: string, expected: { status: string; email: string | null }, data: Record<string, unknown>): Promise<boolean>;
+  /**
+   * Adds an entry to the lead's history (replies, calls, notes the operator
+   * logs) — kept apart from the lead's Notes field, so automatically
+   * recorded history never counts against the notes limit.
+   */
+  addActivity(db: Db, leadId: string, entry: { type: ActivityType; notes: string; date?: Date }): Promise<void>;
   /** Deletes the lead. Its send history rows and ledger entry stay (so the address is never re-pitched). */
   deleteLead(db: Db, id: string): Promise<boolean>;
 };
 
 const SENDABLE = { status: "new", email: { not: null }, sendBlockedReason: null } as const;
 const BLOCKED_NEW = { status: "new", email: { not: null }, sendBlockedReason: { not: null } } as const;
-const NEEDS_LOOKUP = { email: null, emailCheckedAt: null } as const;
+function needsLookup(retryBefore?: Date) {
+  return {
+    email: null,
+    emailCheckedAt: null,
+    ...(retryBefore ? { OR: [{ emailLookupFailedAt: null }, { emailLookupFailedAt: { lt: retryBefore } }] } : {}),
+  };
+}
 
 // The two lead tables (and the two send-log tables) differ only in their
 // pipeline-specific columns, so the factory talks to them through these
@@ -145,6 +168,7 @@ type LeadTable = {
   deleteMany(args: Args): Promise<{ count: number }>;
   count(args: Args): Promise<number>;
 };
+type ActivityTable = { create(args: Args): Promise<unknown> };
 type SendLogTable = {
   create(args: Args): Promise<unknown>;
   findFirst(args: Args): Promise<{ id: string } | null>;
@@ -158,6 +182,7 @@ type PipelineSpec = {
   buildEmail: PipelineAdapter["buildEmail"];
   leads: (db: Db) => LeadTable;
   sendLogs: (db: Db) => SendLogTable;
+  activities: (db: Db) => ActivityTable;
   /** Columns only this pipeline's lead table has, for a new lead. */
   ownColumns: (data: NewLeadData) => Record<string, string | null>;
   /** Extra columns searched besides name and email. */
@@ -179,6 +204,7 @@ function toOutreach(row: Row): OutreachLead {
     lastEmailedAt: row.lastEmailedAt,
     repliedAt: row.repliedAt,
     notes: row.notes,
+    emailEvidence: row.emailEvidence,
     company: row.company ?? null,
     brokerage: row.brokerage ?? null,
     county: row.county ?? null,
@@ -186,7 +212,7 @@ function toOutreach(row: Row): OutreachLead {
 }
 
 function makeAdapter(spec: PipelineSpec): PipelineAdapter {
-  const { leads, sendLogs } = spec;
+  const { leads, sendLogs, activities } = spec;
   return {
     id: spec.id,
     label: PIPELINE_LABEL[spec.id],
@@ -275,11 +301,11 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
       const rows = await leads(db).findMany({ where: { status: "contacted", lastEmailedAt: { lte: cutoff } } });
       return rows.map(toOutreach);
     },
-    async listNeedingEmailLookup(db, limit) {
-      const rows = await leads(db).findMany({ where: NEEDS_LOOKUP, orderBy: { createdAt: "asc" }, take: limit });
+    async listNeedingEmailLookup(db, limit, retryBefore) {
+      const rows = await leads(db).findMany({ where: needsLookup(retryBefore), orderBy: { createdAt: "asc" }, take: limit });
       return rows.map(toOutreach);
     },
-    countNeedingEmailLookup: (db) => leads(db).count({ where: NEEDS_LOOKUP }),
+    countNeedingEmailLookup: (db, retryBefore) => leads(db).count({ where: needsLookup(retryBefore) }),
     async search(db, query, limit) {
       const q = query.trim();
       if (!q) return [];
@@ -302,6 +328,9 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
       const { count } = await leads(db).updateMany({ where: { id, status: expected.status, email: expected.email }, data });
       return count === 1;
     },
+    async addActivity(db, leadId, entry) {
+      await activities(db).create({ data: { leadId, type: entry.type, notes: entry.notes, ...(entry.date ? { date: entry.date } : {}) } });
+    },
     async deleteLead(db, id) {
       const { count } = await leads(db).deleteMany({ where: { id } });
       return count === 1;
@@ -315,6 +344,7 @@ const dataleadsell = makeAdapter({
   buildEmail: (lead) => buildAgentOutreachEmail(lead.name, lead.county),
   leads: (db) => db.agentLead as unknown as LeadTable,
   sendLogs: (db) => db.emailSendLog as unknown as SendLogTable,
+  activities: (db) => db.agentLeadActivity as unknown as ActivityTable,
   ownColumns: (data) => ({ county: data.county ?? null, brokerage: data.brokerage ?? null }),
   searchColumns: ["brokerage", "city"],
 });
@@ -325,6 +355,7 @@ const coldOutreach = makeAdapter({
   buildEmail: (lead) => buildOutreachEmail(lead.company || lead.name),
   leads: (db) => db.lead as unknown as LeadTable,
   sendLogs: (db) => db.leadEmailSendLog as unknown as SendLogTable,
+  activities: (db) => db.leadActivity as unknown as ActivityTable,
   ownColumns: (data) => ({ company: data.company ?? null }),
   searchColumns: ["company", "city"],
 });

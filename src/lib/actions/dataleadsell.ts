@@ -11,9 +11,17 @@ import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextAgentCity, markAgentCityUsed } from "@/lib/agent-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { SOLD_COUNTIES, citiesInCounty, stateForCounty } from "@/lib/agent-cities";
-import { agentLeadSchema, fieldErrorsOf, normalizeWebsite, type AgentLeadInput, type FormState } from "@/lib/lead-forms";
+import {
+  agentLeadEditSchema,
+  agentLeadSchema,
+  fieldErrorsOf,
+  normalizeWebsite,
+  type AgentLeadInput,
+  type FormState,
+} from "@/lib/lead-forms";
 import { createLeadsFromCandidates, describeDiscovery } from "@/lib/outreach/discovery";
-import { checkAddressForLead, editLead, enteredByHandEvidence } from "@/lib/outreach/lead-edit";
+import { checkAddressForLead, editLead } from "@/lib/outreach/lead-edit";
+import { enteredByHandEvidence } from "@/lib/outreach/evidence";
 import { getAdreStatus, loadAdreRoster, processAdreChunk, type AdreChunkResult, type AdreStatus } from "@/lib/adre-import";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
@@ -84,7 +92,8 @@ export async function createAgentAction(input: AgentLeadInput): Promise<AgentFor
 }
 
 export async function updateAgentAction(leadId: string, input: AgentLeadInput): Promise<AgentFormState> {
-  const parsed = agentLeadSchema.safeParse(input);
+  const existing = await prisma.agentLead.findUnique({ where: { id: leadId }, select: { notes: true } }).catch(() => null);
+  const parsed = agentLeadEditSchema(existing?.notes).safeParse(input);
   if (!parsed.success) {
     return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<AgentLeadInput>(parsed.error) };
   }

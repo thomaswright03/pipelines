@@ -2,16 +2,30 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { addLeadActivityAction } from "@/lib/actions/vault-pipeline";
+import { addLeadActivityAction } from "@/lib/actions/outreach";
+import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 
 type Activity = { id: string; type: string; notes: string; date: string };
 
 const TYPE_LABEL: Record<string, string> = { note: "Note", call: "Call", email: "Email", meeting: "Meeting" };
 
-// Cold Outreach activity log. A real form, so Enter in the text box adds
-// the entry; the text stays in the box if saving fails.
-export default function VaultActivityLog({ leadId, activities }: { leadId: string; activities: Activity[] }) {
+/**
+ * A lead's history, newest first: replies received and cold calls (added
+ * automatically) and anything the operator logs here. Kept apart from the
+ * lead's Notes, so it never counts against the notes limit. A real form, so
+ * Enter in the text box adds the entry; the text stays in the box if saving
+ * fails.
+ */
+export default function LeadActivityLog({
+  pipeline,
+  leadId,
+  activities,
+}: {
+  pipeline: PipelineId;
+  leadId: string;
+  activities: Activity[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState("note");
@@ -27,10 +41,10 @@ export default function VaultActivityLog({ leadId, activities }: { leadId: strin
     setFeedback(null);
     startTransition(async () => {
       try {
-        const result = await addLeadActivityAction(leadId, type, notes);
+        const result = await addLeadActivityAction(pipeline, leadId, type, notes);
         if (result.ok) {
           setNotes("");
-          setFeedback({ ok: true, text: `${TYPE_LABEL[type]} added.` });
+          setFeedback({ ok: true, text: result.message });
         } else {
           setFeedback({ ok: false, text: result.error });
         }
@@ -44,12 +58,13 @@ export default function VaultActivityLog({ leadId, activities }: { leadId: strin
   return (
     <section aria-labelledby="activity-heading" className="card p-4">
       <h2 id="activity-heading" className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-        Activity
+        History
       </h2>
+      <p className="mb-2 text-sm muted">Replies and calls are added here automatically. Log anything else below.</p>
 
       <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor="activity-type">
-          Activity type
+          Entry type
         </label>
         <select id="activity-type" value={type} onChange={(e) => setType(e.target.value)} className="input sm:w-auto">
           {Object.entries(TYPE_LABEL).map(([value, label]) => (
@@ -78,12 +93,12 @@ export default function VaultActivityLog({ leadId, activities }: { leadId: strin
       </div>
 
       {activities.length === 0 ? (
-        <p className="mt-2 text-sm muted">No activity logged yet.</p>
+        <p className="mt-2 text-sm muted">Nothing here yet.</p>
       ) : (
         <ul className="mt-2 flex flex-col gap-2 text-sm">
           {activities.map((a) => (
             <li key={a.id} className="flex justify-between gap-3 border-t border-zinc-100 pt-2 dark:border-zinc-800">
-              <span className="min-w-0 break-words">
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 <span className="mr-2 rounded-full bg-indigo-50 px-1.5 py-0.5 text-xs font-medium uppercase text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
                   {TYPE_LABEL[a.type] ?? a.type}
                 </span>

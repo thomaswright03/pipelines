@@ -6,7 +6,7 @@ import { findEmailsChunkAction } from "@/lib/actions/outreach";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 
-type Progress = { checked: number; found: number; remaining: number };
+type Progress = { checked: number; found: number; unreachable: number; remaining: number };
 
 /**
  * "Find emails for all leads": looks up an address for every lead that was
@@ -37,7 +37,7 @@ export default function FindEmailsButton({
     stopRequested.current = false;
     setStopping(false);
     setFeedback(null);
-    const totals: Progress = { checked: 0, found: 0, remaining: 0 };
+    const totals: Progress = { checked: 0, found: 0, unreachable: 0, remaining: 0 };
     setProgress({ ...totals });
     let error: string | null = null;
 
@@ -56,21 +56,30 @@ export default function FindEmailsButton({
       }
       totals.checked += chunk.result.checked;
       totals.found += chunk.result.found;
+      totals.unreachable += chunk.result.unreachable;
       totals.remaining = chunk.result.remaining;
       setProgress({ ...totals });
-      if (chunk.result.remaining === 0 || chunk.result.checked === 0) break;
+      if (chunk.result.remaining === 0 || chunk.result.checked + chunk.result.unreachable === 0) break;
     }
 
     setProgress(null);
-    const summary = `Checked ${totals.checked} lead${totals.checked === 1 ? "" : "s"}, found ${totals.found} email${totals.found === 1 ? "" : "s"}. Leads with none were moved to the phone lists.`;
+    const unreachable = totals.unreachable
+      ? ` ${totals.unreachable} website${totals.unreachable === 1 ? "" : "s"} couldn't be reached — those leads were left as they are and will be tried again in an hour.`
+      : "";
+    const summary = `Checked ${totals.checked} lead${totals.checked === 1 ? "" : "s"}, found ${totals.found} email${totals.found === 1 ? "" : "s"}. Leads with none were moved to the phone lists.${unreachable}`;
     if (error) setFeedback({ ok: false, text: `${error} ${summary}` });
     else if (stopRequested.current) setFeedback({ ok: true, text: `Stopped. ${summary} ${totals.remaining} still to check.` });
-    else setFeedback({ ok: true, text: totals.checked === 0 ? "Every lead has already been checked for an email." : summary });
+    else
+      setFeedback({
+        ok: true,
+        text: totals.checked + totals.unreachable === 0 ? "Every lead has already been checked for an email." : summary,
+      });
     router.refresh();
   }
 
-  const total = progress ? progress.checked + progress.remaining : 0;
-  const pct = progress && total > 0 ? Math.round((progress.checked / total) * 100) : 0;
+  const done = progress ? progress.checked + progress.unreachable : 0;
+  const total = progress ? done + progress.remaining : 0;
+  const pct = progress && total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -78,7 +87,8 @@ export default function FindEmailsButton({
         <div className="flex flex-col gap-1.5" aria-live="polite">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm">
-              Finding emails… {progress.checked} of {total || "?"} checked, {progress.found} found.
+              Finding emails… {done} of {total || "?"} looked up, {progress.found} found
+              {progress.unreachable > 0 && `, ${progress.unreachable} site${progress.unreachable === 1 ? "" : "s"} unreachable`}.
             </p>
             <button
               type="button"

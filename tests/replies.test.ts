@@ -70,7 +70,10 @@ describe("a reply after the lead left Contacted", () => {
     const after = await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } });
     expect(after).toMatchObject({ status: "responded", replyNeedsReview: false });
     expect(after.repliedAt).not.toBeNull();
-    expect(after.notes).toContain("Tell me more about the probate leads.");
+    expect(after.notes).toBeNull();
+    expect((await prisma.agentLeadActivity.findFirstOrThrow({ where: { leadId: agent.id } })).notes).toContain(
+      "Tell me more about the probate leads.",
+    );
     expect((await getDataleadsellStats()).replied).toBe(1);
   });
 
@@ -174,8 +177,7 @@ describe("re-delivered replies", () => {
     const second = await (await inbound({ ...payload, text: "  Sounds   good " })).json();
 
     expect(second.duplicate).toBe(true);
-    const notes = (await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } })).notes ?? "";
-    expect(notes.match(/Sounds good/g)).toHaveLength(1);
+    expect(await prisma.agentLeadActivity.count({ where: { leadId: agent.id } })).toBe(1);
 
     // A different message from the same person is a new reply.
     expect((await (await inbound({ ...payload, text: "One more question" })).json()).duplicate).toBe(false);

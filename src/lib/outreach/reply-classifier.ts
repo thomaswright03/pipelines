@@ -8,16 +8,30 @@
 // 1. Only the replier's own new text counts: quoted history (">" lines,
 //    "On … wrote:", Outlook's "From:/Sent:" header blocks, "Original
 //    Message" separators), signatures and our own template footer are cut.
-// 2. What's left must *ask* to opt out: a line that is just the command
-//    ("STOP", "Unsubscribe", "Please remove me"), or an explicit phrase
-//    ("take me off your list", "stop emailing me", "don't contact me
-//    again"). Ordinary uses of the words ("stop by the office", "can't stop
-//    thinking about it") don't count.
+// 2. What's left must *ask* not to be contacted: a line that is just the
+//    command ("STOP", "Unsubscribe", "Please remove me"), or an explicit
+//    phrase ("take me off your list", "don't email me", "quit contacting
+//    us", "delete my email address", "leave me alone"). Ordinary uses of the
+//    words ("stop by the office", "can't stop thinking about it") and
+//    negated ones ("please don't stop sending these") don't count.
+// 3. A reply that isn't an opt-out but reads like a brush-off or a
+//    complaint ("not interested", "wrong person", "how did you get my
+//    email") is flagged for a human look (`review`) instead of being
+//    treated as an ordinary positive reply.
+//
+// tests/reply-classifier.test.ts holds the development cases;
+// tests/heuristics-eval.test.ts measures precision and recall on a
+// separate labelled set and fails the build if they drop.
 
 export type ReplyClassification = {
   optOut: boolean;
   /** The words that were read as an opt-out, for display on the lead. */
   trigger: string | null;
+  /**
+   * Not an opt-out, but worth a human look before treating it as a
+   * positive reply: why, in words for the lead page. Null otherwise.
+   */
+  review: string | null;
   /** The replier's own text with quoted history and signatures removed. */
   newText: string;
 };
@@ -35,6 +49,8 @@ const COMMAND_WORDS = new Set([
   "optout",
   "opt out",
   "opt me out",
+  "stop it",
+  "stop this",
   "stop emailing",
   "stop emailing me",
   "stop sending",
@@ -42,15 +58,45 @@ const COMMAND_WORDS = new Set([
 ]);
 const FILLER_RE = /\b(please|pls|plz|kindly|thanks|thank you|thx|asap|now)\b/g;
 
+const ME = String.raw`(?:me|us|this\s+(?:e-?mail\s+)?(?:address|account|e-?mail))`;
+const CONTACT_VERB = String.raw`(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to|send\s+(?:me|us)\s+(?:any\s*more\s+|more\s+)?(?:e-?mails?|messages?|anything|stuff))`;
+const NEG = String.raw`(?:do\s+not|don'?t|dont|never|please\s+don'?t)`;
+const LIST = String.raw`(?:(?:your|the|this|all|any|every|ur)\s+)?(?:(?:e-?mail(?:ing)?|mailing|contact|distribution|marketing|call)\s+)?lists?`;
+
 // Explicit requests anywhere in the new text.
 const OPT_OUT_PHRASES: RegExp[] = [
   /\bunsubscribe\b/i,
   /\bopt(?:ing)?[\s-]?(?:me\s+)?out\b/i,
-  /\bremove\s+(?:me|us|my\s+(?:e-?mail|address|name)|this\s+(?:e-?mail|address))\b/i,
+  // "remove me", "remove my email", "please remove from list"
+  /\bremove\s+(?:me|us|my\s+(?:e-?mail|address|name|info)|this\s+(?:e-?mail|address))\b/i,
+  new RegExp(String.raw`\bremove\s+(?:(?:me|us|it|this)\s+)?from\s+${LIST}\b`, "i"),
   /\btake\s+(?:me|us|my\s+(?:e-?mail|address|name))\s+off\b/i,
-  /\bstop\s+(?:e-?mailing|contacting|messaging|spamming|sending(?:\s+me)?(?:\s+(?:e-?mails?|these|this))?|writing\s+to)\b/i,
-  /\b(?:do\s+not|don'?t|dont|never)\s+(?:e-?mail|contact|message|write\s+to)\s+(?:me|us)\s+(?:again|anymore|any\s+more|ever)\b/i,
-  /\bno\s+more\s+e-?mails?\b/i,
+  /\b(?:stop|quit|cease)\s+(?:e-?mailing|contacting|messaging|spamming|texting|calling|sending(?:\s+me)?(?:\s+(?:e-?mails?|these|this|messages?))?|writing\s+to|reaching\s+out)\b/i,
+  // "don't email me", "do not contact us", "don't reach out to me again", "don't send me emails"
+  new RegExp(String.raw`\b${NEG}\s+(?:ever\s+)?${CONTACT_VERB}(?:\s+${ME})?(?=\s+(?:again|anymore|any\s+more|ever)\b|\s*[.!,;]|\s*$)`, "im"),
+  new RegExp(
+    String.raw`\b${NEG}\s+(?:ever\s+)?(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to)\s+${ME}\b(?!\s+(?:until|till|before|after|about|regarding|with\s+questions))`,
+    "i",
+  ),
+  new RegExp(String.raw`\b${NEG}\s+(?:e-?mail|contact|message|reach\s+out|write)\s+(?:again|anymore|any\s+more)\b`, "i"),
+  /\bno\s+more\s+(?:e-?mails?|messages?|contact)\b/i,
+  /\b(?:delete|erase|purge)\s+(?:my|our)\s+(?:e-?mail(?:\s+address)?|address|info(?:rmation)?|contact(?:\s+(?:info|details))?|details|data)\b/i,
+  /\b(?:delete|erase)\s+(?:me|us)\s+from\b/i,
+  /\bcease\s+and\s+desist\b/i,
+  /\bleave\s+(?:me|us)\s+alone\b/i,
+  /\b(?:i|we)\s+(?:do\s+not|don'?t)\s+want\s+(?:any\s+more|any|more|your)\s+(?:e-?mails?|messages?)\b/i,
+];
+
+// Not an opt-out on their own, but not a "yes" either: the lead is flagged
+// for a look instead of being moved to Responded.
+const REVIEW_PHRASES: { re: RegExp; reason: string }[] = [
+  { re: /\bnot\s+(?:at\s+all\s+|really\s+)?interested\b/i, reason: "says they're not interested" },
+  { re: /\bno\s+(?:thanks|thank\s+you|thx)\b/i, reason: "says no thanks" },
+  { re: /\bwrong\s+(?:person|e-?mail|address|contact|guy|gal)\b/i, reason: "says this is the wrong person" },
+  { re: /\b(?:no\s+longer|not)\s+(?:work(?:ing)?\s+(?:here|there|at)|with\s+(?:the|this)\s+(?:company|brokerage|firm))\b/i, reason: "says they no longer work there" },
+  { re: /\bhow\s+did\s+you\s+get\s+(?:my|this|our)\b/i, reason: "asks how we got their address" },
+  { re: /\b(?:spam|spammer|spamming|unsolicited)\b|\breport(?:ed|ing)?\s+(?:you|this|it)\b/i, reason: "calls the email spam" },
+  { re: /\b(?:retired|passed\s+away|deceased)\b/i, reason: "says the person has retired or died" },
 ];
 
 // A phrase right after one of these is being negated, not requested:
@@ -121,28 +167,31 @@ function stripReplyPrefix(subject: string): string {
 
 export function classifyReply(input: { subject?: string | null; text?: string | null }): ReplyClassification {
   const newText = extractNewReplyText(input.text ?? "");
+  const optOut = (trigger: string): ReplyClassification => ({ optOut: true, trigger, review: null, newText });
 
   for (const line of newText.split("\n")) {
     const normalized = normalizeCommandLine(line);
-    if (normalized && COMMAND_WORDS.has(normalized)) {
-      return { optOut: true, trigger: line.trim(), newText };
-    }
+    if (normalized && COMMAND_WORDS.has(normalized)) return optOut(line.trim());
   }
 
   for (const re of OPT_OUT_PHRASES) {
-    for (const match of newText.matchAll(new RegExp(re.source, "gi"))) {
+    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+    for (const match of newText.matchAll(new RegExp(re.source, flags))) {
       if (isNegated(newText, match.index)) continue;
-      return { optOut: true, trigger: sentenceAround(newText, match.index, match[0].length), newText };
+      return optOut(sentenceAround(newText, match.index, match[0].length));
     }
   }
 
   // A reply whose subject was changed to just "STOP"/"Unsubscribe".
   const subject = stripReplyPrefix(input.subject ?? "");
-  if (subject && COMMAND_WORDS.has(normalizeCommandLine(subject))) {
-    return { optOut: true, trigger: `Subject: ${subject}`, newText };
+  if (subject && COMMAND_WORDS.has(normalizeCommandLine(subject))) return optOut(`Subject: ${subject}`);
+
+  for (const { re, reason } of REVIEW_PHRASES) {
+    const match = re.exec(newText);
+    if (match) return { optOut: false, trigger: null, review: `${reason}: “${sentenceAround(newText, match.index, match[0].length)}”`, newText };
   }
 
-  return { optOut: false, trigger: null, newText };
+  return { optOut: false, trigger: null, review: null, newText };
 }
 
 function sentenceAround(text: string, index: number, length: number): string {

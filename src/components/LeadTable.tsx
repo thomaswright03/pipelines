@@ -30,7 +30,7 @@ function RowFlags({ row }: { row: LeadRow }) {
   if (!row.flagged && !row.needsReview) return null;
   return (
     <div className="flex flex-wrap gap-x-2 text-xs font-medium">
-      {row.needsReview && <span className="text-amber-800 dark:text-amber-300">Replied — needs review</span>}
+      {row.needsReview && <span className="text-amber-800 dark:text-amber-300">Reply needs a look</span>}
       {row.flagged && <span className="text-amber-800 dark:text-amber-300">Won&apos;t be auto-sent</span>}
     </div>
   );

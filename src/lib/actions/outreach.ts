@@ -18,6 +18,7 @@ import {
 } from "@/lib/outreach/send";
 import { findEmailForLead, findEmailsChunk, type BulkFindResult } from "@/lib/outreach/discovery";
 import {
+  addLeadActivity,
   changeStatus,
   confirmColdCall,
   dismissReplyReview,
@@ -30,6 +31,7 @@ import {
   type ActionResult,
 } from "@/lib/outreach/lead-actions";
 import { confirmAddress, deleteLead } from "@/lib/outreach/lead-edit";
+import { statusLabel } from "@/lib/lead-status";
 
 function refresh(pipeline: PipelineId, leadId?: string) {
   const base = PIPELINE_BASE_PATH[pipeline];
@@ -74,24 +76,34 @@ export async function findLeadEmailAction(pipeline: string, leadId: string): Pro
     const lead = await getPipeline(p).findLead(prisma, leadId);
     if (!lead) return { ok: false, error: "This lead no longer exists." };
     const outcome = await findEmailForLead(p, lead);
-    if (outcome.found) {
-      return {
-        ok: true,
-        message: outcome.blockedReason
-          ? `Found ${outcome.email}, but ${outcome.blockedReason.replace(/^[^—]+— /, "")}`
-          : `Found ${outcome.email} for ${lead.name}.`,
-      };
+    switch (outcome.kind) {
+      case "found":
+        return {
+          ok: true,
+          message: outcome.blockedReason
+            ? `Found ${outcome.email}, but ${outcome.blockedReason.replace(/^[^—]+— /, "")}`
+            : `Found ${outcome.email} for ${lead.name}.`,
+        };
+      case "refused":
+        return { ok: false, error: outcome.reason };
+      case "unreachable":
+        return {
+          ok: false,
+          error: `Couldn't reach ${outcome.website ? outcome.website.replace(/^https?:\/\//, "") : "the website"} just now (it timed out or returned an error), so nothing was changed — ${lead.name} stays ${statusLabel(lead.status)}. Try again later.`,
+        };
+      case "none": {
+        const unverified = outcome.unverified
+          ? ` ${outcome.unverified.email} is on ${outcome.unverified.website}, but that site doesn't show ${lead.name}'s phone, street address or city, so it may be a different business and wasn't saved. If it is theirs, edit the lead and enter it.`
+          : "";
+        return {
+          ok: false,
+          error:
+            (outcome.routedTo
+              ? `No usable email found for ${lead.name} — moved to ${outcome.routedTo === "cold_call_list" ? "the call deck for phone outreach" : "“No phone number”, since there's no way to reach them yet"}.`
+              : `No usable email found for ${lead.name}.`) + unverified,
+        };
+      }
     }
-    const unverified = outcome.unverified
-      ? ` ${outcome.unverified.email} is on ${outcome.unverified.website}, but that site doesn't show ${lead.name}'s phone, street address or city, so it may be a different business and wasn't saved. If it is theirs, edit the lead and enter it.`
-      : "";
-    return {
-      ok: false,
-      error:
-        (outcome.routedTo
-          ? `No usable email found for ${lead.name} — moved to ${outcome.routedTo === "cold_call_list" ? "the call deck for phone outreach" : "“No phone number”, since there's no way to reach them yet"}.`
-          : `No usable email found for ${lead.name}.`) + unverified,
-    };
   });
 }
 
@@ -199,4 +211,8 @@ export async function findEmailsChunkAction(pipeline: string): Promise<BulkFindA
     logError("action.findEmailsChunk", err, { pipeline });
     return { ok: false, error: "The email search stopped because of an unexpected error. Progress so far is saved." };
   }
+}
+
+export async function addLeadActivityAction(pipeline: string, leadId: string, type: string, notes: string): Promise<ActionResult> {
+  return guarded("addLeadActivity", pipeline, leadId, (p) => addLeadActivity(p, leadId, String(type), String(notes ?? "")));
 }

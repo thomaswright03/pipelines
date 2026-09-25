@@ -76,12 +76,12 @@ describe("email lookup for an existing lead", () => {
     const pipeline = getPipeline("dataleadsell");
 
     expect(await findEmailForLead("dataleadsell", (await pipeline.findLead(prisma, withPhone.id))!)).toEqual({
-      found: false,
+      kind: "none",
       routedTo: "cold_call_list",
       unverified: null,
     });
     expect(await findEmailForLead("dataleadsell", (await pipeline.findLead(prisma, withoutPhone.id))!)).toEqual({
-      found: false,
+      kind: "none",
       routedTo: "contactless_list",
       unverified: null,
     });
@@ -96,7 +96,7 @@ describe("email lookup for an existing lead", () => {
 
     const outcome = await findEmailForLead("dataleadsell", (await getPipeline("dataleadsell").findLead(prisma, second.id))!);
 
-    expect(outcome).toMatchObject({ found: true, email: "team@acmerealty.test" });
+    expect(outcome).toMatchObject({ kind: "found", email: "team@acmerealty.test" });
     const after = await prisma.agentLead.findUniqueOrThrow({ where: { id: second.id } });
     expect(after.sendBlockedReason).toMatch(/^Duplicate address/);
   });

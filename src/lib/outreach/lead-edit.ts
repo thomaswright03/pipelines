@@ -15,6 +15,7 @@ import { ADDRESS_BLOCK_PREFIXES, UNVERIFIED_BLOCK_PREFIX } from "@/lib/outreach/
 import { getPipeline } from "@/lib/outreach/pipelines";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
+import { enteredByHandEvidence } from "@/lib/outreach/evidence";
 
 export type AddressProblem = { message: string; link: { href: string; label: string } | null };
 
@@ -35,11 +36,6 @@ export async function checkAddressForLead(
     return { message: `${email} is on the do-not-email list, so it can't be used for outreach.`, link: null };
   }
   return null;
-}
-
-/** The note saved as an address's evidence when a person typed it in. */
-export function enteredByHandEvidence(at: Date = new Date()): string {
-  return `Entered by hand on ${formatDate(at)}.`;
 }
 
 /** Whether the lead has been pitched (by a finished send or one still in flight). */

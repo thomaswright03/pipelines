@@ -95,4 +95,23 @@ describe("ADRE import", () => {
       phone: "(480) 555-0100",
     });
   });
+
+  it("leaves a licensee whose website timed out unchecked, and retries them an hour later", async () => {
+    await loadAdreRoster(roster(2));
+    stubFetch({
+      // Licensee 1's brokerage site is down; licensee 2 has no site at all.
+      "https://www.testrealty.com": () => ({ status: 503, body: "down" }),
+    });
+
+    const now = new Date();
+    const first = await processAdreChunk({ now });
+    expect(first).toMatchObject({ checked: 2, unreachable: 2 });
+    expect(first.status).toMatchObject({ checked: 0, remaining: 0, retryLater: 2, needsLoad: false });
+    expect((await prisma.adreLicensee.findFirstOrThrow({ orderBy: { position: "asc" } })).checkedAt).toBeNull();
+
+    stubFetch({ "https://www.first1last1.com": page(`First1 Last1 homes — (480) 555-0100 — first1@first1last1.test`) });
+    const later = await processAdreChunk({ now: new Date(now.getTime() + 61 * 60 * 1000) });
+    expect(later).toMatchObject({ checked: 2, created: 1, unreachable: 0 });
+    expect(later.status).toMatchObject({ checked: 2, retryLater: 0 });
+  });
 });

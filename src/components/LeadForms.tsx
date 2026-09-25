@@ -5,7 +5,15 @@
 import { useRouter } from "next/navigation";
 import { createLeadAction, updateLeadAction } from "@/lib/actions/vault-pipeline";
 import { createAgentAction, updateAgentAction } from "@/lib/actions/dataleadsell";
-import { agentLeadSchema, coldOutreachLeadSchema, LIMITS, type AgentLeadInput, type ColdOutreachLeadInput } from "@/lib/lead-forms";
+import {
+  agentLeadEditSchema,
+  agentLeadSchema,
+  coldOutreachLeadEditSchema,
+  coldOutreachLeadSchema,
+  LIMITS,
+  type AgentLeadInput,
+  type ColdOutreachLeadInput,
+} from "@/lib/lead-forms";
 import { US_STATE_OPTIONS } from "@/lib/us-states";
 import { SOLD_COUNTIES, citiesInCounty } from "@/lib/agent-cities";
 import { TextAreaField, TextField, useLeadForm } from "@/components/LeadFormFields";
@@ -52,7 +60,8 @@ export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: R
   const router = useRouter();
   const submit =
     mode.kind === "edit" ? (values: ColdOutreachLeadInput) => updateLeadAction(mode.leadId, values) : createLeadAction;
-  const form = useLeadForm(coldOutreachLeadSchema, initial, submit, (id) => {
+  const schema = mode.kind === "edit" ? coldOutreachLeadEditSchema(initial.notes) : coldOutreachLeadSchema;
+  const form = useLeadForm(schema, initial, submit, (id) => {
     router.push(`/vault-pipeline/${id}`);
     router.refresh();
   });
@@ -104,7 +113,7 @@ export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: R
       <TextField label="Website" placeholder="example.com" maxLength={LIMITS.website} {...form.field("website")} />
       <TextField label="Source" placeholder="Referral, event, …" maxLength={LIMITS.source} {...form.field("source")} />
       <TextField label="Estimated value ($)" inputMode="decimal" placeholder="2500" {...form.field("estimatedValue")} />
-      <TextAreaField label="Notes" maxLength={LIMITS.notes} {...form.field("notes")} />
+      <TextAreaField label="Notes" maxLength={Math.max(LIMITS.notes, initial.notes.length)} {...form.field("notes")} />
       <div aria-live="polite">{form.formError && <p className="notice-error">{form.formError}</p>}</div>
       <button type="submit" disabled={form.isPending} className="btn-primary">
         {form.isPending ? "Saving…" : mode.kind === "edit" ? "Save changes" : "Add lead"}
@@ -116,7 +125,8 @@ export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: R
 export function AgentLeadForm({ mode, initial }: { mode: Mode; initial: Required<AgentLeadInput> }) {
   const router = useRouter();
   const submit = mode.kind === "edit" ? (values: AgentLeadInput) => updateAgentAction(mode.leadId, values) : createAgentAction;
-  const form = useLeadForm(agentLeadSchema, initial, submit, (id) => {
+  const schema = mode.kind === "edit" ? agentLeadEditSchema(initial.notes) : agentLeadSchema;
+  const form = useLeadForm(schema, initial, submit, (id) => {
     router.push(`/dataleadsell/${id}`);
     router.refresh();
   });
@@ -193,7 +203,7 @@ export function AgentLeadForm({ mode, initial }: { mode: Mode; initial: Required
         )}
       </div>
       <TextField label="Website" placeholder="example.com" maxLength={LIMITS.website} {...form.field("website")} />
-      <TextAreaField label="Notes" maxLength={LIMITS.notes} {...form.field("notes")} />
+      <TextAreaField label="Notes" maxLength={Math.max(LIMITS.notes, initial.notes.length)} {...form.field("notes")} />
       <div aria-live="polite">{form.formError && <p className="notice-error">{form.formError}</p>}</div>
       <button type="submit" disabled={form.isPending} className="btn-primary">
         {form.isPending ? "Saving…" : mode.kind === "edit" ? "Save changes" : "Add agent"}

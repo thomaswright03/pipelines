@@ -21,13 +21,13 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
   const [running, setRunning] = useState<null | "loading" | "checking">(null);
   const [stopping, setStopping] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
-  const [session, setSession] = useState({ checked: 0, created: 0 });
+  const [session, setSession] = useState({ checked: 0, created: 0, unreachable: 0 });
 
   async function run() {
     stopRequested.current = false;
     setStopping(false);
     setFeedback(null);
-    const totals = { checked: 0, created: 0 };
+    const totals = { checked: 0, created: 0, unreachable: 0 };
     setSession(totals);
     let current = status;
 
@@ -65,6 +65,7 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
       }
       totals.checked += chunk.result.checked;
       totals.created += chunk.result.created;
+      totals.unreachable += chunk.result.unreachable;
       setSession({ ...totals });
       current = { ...chunk.result.status, loadedAtLabel: current.loadedAtLabel };
       setStatus(current);
@@ -72,8 +73,14 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
     }
     setRunning(null);
 
-    const summary = `Checked ${totals.checked} licensee${totals.checked === 1 ? "" : "s"} and added ${totals.created} new agent${totals.created === 1 ? "" : "s"} this run; ${current.remaining.toLocaleString("en-US")} left.`;
-    setFeedback(error ? { ok: false, text: `${error} ${summary}` } : { ok: true, text: current.remaining === 0 ? `Done — the whole roster has been checked. ${summary}` : `Stopped. ${summary}` });
+    const retry = totals.unreachable
+      ? ` ${totals.unreachable} website${totals.unreachable === 1 ? "" : "s"} couldn't be reached; those licensees will be checked again in an hour.`
+      : "";
+    const summary = `Checked ${totals.checked} licensee${totals.checked === 1 ? "" : "s"} and added ${totals.created} new agent${totals.created === 1 ? "" : "s"} this run; ${current.remaining.toLocaleString("en-US")} left.${retry}`;
+    setFeedback(error ? { ok: false, text: `${error} ${summary}` } : { ok: true, text: current.remaining === 0
+            ? current.retryLater > 0
+              ? `Everything due has been checked. ${summary}`
+              : `Done — the whole roster has been checked. ${summary}` : `Stopped. ${summary}` });
     router.refresh();
   }
 
@@ -84,7 +91,9 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
       : "Import Maricopa agents (ADRE)"
     : status.remaining > 0
       ? `Continue ADRE import (${status.remaining.toLocaleString("en-US")} left)`
-      : "ADRE roster fully checked";
+      : status.retryLater > 0
+        ? `${status.retryLater.toLocaleString("en-US")} waiting to retry`
+        : "ADRE roster fully checked";
 
   return (
     <section aria-labelledby="adre-heading" className="card flex flex-col gap-3 p-4">
@@ -93,7 +102,7 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
       </h2>
       <p className="text-sm muted">
         {status.loaded
-          ? `Roster loaded ${status.loadedAtLabel ?? ""}: ${status.total.toLocaleString("en-US")} active licensees, ${status.checked.toLocaleString("en-US")} checked, ${status.created.toLocaleString("en-US")} added as agents.`
+          ? `Roster loaded ${status.loadedAtLabel ?? ""}: ${status.total.toLocaleString("en-US")} active licensees, ${status.checked.toLocaleString("en-US")} checked, ${status.created.toLocaleString("en-US")} added as agents.${status.retryLater > 0 ? ` ${status.retryLater.toLocaleString("en-US")} whose website couldn't be reached will be checked again within the hour.` : ""}`
           : "Not loaded yet. The first click downloads ADRE's public license roster (it can take up to a minute), then starts checking licensees for an email of their own."}
       </p>
       {status.total > 0 && (

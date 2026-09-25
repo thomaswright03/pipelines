@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { ColdOutreachLeadForm } from "@/components/LeadForms";
 import { wasPitched } from "@/lib/outreach/lead-edit";
+import { centsToInput } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function EditLead({ params }: PageProps<"/vault-pipeline/[i
           state: lead.state ?? "",
           website: lead.website ?? "",
           source: lead.source ?? "",
-          estimatedValue: lead.estimatedValue !== null ? String(lead.estimatedValue) : "",
+          estimatedValue: centsToInput(lead.estimatedValueCents),
           notes: lead.notes ?? "",
         }}
       />

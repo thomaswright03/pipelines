@@ -30,10 +30,17 @@ export type LeadActionsLead = {
   email: string | null;
   sendBlockedReason: string | null;
   emailed: boolean;
+  /** Every send to this lead is already marked bounced. */
+  bounced: boolean;
   replied: boolean;
   ourReplied: boolean;
   replyNeedsReview: boolean;
+  /** Why the reply needs a look (shown with the flag). */
+  replyReviewReason: string | null;
 };
+
+// Mirrors BOUNCE_MOVES_TO_LOST in src/lib/outreach/lead-actions.ts.
+const BOUNCE_ENDS_OUTREACH = ["contacted", "responded", "cold_call_list", "contactless_list"];
 
 export type LeadSuppression = {
   source: string | null;
@@ -160,7 +167,14 @@ export default function LeadActions({
   async function bounced() {
     const confirmed = await confirm({
       title: `Mark the email to ${lead.name} as bounced?`,
-      body: <p>Records the latest send as bounced and moves the lead to Lost.</p>,
+      body: (
+        <p>
+          Records the latest send as bounced
+          {BOUNCE_ENDS_OUTREACH.includes(lead.status)
+            ? " and moves the lead to Lost."
+            : `. The lead stays ${statusLabel(lead.status)}.`}
+        </p>
+      ),
       confirmLabel: "Mark bounced",
       danger: true,
     });
@@ -195,8 +209,9 @@ export default function LeadActions({
         {lead.replyNeedsReview && (
           <div className="notice-warning flex flex-col gap-2">
             <p>
-              <strong>Replied — needs review.</strong> A reply arrived while this lead was {statusLabel(lead.status)}. Read it on
-              this page, then move the lead (for example back to Responded) or keep it as it is.
+              <strong>Reply needs a look.</strong>{" "}
+              {lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`} Read it in the
+              history on this page, then mark them opted out, move the lead (for example to Responded), or keep it as it is.
             </p>
             <button
               type="button"
@@ -310,7 +325,7 @@ export default function LeadActions({
             {lead.ourReplied ? "Clear “we replied”" : "Mark “we replied”"}
           </button>
         )}
-        {lead.emailed && (lead.status === "contacted" || lead.status === "responded") && (
+        {lead.emailed && !lead.bounced && (
           <button type="button" disabled={isPending} onClick={bounced} className="btn-danger">
             Mark bounced
           </button>

@@ -17,6 +17,7 @@ export const LIMITS = {
   website: 200,
   source: 120,
   notes: 5_000,
+  /** Dollars. */
   estimatedValue: 10_000_000,
 } as const;
 
@@ -69,7 +70,7 @@ export const coldOutreachLeadSchema = z.object({
     .trim()
     .refine((v) => !v || /^\$?\s*\d[\d,]*(\.\d{1,2})?$/.test(v), "Estimated value must be a dollar amount of 0 or more, like 2500")
     .refine(
-      (v) => !v || parseMoney(v) <= LIMITS.estimatedValue,
+      (v) => !v || parseMoneyToCents(v) <= LIMITS.estimatedValue * 100,
       `Estimated value can be at most $${LIMITS.estimatedValue.toLocaleString("en-US")}`,
     ),
   notes: optionalText("Notes", LIMITS.notes),
@@ -89,13 +90,41 @@ export const agentLeadSchema = z.object({
   notes: optionalText("Notes", LIMITS.notes),
 });
 
+/**
+ * Notes for an edit: the usual limit applies to what the operator writes,
+ * but notes saved before replies and call notes moved to the lead's history
+ * may already be longer — those stay editable as long as the notes
+ * themselves aren't made longer than they are now.
+ */
+function editNotes(existing: string | null | undefined) {
+  const current = (existing ?? "").trim();
+  return z
+    .string()
+    .trim()
+    .refine(
+      (v) => v.length <= Math.max(LIMITS.notes, current.length),
+      current.length > LIMITS.notes
+        ? `Notes can't grow past their current ${current.length.toLocaleString("en-US")} characters — shorten them, or log new details in the lead's history`
+        : `Notes can be at most ${LIMITS.notes} characters`,
+    );
+}
+
+export const coldOutreachLeadEditSchema = (existingNotes: string | null | undefined) =>
+  coldOutreachLeadSchema.extend({ notes: editNotes(existingNotes) });
+export const agentLeadEditSchema = (existingNotes: string | null | undefined) =>
+  agentLeadSchema.extend({ notes: editNotes(existingNotes) });
+
 export type ColdOutreachLeadInput = z.input<typeof coldOutreachLeadSchema>;
 export type AgentLeadInput = z.input<typeof agentLeadSchema>;
 export type FieldErrors<T> = Partial<Record<keyof T, string>>;
 
-/** "$2,500.00" → 2500 */
-export function parseMoney(value: string): number {
-  return Number(value.replace(/[$,\s]/g, ""));
+/**
+ * "$2,500.5" → 250050 (whole cents), parsed from the digits so no
+ * floating-point rounding is involved. Expects a value the schema accepted.
+ */
+export function parseMoneyToCents(value: string): number {
+  const [dollars = "0", fraction = ""] = value.replace(/[$,\s]/g, "").split(".");
+  return Number(dollars || "0") * 100 + Number((fraction + "00").slice(0, 2));
 }
 
 /** First message per field, keyed by field name. */

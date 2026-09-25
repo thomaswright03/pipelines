@@ -10,6 +10,8 @@
 // obvious domain), but it doesn't evade anything: it just requests a
 // handful of plausible URLs directly, the same as typing one into a
 // browser, and keeps whichever one actually resolves and looks real.
+import { classifyFetchError, classifyStatus, type FetchFailure } from "@/lib/fetch-failure";
+
 const FETCH_TIMEOUT_MS = 5000;
 const MAX_ATTEMPTS = 3;
 
@@ -62,8 +64,9 @@ function pickSignificantWord(name: string): string | null {
   return words.reduce((longest, w) => (w.length > longest.length ? w : longest));
 }
 
-async function checkCandidate(url: string, significantWord: string, outer?: AbortSignal): Promise<boolean> {
-  if (outer?.aborted) return false;
+/** Whether `url` is a real site about this business, isn't, or couldn't be checked right now. */
+async function checkCandidate(url: string, significantWord: string, outer?: AbortSignal): Promise<"match" | FetchFailure> {
+  if (outer?.aborted) return "unreachable";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -72,15 +75,15 @@ async function checkCandidate(url: string, significantWord: string, outer?: Abor
       redirect: "follow",
       headers: { "User-Agent": "Mozilla/5.0 (compatible; PipelinesOutreachBot/1.0)" },
     });
-    if (!res.ok) return false;
+    if (!res.ok) return classifyStatus(res.status);
     const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("html")) return false;
+    if (!contentType.includes("html")) return "missing";
 
     const html = (await res.text()).toLowerCase();
-    if (PARKED_DOMAIN_MARKERS.some((marker) => html.includes(marker))) return false;
-    return html.includes(significantWord);
-  } catch {
-    return false;
+    if (PARKED_DOMAIN_MARKERS.some((marker) => html.includes(marker))) return "missing";
+    return html.includes(significantWord) ? "match" : "missing";
+  } catch (err) {
+    return classifyFetchError(err);
   } finally {
     clearTimeout(timer);
   }
@@ -95,16 +98,23 @@ async function checkCandidate(url: string, significantWord: string, outer?: Abor
 export type WebsiteGuess = { url: string; basedOn: "brokerage" | "name" };
 
 /**
+ * The outcome of guessing: the site found, or none — and when none, whether
+ * that is a real answer (`inconclusive: false`: every candidate domain
+ * doesn't exist or isn't this business) or some candidate couldn't be
+ * checked (timeout, connection error, 5xx), so the guess should be retried
+ * later rather than taken as "no website".
+ */
+export type WebsiteGuessResult = { guess: WebsiteGuess; inconclusive: false } | { guess: null; inconclusive: boolean };
+
+/**
  * Tries a handful of plausible domains for a business and returns the
  * first one that resolves, looks like a real (non-parked) site, and
- * mentions a significant word from the business's name. Returns null if
- * nothing plausible turns up — callers should treat that as "no website
- * found," same as if Yelp/ADRE had returned one that led nowhere.
+ * mentions a significant word from the business's name.
  */
 export async function guessWebsiteForBusiness(
   name: string,
   options: { brokerage?: string | null; splitPersonName?: boolean; signal?: AbortSignal } = {},
-): Promise<WebsiteGuess | null> {
+): Promise<WebsiteGuessResult> {
   // Only agent listings follow the "Person - Brokerage" convention; a
   // business called "Joe's Pizza - Downtown" isn't a person at "Downtown".
   const { person, brokerage: splitBrokerage } = options.splitPersonName
@@ -121,19 +131,22 @@ export async function guessWebsiteForBusiness(
 
   const tried = new Set<string>();
   let attempts = 0;
+  let inconclusive = false;
   for (const candidate of nameCandidates) {
     const significantWord = pickSignificantWord(candidate.name);
     if (!significantWord) continue;
 
     for (const slug of buildSlugCandidates(candidate.name)) {
-      if (attempts >= MAX_ATTEMPTS) return null;
+      if (attempts >= MAX_ATTEMPTS) return { guess: null, inconclusive };
       const url = `https://www.${slug}.com`;
       if (tried.has(url)) continue;
       tried.add(url);
       attempts++;
 
-      if (await checkCandidate(url, significantWord, options.signal)) return { url, basedOn: candidate.basedOn };
+      const verdict = await checkCandidate(url, significantWord, options.signal);
+      if (verdict === "match") return { guess: { url, basedOn: candidate.basedOn }, inconclusive: false };
+      if (verdict === "unreachable") inconclusive = true;
     }
   }
-  return null;
+  return { guess: null, inconclusive };
 }

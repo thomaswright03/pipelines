@@ -70,7 +70,7 @@ describe("discovery only saves addresses from sites that are the lead's", () => 
     const outcome = await findEmailForLead("cold-outreach", (await getPipeline("cold-outreach").findLead(prisma, lead.id))!);
 
     expect(outcome).toMatchObject({
-      found: false,
+      kind: "none",
       unverified: { website: "https://www.joespizza.com", email: "orders@joespizza.test" },
     });
     const after = await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
@@ -82,7 +82,7 @@ describe("discovery only saves addresses from sites that are the lead's", () => 
     const lead = await makeColdLead({ name: "Joe's Pizza", email: null, website: "https://joes.example.test" });
     stubFetch({ "https://joes.example.test": page(`orders@joes.test`) });
     const outcome = await findEmailForLead("cold-outreach", (await getPipeline("cold-outreach").findLead(prisma, lead.id))!);
-    expect(outcome).toMatchObject({ found: true, email: "orders@joes.test", evidence: "Found on joes.example.test, the website saved on this lead." });
+    expect(outcome).toMatchObject({ kind: "found", email: "orders@joes.test", evidence: "Found on joes.example.test, the website saved on this lead." });
   });
 });
 

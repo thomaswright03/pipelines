@@ -16,14 +16,16 @@ import { parseZonedInputValue, formatDateTime } from "@/lib/time";
 import { allowedTransitions, APPOINTMENT_FROM, statusLabel, CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 import {
   coldOutreachLeadSchema,
+  coldOutreachLeadEditSchema,
   fieldErrorsOf,
   normalizeWebsite,
-  parseMoney,
+  parseMoneyToCents,
   type ColdOutreachLeadInput,
   type FormState,
 } from "@/lib/lead-forms";
 import { createLeadsFromCandidates, describeDiscovery, routeToPhoneOutreach } from "@/lib/outreach/discovery";
-import { checkAddressForLead, editLead, enteredByHandEvidence } from "@/lib/outreach/lead-edit";
+import { checkAddressForLead, editLead } from "@/lib/outreach/lead-edit";
+import { enteredByHandEvidence } from "@/lib/outreach/evidence";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
@@ -54,7 +56,7 @@ function coldOutreachColumns(d: ColdOutreachLeadInput & { name: string }) {
     state: normalizeState(d.state ?? ""),
     website: normalizeWebsite(d.website ?? ""),
     source: d.source || "Manual entry",
-    estimatedValue: d.estimatedValue ? parseMoney(d.estimatedValue) : null,
+    estimatedValueCents: d.estimatedValue ? parseMoneyToCents(d.estimatedValue) : null,
     notes: d.notes || null,
   };
 }
@@ -90,7 +92,8 @@ export async function createLeadAction(input: ColdOutreachLeadInput): Promise<Le
 }
 
 export async function updateLeadAction(leadId: string, input: ColdOutreachLeadInput): Promise<LeadFormState> {
-  const parsed = coldOutreachLeadSchema.safeParse(input);
+  const existing = await prisma.lead.findUnique({ where: { id: leadId }, select: { notes: true } }).catch(() => null);
+  const parsed = coldOutreachLeadEditSchema(existing?.notes).safeParse(input);
   if (!parsed.success) {
     return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
   }
@@ -250,25 +253,6 @@ export async function markResponseAsNonDeliveryAction(leadId: string): Promise<A
     };
   } catch (err) {
     logError("action.markResponseAsNonDelivery", err, { leadId });
-    return { ok: false, error: UNEXPECTED };
-  }
-}
-
-// --- Activity log ---
-
-const ACTIVITY_TYPES = ["note", "call", "email", "meeting"] as const;
-
-export async function addLeadActivityAction(leadId: string, type: string, notes: string): Promise<ActionResult> {
-  const trimmed = String(notes ?? "").trim();
-  if (!trimmed) return { ok: false, error: "Write what happened first." };
-  if (trimmed.length > 2_000) return { ok: false, error: "Keep an activity note under 2,000 characters." };
-  if (!(ACTIVITY_TYPES as readonly string[]).includes(type)) return { ok: false, error: "Pick an activity type." };
-  try {
-    await prisma.leadActivity.create({ data: { leadId, type, notes: trimmed } });
-    revalidate(leadId);
-    return { ok: true, message: "Activity added." };
-  } catch (err) {
-    logError("action.addLeadActivity", err, { leadId });
     return { ok: false, error: UNEXPECTED };
   }
 }

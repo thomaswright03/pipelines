@@ -7,7 +7,7 @@ import { logError } from "@/lib/log";
 import { scanWebsite } from "@/lib/email-finder";
 import { guessWebsiteForBusiness, splitPersonAndBrokerage } from "@/lib/website-finder";
 import { digitsOnly, normalizePhone } from "@/lib/phone";
-import { addressFilterFor } from "@/lib/outreach/email-policy";
+import { addressFilterFor, hostNamesPerson } from "@/lib/outreach/email-policy";
 import { siteEvidence, type LeadFacts } from "@/lib/outreach/site-evidence";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { DUPLICATE_BLOCK_PREFIX, findExistingPitch } from "@/lib/outreach/send";
@@ -21,15 +21,18 @@ import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id"
  *   street or city).
  * - `unverified`: an address was found, but on a guessed site nothing ties
  *   to the lead — it is not saved, only reported.
+ * - `unreachable`: the lead's site (or a candidate site) couldn't be read —
+ *   timeout, connection error, 5xx — so "no address" isn't a verdict.
  */
 export type EmailLookup = {
   website: string | null;
   email: string | null;
   evidence: string | null;
   unverified: { website: string; email: string } | null;
+  unreachable: boolean;
 };
 
-const NO_LOOKUP: EmailLookup = { website: null, email: null, evidence: null, unverified: null };
+const NO_LOOKUP: EmailLookup = { website: null, email: null, evidence: null, unverified: null, unreachable: false };
 
 /**
  * Upper bound on one lead's lookup (up to 3 site guesses + 4 page fetches),
@@ -39,10 +42,6 @@ const NO_LOOKUP: EmailLookup = { website: null, email: null, evidence: null, unv
 export const LOOKUP_TIME_LIMIT_MS = 15_000;
 /** A lookup isn't started with less time than this left before the deadline. */
 const MIN_LOOKUP_MS = 2_000;
-
-function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
 
 function safeHostname(url: string): string {
   try {
@@ -73,28 +72,29 @@ async function lookupEmail(
   if (website) {
     // A stored site for an agent with a brokerage is treated as the
     // brokerage's unless its domain carries the agent's own name.
-    if (isAgent && brokerage) {
-      const host = safeHostname(website);
-      const lastName = slug(person.split(/\s+/).pop() ?? "");
-      basis = lastName.length >= 3 && host.includes(lastName) ? "name" : "brokerage";
-    }
+    if (isAgent && brokerage) basis = hostNamesPerson(safeHostname(website), person) ? "name" : "brokerage";
   } else {
-    const guess = await guessWebsiteForBusiness(lead.name, { brokerage, splitPersonName: isAgent, signal });
-    if (!guess) return NO_LOOKUP;
+    const { guess, inconclusive } = await guessWebsiteForBusiness(lead.name, { brokerage, splitPersonName: isAgent, signal });
+    if (!guess) return { ...NO_LOOKUP, unreachable: inconclusive };
     website = guess.url;
     basis = guess.basedOn;
   }
 
   const scan = await scanWebsite(website, signal);
   const email = scan.emails.find(addressFilterFor(person, basis))?.toLowerCase() ?? null;
-  if (!email) return { ...NO_LOOKUP, website: lead.website?.trim() ? website : null };
+  if (!email) return { ...NO_LOOKUP, website: lead.website?.trim() ? website : null, unreachable: scan.unreachable };
 
   if (lead.website?.trim()) {
-    return { website, email, evidence: `Found on ${safeHostname(website) || website}, the website saved on this lead.`, unverified: null };
+    return {
+      ...NO_LOOKUP,
+      website,
+      email,
+      evidence: `Found on ${safeHostname(website) || website}, the website saved on this lead.`,
+    };
   }
   const evidence = siteEvidence(website, scan.pages, lead);
   if (!evidence) return { ...NO_LOOKUP, unverified: { website, email } };
-  return { website, email, evidence, unverified: null };
+  return { ...NO_LOOKUP, website, email, evidence };
 }
 
 export type AddressConflict = { message: string; href: string | null; leadName: string | null };
@@ -162,7 +162,15 @@ export type DiscoveryContext = {
 export type DiscoveryResult = {
   created: { id: string; name: string; email: string }[];
   examined: number;
-  skipped: { existingName: number; noEmail: number; unverifiedSite: number; addressInUse: number; optedOut: number };
+  skipped: {
+    existingName: number;
+    noEmail: number;
+    unverifiedSite: number;
+    addressInUse: number;
+    optedOut: number;
+    /** The website couldn't be read (timeout, connection error, 5xx); a later run will look again. */
+    unreachable: number;
+  };
   stoppedEarly: boolean;
 };
 
@@ -215,7 +223,7 @@ export async function createLeadsFromCandidates(
   const result: DiscoveryResult = {
     created: [],
     examined: 0,
-    skipped: { existingName: 0, noEmail: 0, unverifiedSite: 0, addressInUse: 0, optedOut: 0 },
+    skipped: { existingName: 0, noEmail: 0, unverifiedSite: 0, addressInUse: 0, optedOut: 0, unreachable: 0 },
     stoppedEarly: false,
   };
 
@@ -259,6 +267,7 @@ export async function createLeadsFromCandidates(
     result.examined++;
     if (!lookup.email) {
       if (lookup.unverified) result.skipped.unverifiedSite++;
+      else if (lookup.unreachable) result.skipped.unreachable++;
       else result.skipped.noEmail++;
       continue;
     }
@@ -310,6 +319,9 @@ export function describeDiscovery(
   if (result.skipped.unverifiedSite) {
     skipped.push(`${result.skipped.unverifiedSite} whose guessed website couldn't be confirmed as theirs`);
   }
+  if (result.skipped.unreachable) {
+    skipped.push(`${result.skipped.unreachable} whose website couldn't be reached (a later run will try again)`);
+  }
   if (result.skipped.addressInUse) skipped.push(`${result.skipped.addressInUse} whose email is already in use`);
   if (result.skipped.optedOut) skipped.push(`${result.skipped.optedOut} opted out`);
   const created = result.created.length;
@@ -338,65 +350,116 @@ export async function routeToPhoneOutreach(
 }
 
 export type FindEmailOutcome =
-  | { found: true; email: string; evidence: string | null; blockedReason: string | null }
+  | { kind: "found"; email: string; evidence: string | null; blockedReason: string | null }
   | {
-      found: false;
+      kind: "none";
       routedTo: "cold_call_list" | "contactless_list" | null;
       unverified: { website: string; email: string } | null;
-    };
+    }
+  /** The site couldn't be read; the lead is left as it was and not counted as checked. */
+  | { kind: "unreachable"; website: string | null }
+  /** The lead already has an address or was pitched, or changed while the lookup ran. */
+  | { kind: "refused"; reason: string };
 
-/** Looks up an address for an existing lead and records the result either way. */
+/**
+ * After an unreachable site, the bulk sweep leaves the lead alone for this
+ * long (so one sweep doesn't keep hammering a site that is down), then
+ * tries it again.
+ */
+export const LOOKUP_RETRY_AFTER_MS = 60 * 60 * 1000;
+
+/**
+ * Looks up an address for an existing lead with none and records the
+ * result. Only a completed scan with no usable address counts as "checked"
+ * and routes a New lead to phone outreach; a site that couldn't be reached
+ * leaves the lead as it was, to be tried again later. The address is saved
+ * only if the lead still has no address and the same status as when it was
+ * read, so it can never replace an address a pitch went to.
+ */
 export async function findEmailForLead(pipelineId: PipelineId, lead: OutreachLead): Promise<FindEmailOutcome> {
   const pipeline = getPipeline(pipelineId);
+  if (lead.email) return { kind: "refused", reason: `${lead.name} already has an address (${lead.email}).` };
+  if (lead.lastEmailedAt || (await pipeline.hasBeenEmailed(prisma, lead.id))) {
+    return { kind: "refused", reason: `${lead.name} was already emailed, so their address can't be replaced.` };
+  }
+  const changed: FindEmailOutcome = {
+    kind: "refused",
+    reason: `${lead.name} changed while the lookup ran — reload the page and try again.`,
+  };
+  const expected = { status: lead.status, email: null };
+
   const lookup = await lookupEmail(pipelineId, lead, AbortSignal.timeout(LOOKUP_TIME_LIMIT_MS));
   const checkedAt = new Date();
 
+  if (!lookup.email && lookup.unreachable) {
+    await pipeline.updateIfUnchanged(prisma, lead.id, expected, { emailLookupFailedAt: checkedAt });
+    return { kind: "unreachable", website: lookup.website ?? lead.website };
+  }
+
   if (!lookup.email) {
-    await pipeline.update(prisma, lead.id, { website: lookup.website ?? lead.website, emailCheckedAt: checkedAt });
+    const saved = await pipeline.updateIfUnchanged(prisma, lead.id, expected, {
+      website: lookup.website ?? lead.website,
+      emailCheckedAt: checkedAt,
+      emailLookupFailedAt: null,
+    });
+    if (!saved) return changed;
     const routedTo = lead.status === "new" ? await routeToPhoneOutreach(pipelineId, lead) : null;
-    return { found: false, routedTo, unverified: lookup.unverified };
+    return { kind: "none", routedTo, unverified: lookup.unverified };
   }
 
   const conflict = await describeAddressConflict(pipelineId, lookup.email, lead.id);
   const blockedReason = conflict ? `${DUPLICATE_BLOCK_PREFIX} — ${conflict}, so this lead is never auto-sent.` : null;
-  await pipeline.update(prisma, lead.id, {
+  const saved = await pipeline.updateIfUnchanged(prisma, lead.id, expected, {
     email: lookup.email,
     emailEvidence: lookup.evidence,
     website: lookup.website,
     emailCheckedAt: checkedAt,
+    emailLookupFailedAt: null,
     ...(blockedReason ? { sendBlockedReason: blockedReason } : {}),
   });
-  return { found: true, email: lookup.email, evidence: lookup.evidence, blockedReason };
+  if (!saved) return changed;
+  return { kind: "found", email: lookup.email, evidence: lookup.evidence, blockedReason };
 }
 
 const BULK_FIND_CHUNK_SIZE = 5;
 const BULK_FIND_TIME_BUDGET_MS = 20_000;
 
-export type BulkFindResult = { checked: number; found: number; remaining: number };
+export type BulkFindResult = { checked: number; found: number; unreachable: number; remaining: number };
 
 /**
  * One chunk of the "Find emails for all leads" sweep: leads never checked
- * before, oldest first. Small and time-boxed so each call stays well under
- * the function limit; the client loops to show live progress.
+ * before, oldest first, skipping any whose site was unreachable within the
+ * last hour. Small and time-boxed so each call stays well under the
+ * function limit; the client loops to show live progress.
  */
-export async function findEmailsChunk(pipelineId: PipelineId): Promise<BulkFindResult> {
+export async function findEmailsChunk(pipelineId: PipelineId, now: Date = new Date()): Promise<BulkFindResult> {
   const pipeline = getPipeline(pipelineId);
-  const leads = await pipeline.listNeedingEmailLookup(prisma, BULK_FIND_CHUNK_SIZE);
+  const retryBefore = new Date(now.getTime() - LOOKUP_RETRY_AFTER_MS);
+  const leads = await pipeline.listNeedingEmailLookup(prisma, BULK_FIND_CHUNK_SIZE, retryBefore);
   const deadline = Date.now() + BULK_FIND_TIME_BUDGET_MS;
   let checked = 0;
   let found = 0;
+  let unreachable = 0;
   for (const lead of leads) {
-    if (checked > 0 && Date.now() > deadline) break;
-    checked++;
+    if (checked + unreachable > 0 && Date.now() > deadline) break;
     try {
       const outcome = await findEmailForLead(pipelineId, lead);
-      if (outcome.found) found++;
+      if (outcome.kind === "unreachable") {
+        unreachable++;
+        continue;
+      }
+      checked++;
+      if (outcome.kind === "found") found++;
+      // Refused: it has an address or was emailed after all — nothing to look up.
+      if (outcome.kind === "refused") await pipeline.update(prisma, lead.id, { emailCheckedAt: new Date() });
     } catch (err) {
       logError("discovery.findEmailsChunk", err, { pipeline: pipelineId, leadId: lead.id });
-      // Record the attempt so the sweep moves on instead of retrying forever.
-      await pipeline.update(prisma, lead.id, { emailCheckedAt: new Date() });
+      // Park it like an unreachable site so the sweep moves on; it is
+      // retried later rather than written off.
+      await pipeline.update(prisma, lead.id, { emailLookupFailedAt: new Date() });
+      unreachable++;
     }
   }
-  const remaining = await pipeline.countNeedingEmailLookup(prisma);
-  return { checked, found, remaining };
+  const remaining = await pipeline.countNeedingEmailLookup(prisma, retryBefore);
+  return { checked, found, unreachable, remaining };
 }
