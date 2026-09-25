@@ -4,17 +4,11 @@ import { prisma } from "@/lib/db";
 import SettingsControls from "@/components/SettingsControls";
 import { AddSuppressionForm, DoNotEmailRows } from "@/components/DoNotEmailList";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { resolveTransportKind } from "@/lib/mail-transport-kind";
+import { describeMailDestination } from "@/lib/mail-transport-kind";
 import { formatDate, formatDateTime } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
-
-const TRANSPORT_DESCRIPTION = {
-  zeptomail: "Live — emails are delivered to recipients.",
-  smtp: "Test mode — emails are saved, not delivered. Nobody receives them.",
-  outbox: "Test mode — emails are saved, not delivered. Nobody receives them.",
-} as const;
 
 const DNE_PAGE_SIZE = 25;
 
@@ -47,7 +41,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     skip: (page - 1) * DNE_PAGE_SIZE,
     take: DNE_PAGE_SIZE,
   });
-  const transport = resolveTransportKind();
+  const mail = describeMailDestination();
   const pageHref = (n: number) => `/settings?${new URLSearchParams({ ...(q ? { q } : {}), page: String(n) })}#dne-heading`;
 
   return (
@@ -67,7 +61,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         <h2 id="transport-heading" className="text-base font-semibold">
           Where email goes
         </h2>
-        <p className="text-sm">{TRANSPORT_DESCRIPTION[transport]}</p>
+        <p className="text-sm">{mail.description}</p>
         <p className="text-sm muted">This is part of how the app is set up; ask your developer if it looks wrong.</p>
       </section>
 

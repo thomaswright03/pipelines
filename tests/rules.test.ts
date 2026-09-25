@@ -8,7 +8,7 @@ import { escapeVCardValue, buildVCard } from "@/lib/vcard";
 import { isAuthorizedBearer } from "@/lib/auth-header";
 import { agentLeadSchema, coldOutreachLeadSchema, fieldErrorsOf } from "@/lib/lead-forms";
 import { missingEnvVars } from "@/instrumentation";
-import { resolveTransportKind } from "@/lib/mail-transport-kind";
+import { describeMailDestination, resolveTransportKind } from "@/lib/mail-transport-kind";
 import { classifySendError, MailConfigError } from "@/lib/send-email";
 import { smtpError } from "./helpers";
 
@@ -193,5 +193,19 @@ describe("send error classification", () => {
   it("treats a dropped connection mid-send as 'unknown'", () => {
     expect(classifySendError(smtpError("Timeout", { code: "ETIMEDOUT" })).delivery).toBe("unknown");
     expect(classifySendError(smtpError("Connection closed unexpectedly", { code: "ECONNECTION" })).delivery).toBe("unknown");
+  });
+});
+
+describe("where mail goes", () => {
+  it("only claims nobody receives mail for the outbox or an SMTP catcher on this machine", () => {
+    expect(describeMailDestination({ EMAIL_TRANSPORT: "outbox" })).toMatchObject({ delivers: false, badge: "Test mode — emails are saved, not delivered" });
+    expect(describeMailDestination({ EMAIL_TRANSPORT: "smtp", SMTP_HOST: "127.0.0.1", SMTP_PORT: "1025" })).toMatchObject({
+      delivers: false,
+      badge: "Mail captured locally (127.0.0.1:1025)",
+    });
+    const relay = describeMailDestination({ EMAIL_TRANSPORT: "smtp", SMTP_HOST: "mail.example.org", SMTP_PORT: "587" });
+    expect(relay).toMatchObject({ delivers: true, badge: "Mail sent via mail.example.org:587" });
+    expect(relay.description).not.toMatch(/Nobody receives/);
+    expect(describeMailDestination({ VERCEL: "1" })).toMatchObject({ kind: "zeptomail", delivers: true, badge: null });
   });
 });

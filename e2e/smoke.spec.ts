@@ -192,11 +192,14 @@ test("every page has its own tab title", async ({ page }) => {
     ["/dataleadsell/stats", /^dataleadsell — Stats/],
     ["/settings", /^Settings/],
     [`/vault-pipeline/${id}`, /^Test Business 1 — Cold Outreach/],
+    ["/nope", /^Page not found · Pipelines$/],
   ];
   for (const [path, title] of expected) {
     await page.goto(path);
     await expect(page).toHaveTitle(title);
   }
+  expect((await page.goto("/nope"))?.status()).toBe(404);
+  await expect(page.getByText("This page doesn't exist.")).toBeVisible();
 });
 
 async function expectNoSidewaysScroll(page: Page) {
@@ -231,3 +234,15 @@ for (const width of [375, 768, 1280, 1440, 2560]) {
     await expect(list.getByRole("link", { name: longName }).filter({ visible: true })).toHaveAttribute("title", longName);
   });
 }
+
+test("each stats bar can be read: its date and count on hover or focus", async ({ page }) => {
+  await seedColdLeads(3);
+  await page.goto("/vault-pipeline/stats");
+  const bars = page.getByRole("list", { name: "leads added, by day" }).getByRole("listitem");
+  await expect(bars).toHaveCount(14);
+  const today = bars.last();
+  await expect(today).toHaveAccessibleName(/^[A-Z][a-z]{2} \d{1,2}: 3 leads added$/);
+  await today.focus();
+  await expect(today.getByRole("tooltip")).toBeVisible();
+  await expect(today.getByRole("tooltip")).toHaveText(/: 3 leads added$/);
+});

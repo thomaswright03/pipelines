@@ -46,25 +46,55 @@ export function BreakdownList({ items, emptyLabel }: { items: Breakdown; emptyLa
   );
 }
 
+/** "2026-09-24" → "Sep 24" (the key is already a calendar day in the app's time zone). */
+function dayLabel(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * Daily counts as bars. Each bar shows its count above it and is a
+ * focusable list item named "Sep 24: 3 emails sent", with a tooltip on
+ * hover or keyboard focus.
+ */
 export function DayTrend({ points, noun }: { points: { day: string; count: number }[]; noun: string }) {
   const max = Math.max(...points.map((p) => p.count), 1);
   const total = points.reduce((sum, p) => sum + p.count, 0);
   return (
-    <figure>
-      <div className="flex items-end gap-1" style={{ height: "64px" }} aria-hidden>
-        {points.map((p) => (
-          <div key={p.day} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1" style={{ height: "100%" }}>
-            <div
-              className="w-full rounded-t bg-gradient-to-t from-indigo-600 to-violet-400 transition-all"
-              style={{ height: `${Math.max((p.count / max) * 100, p.count > 0 ? 6 : 2)}%` }}
-              title={`${p.day}: ${p.count}`}
-            />
-            <div className="truncate text-[10px] text-zinc-600 dark:text-zinc-400">{p.day.slice(5).replace("-", "/")}</div>
-          </div>
-        ))}
-      </div>
-      <figcaption className="sr-only">
-        {total} {noun} over the last {points.length} days: {points.map((p) => `${p.day} ${p.count}`).join(", ")}.
+    <figure className="flex flex-col gap-2">
+      <ol className="flex items-end gap-1" style={{ height: "88px" }} aria-label={`${noun}, by day`}>
+        {points.map((p, i) => {
+          const label = `${dayLabel(p.day)}: ${p.count.toLocaleString("en-US")} ${noun}`;
+          return (
+            <li
+              key={p.day}
+              tabIndex={0}
+              aria-label={label}
+              className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              <span
+                role="tooltip"
+                className={`pointer-events-none absolute -top-7 z-10 hidden ${i < points.length / 2 ? "left-0" : "right-0"} whitespace-nowrap rounded bg-zinc-900 px-1.5 py-0.5 text-xs text-white shadow group-hover:block group-focus-visible:block dark:bg-zinc-100 dark:text-zinc-900`}
+              >
+                {label}
+              </span>
+              <span className="text-[10px] font-medium tabular-nums text-zinc-700 dark:text-zinc-300" aria-hidden>
+                {p.count > 0 ? p.count.toLocaleString("en-US") : ""}
+              </span>
+              <span
+                aria-hidden
+                className="w-full rounded-t bg-gradient-to-t from-indigo-600 to-violet-400 transition-all"
+                style={{ height: `${Math.max((p.count / max) * 60, p.count > 0 ? 4 : 1.5)}%` }}
+              />
+              <span aria-hidden className="truncate text-[10px] text-zinc-600 dark:text-zinc-400">
+                {p.day.slice(5).replace("-", "/")}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <figcaption className="text-sm muted">
+        {total.toLocaleString("en-US")} {noun} over the last {points.length} days
+        {total > 0 ? `, at most ${max.toLocaleString("en-US")} in a day` : ""}. Hover or tab to a bar for its date and count.
       </figcaption>
     </figure>
   );

@@ -4,12 +4,14 @@ import UnmatchedReplies from "@/components/UnmatchedReplies";
 import { listUnmatchedReplies } from "@/lib/outreach/inbound";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import { formatDateTime } from "@/lib/time";
+import { getQualitySignals } from "@/lib/outreach/corrections";
+import { StatCard } from "@/components/PipelineStatsWidgets";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Replies" };
 
 export default async function RepliesPage() {
-  const [health, replies] = await Promise.all([getReplyHealth(), listUnmatchedReplies(50)]);
+  const [health, replies, quality] = await Promise.all([getReplyHealth(), listUnmatchedReplies(50), getQualitySignals()]);
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -25,6 +27,32 @@ export default async function RepliesPage() {
           Reply tracking
         </h2>
         <ReplyStatus health={health} showLink={false} />
+      </section>
+
+      <section aria-labelledby="quality-heading" className="card flex flex-col gap-3 p-4">
+        <div>
+          <h2 id="quality-heading" className="text-base font-semibold">
+            How the automatic checks are doing (last {quality.sinceDays} days)
+          </h2>
+          <p className="mt-1 text-sm muted">
+            Each time you correct the app — undo an opt-out it read from a reply, mark someone opted out that it missed, or mark
+            a found address bounced — it counts here. Rising numbers mean the rules need a look.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard
+            label="Opt-outs read from replies"
+            value={quality.autoOptOuts}
+            sublabel={`${quality.optOutsReversed.toLocaleString("en-US")} undone by you`}
+          />
+          <StatCard label="Opt-outs it missed" value={quality.optOutsMissed} sublabel="replies you marked opted out yourself" />
+          <StatCard
+            label="Replies flagged for a look"
+            value={quality.flaggedForReview}
+            sublabel={`${quality.wrongPerson.toLocaleString("en-US")} said “wrong person”`}
+          />
+          <StatCard label="Found addresses that bounced" value={quality.foundAddressesBounced} sublabel="marked bounced by you" />
+        </div>
       </section>
 
       <section aria-labelledby="unmatched-heading" className="flex flex-col gap-3">

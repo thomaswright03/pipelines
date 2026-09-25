@@ -11,7 +11,7 @@ export const VAULT_DAILY_RUN_TIME_LABEL = "8:33 AM Arizona time";
  * `businessesPerRun` caps how many Yelp businesses one daily run checks for
  * an email address — not how many get emailed: typically only 15–25% of
  * businesses turn up a usable address, and the run also stops looking
- * after about 30 seconds. (Stored in PipelineSchedule.leadCount.)
+ * after about 25 seconds (see vault-daily-run.ts). (Stored in PipelineSchedule.leadCount.)
  */
 export type PipelineScheduleData = { enabled: boolean; businessesPerRun: number };
 

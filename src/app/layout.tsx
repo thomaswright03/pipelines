@@ -6,7 +6,7 @@ import SiteNav from "@/components/SiteNav";
 import ThemeToggle from "@/components/ThemeToggle";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { resolveTransportKind } from "@/lib/mail-transport-kind";
+import { describeMailDestination } from "@/lib/mail-transport-kind";
 import { logError } from "@/lib/log";
 import { countUnmatchedReplies } from "@/lib/outreach/inbound";
 import "./globals.css";
@@ -80,12 +80,12 @@ async function NavWithCounts() {
 
 /**
  * Header pills that are always visible: outbound email paused, and (when
- * not using the live mail service) that emails are saved, not delivered.
+ * not using the live mail service) where "sent" mail actually goes.
  */
 async function OutboundStatus() {
   // Read per request, never baked into a prerendered page.
   await connection();
-  const transport = resolveTransportKind();
+  const mail = describeMailDestination();
   let paused: boolean | null = null;
   try {
     paused = (await getAppSettings()).outboundPaused;
@@ -94,9 +94,15 @@ async function OutboundStatus() {
   }
   return (
     <>
-      {transport !== "zeptomail" && (
-        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">
-          Test mode — emails are saved, not delivered
+      {mail.badge && (
+        <span
+          className={
+            mail.delivers
+              ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
+              : "rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200"
+          }
+        >
+          {mail.badge}
         </span>
       )}
       {paused && (

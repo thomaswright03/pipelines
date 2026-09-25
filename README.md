@@ -113,8 +113,11 @@ SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
 ```
 
-Then open http://localhost:8025. While mail is captured, the header shows **Mail captured locally**. Never
-put the production ZeptoMail password in a local `.env`.
+Then open http://localhost:8025. While mail goes to a catcher on this machine, the header shows **Mail captured
+locally (127.0.0.1:1025)**; with the outbox it shows **Test mode — emails are saved, not delivered**. If
+`SMTP_HOST` points anywhere other than this machine, the header shows **Mail sent via host:port** in amber
+instead, because that server may deliver to real people. Never put the production ZeptoMail password in a
+local `.env`.
 
 **Discovery locally.** The search buttons call Yelp, which needs a real `YELP_API_KEY` and uses up real
 quota. Leave the key empty to work on everything else. To get leads without Yelp, use **+ Add lead by
