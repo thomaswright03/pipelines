@@ -81,8 +81,9 @@ export function isStatusOf(pipeline: PipelineId, value: string): value is LeadSt
   return (statusesFor(pipeline) as readonly string[]).includes(value);
 }
 
+/** The on-screen name of a status; one the app doesn't know is shown as such, never raw. */
 export function statusLabel(status: string): string {
-  return STATUS_LABEL[status as LeadStatus] ?? status;
+  return Object.hasOwn(STATUS_LABEL, status) ? STATUS_LABEL[status as LeadStatus] : `Unknown status (${status})`;
 }
 
 // Manual moves offered by the Status control. "contacted" is only a manual
