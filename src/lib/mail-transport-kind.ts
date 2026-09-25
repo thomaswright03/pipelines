@@ -48,8 +48,8 @@ export function describeMailDestination(env: Env = process.env): MailDestination
     return {
       kind,
       delivers: false,
-      badge: "Mail not set up (SMTP_HOST missing)",
-      description: "EMAIL_TRANSPORT is smtp but SMTP_HOST isn't set, so every send will fail until it is.",
+      badge: "Mail not set up",
+      description: "The app is set to send through a mail server, but no server address is set, so every send will fail. Tell your developer the mail server address is missing.",
     };
   }
   const where = `${host}:${env.SMTP_PORT?.trim() || "1025"}`;

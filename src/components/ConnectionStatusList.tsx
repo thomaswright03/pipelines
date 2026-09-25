@@ -1,4 +1,5 @@
 import type { ConnectionStatus, StatusTone } from "@/lib/integration-status";
+import TestConnectionButton from "@/components/TestConnectionButton";
 
 const TONE: Record<StatusTone, { label: string; dot: string; badge: string }> = {
   ok: {
@@ -30,11 +31,12 @@ export default function ConnectionStatusList({ items }: { items: ConnectionStatu
               <span className="text-sm font-semibold">{item.label}</span>
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${tone.badge}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} aria-hidden />
-                {tone.label}
+                {item.badge ?? tone.label}
               </span>
             </div>
             <p className="break-words text-sm">{item.summary}</p>
             {item.next && <p className="text-sm muted">Next step: {item.next}</p>}
+            {item.testable && (item.key === "mail" || item.key === "yelp") && <TestConnectionButton service={item.key} label={item.label} />}
           </li>
         );
       })}

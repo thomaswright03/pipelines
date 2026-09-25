@@ -19,7 +19,11 @@ import path from "node:path";
 import { resolveTransportKind, type TransportKind } from "@/lib/mail-transport-kind";
 
 export type MailMessage = { from: string; to: string; subject: string; text: string };
-export type MailTransport = { sendMail(message: MailMessage): Promise<{ messageId: string }> };
+export type MailTransport = {
+  sendMail(message: MailMessage): Promise<{ messageId: string }>;
+  /** Connects, upgrades to TLS and logs in without sending anything (SMTP transports). */
+  verify?(): Promise<unknown>;
+};
 
 const CONNECTION_TIMEOUT_MS = 5_000;
 const GREETING_TIMEOUT_MS = 5_000;
@@ -60,6 +64,9 @@ function createOutboxTransport(): MailTransport {
   // Local development only (never used on Vercel), so keep it out of output tracing.
   const dir = path.resolve(/*turbopackIgnore: true*/ process.env.OUTBOX_DIR || ".outbox");
   return {
+    async verify() {
+      await mkdir(dir, { recursive: true });
+    },
     async sendMail(message) {
       const info = await stream.sendMail(message);
       await mkdir(dir, { recursive: true });
@@ -87,6 +94,32 @@ function getTransport(): MailTransport {
     cachedTransport = { kind, transport: kind === "outbox" ? createOutboxTransport() : createSmtpTransport(kind) };
   }
   return cachedTransport.transport;
+}
+
+/**
+ * "Test connection": for SMTP transports, connects, does STARTTLS and logs
+ * in with the configured credentials, then disconnects — no message is
+ * sent. Throws the transport's error (see classifyConnectionTestError).
+ */
+export async function verifyMailTransport(): Promise<void> {
+  const transport = getTransport();
+  if (transport.verify) await transport.verify();
+}
+
+/** A failed connection test, in plain words for Settings → Connections. */
+export function describeConnectionTestError(err: unknown): string {
+  if (err instanceof MailConfigError) {
+    return "Email isn't set up on the server yet. Tell your developer the email password (the ZeptoMail SMTP token) is missing.";
+  }
+  const e = (err ?? {}) as SmtpishError;
+  if (e.code === "EAUTH") {
+    return "The email service turned down our login. Tell your developer the ZeptoMail SMTP password needs replacing.";
+  }
+  if (e.syscall === "connect" || e.syscall === "getaddrinfo" || e.code === "ETIMEDOUT" || e.code === "ECONNECTION" || e.code === "ESOCKET") {
+    return "Couldn't reach the email service. Try again in a few minutes; if it keeps failing, tell your developer.";
+  }
+  if (e.code === "ETLS") return "The email service's secure connection failed. Tell your developer.";
+  return "The email service answered with an error. Try again later; if it keeps failing, tell your developer.";
 }
 
 export async function sendOutreachEmail(

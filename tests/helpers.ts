@@ -32,6 +32,10 @@ export function captureMail(options: { delayMs?: number } = {}) {
       counter++;
       return { messageId: `<test-${counter}-${Date.now()}@pipelines.test>` };
     },
+    // "Test connection": fails the same way sends do while `fail` is set.
+    async verify() {
+      if (failure && failure.remaining > 0) throw failure.err;
+    },
   });
   return {
     messages,

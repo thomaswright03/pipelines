@@ -47,6 +47,14 @@ model AppSettings {
   // successful send.
   lastSendFailedAt          DateTime?
   lastSendFailure           String?
+  // The last "Test connection" of the mail service (Settings → Connections):
+  // when, and why it failed (null when it passed).
+  mailTestedAt              DateTime?
+  mailTestError             String?
+  // The last time Yelp was asked anything (a search, a daily run or a
+  // "Test connection"): when, and why it failed (null when it answered).
+  yelpCheckedAt             DateTime?
+  yelpCheckError            String?
   updatedAt                 DateTime  @updatedAt
 }
 

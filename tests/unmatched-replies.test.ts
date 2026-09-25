@@ -75,17 +75,24 @@ describe("unmatched replies", () => {
 describe("reply tracking health", () => {
   const day = 86_400_000;
 
-  it("warns when emails went out 2–7 days ago and no reply has arrived in a week", async () => {
+  it("warns when emails went out more than 2 days ago — however long ago — and no reply has arrived in a week", async () => {
     const now = new Date();
     expect(shouldWarn(0, null, now)).toBe(false);
     expect(shouldWarn(3, null, now)).toBe(true);
     expect(shouldWarn(3, new Date(now.getTime() - 8 * day), now)).toBe(true);
     expect(shouldWarn(3, new Date(now.getTime() - 1 * day), now)).toBe(false);
 
+    // Sends a month old with no reply since still warn.
+    await prisma.outreachRecipient.create({
+      data: { pipeline: "cold-outreach", email: "old@x.test", state: "sent", sentAt: new Date(Date.now() - 30 * day) },
+    });
+    expect(await getReplyHealth()).toMatchObject({ warning: true, sendsPastGrace: 1 });
+    await prisma.outreachRecipient.deleteMany();
+
     await prisma.outreachRecipient.create({
       data: { pipeline: "cold-outreach", email: "a@x.test", state: "sent", sentAt: new Date(Date.now() - 3 * day) },
     });
-    expect(await getReplyHealth()).toMatchObject({ warning: true, lastReplyAt: null, sendsToWatch: 1 });
+    expect(await getReplyHealth()).toMatchObject({ warning: true, lastReplyAt: null, sendsPastGrace: 1 });
 
     await inbound({ from: "anyone@x.test", subject: "Re: hi", text: "Thanks" });
     const health = await getReplyHealth();

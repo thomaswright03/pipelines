@@ -64,8 +64,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             Connections
           </h2>
           <p className="mt-1 text-sm muted">
-            Whether each outside service the pipelines depend on is working. A broken one otherwise looks just like
-            &ldquo;nobody replied&rdquo; or &ldquo;nothing to send&rdquo;. Checked each time this page loads.
+            Whether each outside service the pipelines depend on is working. &ldquo;Working&rdquo; means it has
+            actually worked — a send, a search, a reply or a test — not just that it&apos;s set up.
           </p>
         </div>
         <ConnectionStatusList items={connections} />

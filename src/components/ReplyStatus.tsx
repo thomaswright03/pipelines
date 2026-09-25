@@ -11,13 +11,16 @@ export default function ReplyStatus({ health, showLink = true }: { health: Reply
     <div className="flex flex-col gap-2">
       {health.warning ? (
         <p className="notice-warning">
-          <strong>No replies recorded lately.</strong> {plural(health.sendsToWatch, "email")} went out 2–7 days ago, but
+          <strong>No replies recorded lately.</strong> {plural(health.sendsPastGrace, "email")} went out more than 2 days ago, but
           {health.lastReplyAt ? ` the last reply arrived ${formatDateTime(health.lastReplyAt)}` : " no reply has ever been recorded"}.
-          Replies may not be reaching the app — ask your developer to check reply forwarding (README → Reply tracking).
+          Replies may not be reaching the app: mark replies by hand from each lead&apos;s page, and tell your developer that reply
+          forwarding needs checking.
         </p>
       ) : (
         <p className="text-sm muted">
-          {health.lastReplyAt ? `Last reply received ${formatDateTime(health.lastReplyAt)}.` : "No replies received yet."}
+          {health.lastReplyAt
+            ? `Last reply received ${formatDateTime(health.lastReplyAt)}.`
+            : "No replies received yet, so reply tracking isn't confirmed — until the first one arrives, mark replies by hand from the lead's page."}
         </p>
       )}
       {health.unmatched > 0 && (

@@ -7,6 +7,7 @@
 // the name (see website-finder.ts). Leads without an email still have a
 // phone number for the cold-call deck.
 import { logError } from "@/lib/log";
+import { recordServiceCheck } from "@/lib/outreach/settings";
 
 export type YelpCandidate = {
   name: string;
@@ -38,7 +39,12 @@ export class YelpError extends Error {
   }
 }
 
-export async function findBusinessesViaYelp(term: string, location: string): Promise<YelpCandidate[]> {
+/**
+ * Searches Yelp. Every answer or failure (other than a location Yelp didn't
+ * recognise, which is the operator's input, not the service) is remembered
+ * for Settings → Connections. `limit` defaults to Yelp's maximum of 50.
+ */
+export async function findBusinessesViaYelp(term: string, location: string, options: { limit?: number } = {}): Promise<YelpCandidate[]> {
   const apiKey = process.env.YELP_API_KEY;
   if (!apiKey) {
     throw new YelpError("Yelp isn't set up yet, so the search can't run — ask your developer to add the Yelp access key.");
@@ -47,7 +53,7 @@ export async function findBusinessesViaYelp(term: string, location: string): Pro
   const url = new URL(YELP_SEARCH_URL);
   url.searchParams.set("term", term || "local businesses");
   url.searchParams.set("location", location);
-  url.searchParams.set("limit", String(PAGE_LIMIT));
+  url.searchParams.set("limit", String(Math.min(Math.max(1, options.limit ?? PAGE_LIMIT), PAGE_LIMIT)));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -58,7 +64,9 @@ export async function findBusinessesViaYelp(term: string, location: string): Pro
     raw = await res.text();
   } catch (err) {
     logError("yelp.search", err, { location });
-    throw new YelpError("Couldn't reach Yelp — nothing was used up. Check the connection and try again.");
+    const message = "Couldn't reach Yelp — nothing was used up. Check the connection and try again.";
+    await recordServiceCheck("yelp", message);
+    throw new YelpError(message);
   } finally {
     clearTimeout(timer);
   }
@@ -72,8 +80,14 @@ export async function findBusinessesViaYelp(term: string, location: string): Pro
 
   if (!res.ok || !body) {
     logError("yelp.search", new Error(`HTTP ${res.status}: ${raw.slice(0, 300)}`), { location });
-    throw new YelpError(describeYelpFailure(res.status, body?.error?.code));
+    const code = body?.error?.code;
+    const message = describeYelpFailure(res.status, code);
+    // A location Yelp didn't recognise still proves the key and service work.
+    await recordServiceCheck("yelp", isLocationProblem(code) ? null : message);
+    throw new YelpError(message);
   }
+
+  await recordServiceCheck("yelp", null);
 
   return (body.businesses ?? [])
     .filter((b) => b.name?.trim())
@@ -85,8 +99,12 @@ export async function findBusinessesViaYelp(term: string, location: string): Pro
     }));
 }
 
+function isLocationProblem(code: string | undefined): boolean {
+  return code === "LOCATION_NOT_FOUND" || code === "VALIDATION_ERROR";
+}
+
 function describeYelpFailure(status: number, code: string | undefined): string {
-  if (code === "LOCATION_NOT_FOUND" || code === "VALIDATION_ERROR") {
+  if (isLocationProblem(code)) {
     return "Yelp didn't recognise that location — check the city and state.";
   }
   if (status === 401 || status === 403 || code === "TOKEN_INVALID") {
