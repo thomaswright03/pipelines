@@ -10,8 +10,16 @@ export default function setup() {
   if (!["localhost", "127.0.0.1", "postgres"].includes(host) && process.env.ALLOW_NONLOCAL_TEST_DB !== "1") {
     throw new Error(`Refusing to run tests against non-local database host "${host}".`);
   }
-  execSync("npx prisma migrate deploy", {
-    stdio: "pipe",
-    env: { ...process.env, PIPELINES_DIRECT_URL: url, PRISMA_HIDE_UPDATE_MESSAGE: "1" },
-  });
+  try {
+    execSync("npx prisma migrate deploy", {
+      stdio: "pipe",
+      env: { ...process.env, PIPELINES_DIRECT_URL: url, PRISMA_HIDE_UPDATE_MESSAGE: "1" },
+    });
+  } catch (err) {
+    const output = err as { stdout?: Buffer; stderr?: Buffer };
+    throw new Error(
+      `Couldn't migrate the test database (${host}). A local test database left in a bad state can be recreated with ` +
+        `DROP DATABASE / CREATE DATABASE.\n${output.stdout?.toString() ?? ""}${output.stderr?.toString() ?? ""}`,
+    );
+  }
 }

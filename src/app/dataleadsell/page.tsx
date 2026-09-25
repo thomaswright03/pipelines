@@ -5,6 +5,7 @@ import AdreImportPanel from "@/components/AdreImportPanel";
 import LeadTable from "@/components/LeadTable";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { getAppSettings } from "@/lib/outreach/settings";
+import { getPipeline } from "@/lib/outreach/pipelines";
 import { getAdreStatus } from "@/lib/adre-import";
 import { DATALEADSELL_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
@@ -23,13 +24,14 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     ...searchWhere(params.q, ["name", "brokerage", "email", "city", "county"]),
   };
 
-  const [filteredTotal, total, withEmail, counts, settings, adre] = await Promise.all([
+  const [filteredTotal, total, withEmail, counts, settings, adre, unsent] = await Promise.all([
     prisma.agentLead.count({ where }),
     prisma.agentLead.count(),
     prisma.agentLead.count({ where: { email: { not: null } } }),
     prisma.agentLead.groupBy({ by: ["status"], _count: true }),
     getAppSettings(),
     getAdreStatus(),
+    getPipeline("dataleadsell").countSendable(prisma),
   ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.agentLead.findMany({
@@ -56,7 +58,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <Stat label="With email" value={withEmail} />
       </div>
 
-      <OutreachControls pipeline="dataleadsell" paused={settings.outboundPaused} />
+      <OutreachControls pipeline="dataleadsell" paused={settings.outboundPaused} unsent={unsent} />
       <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
 
       <div>

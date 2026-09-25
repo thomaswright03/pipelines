@@ -2,8 +2,15 @@
 
 import { useActionState, useState } from "react";
 import { updateVaultScheduleAction, type UpdateScheduleState } from "@/lib/actions/pipeline-schedule";
-import { LEAD_COUNT_MAX, LEAD_COUNT_MIN, type PipelineScheduleData } from "@/lib/pipeline-schedule-rules";
+import {
+  BUSINESSES_PER_RUN_LABEL,
+  BUSINESSES_PER_RUN_MAX,
+  BUSINESSES_PER_RUN_MIN,
+  RANGE_MESSAGE,
+  type PipelineScheduleData,
+} from "@/lib/pipeline-schedule-rules";
 import ActionMessage from "@/components/ActionMessage";
+import { plural } from "@/lib/format";
 
 export type RunView = {
   id: string;
@@ -11,6 +18,7 @@ export type RunView = {
   startedAt: string; // formatted in the app's time zone
   summary: string | null;
   errors: string[];
+  numbers: { businessesChecked: number; leadsFound: number; emailsSent: number } | null;
 };
 
 const RUN_STATUS: Record<string, { label: string; className: string }> = {
@@ -40,7 +48,7 @@ export default function VaultScheduleSettings({
   staleWarning: string | null;
 }) {
   const [enabled, setEnabled] = useState(schedule.enabled);
-  const [leadCount, setLeadCount] = useState(String(schedule.leadCount));
+  const [businessesPerRun, setLeadCount] = useState(String(schedule.businessesPerRun));
   const [clientError, setClientError] = useState<string | null>(null);
   const [state, formAction, isPending] = useActionState(
     (prev: UpdateScheduleState, formData: FormData) => updateVaultScheduleAction(prev, formData),
@@ -48,17 +56,18 @@ export default function VaultScheduleSettings({
   );
 
   const live = schedule.enabled && !paused;
+  const lastCounted = runs.find((r) => r.numbers !== null);
   const stateLine = paused
     ? "On hold: outbound email is paused, so the daily run skips itself (see Settings)."
     : schedule.enabled
-      ? `On: runs every day at ${runTimeLabel}. It searches one new city for up to ${schedule.leadCount} businesses, finds their emails, and sends each new lead the first pitch.`
+      ? `On: runs every day at ${runTimeLabel}. It searches one new city on Yelp, checks up to ${schedule.businessesPerRun} of those businesses for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`
       : "Off: the daily run is skipped until you turn it back on.";
 
   function validate(e: React.FormEvent<HTMLFormElement>) {
-    const n = Number(leadCount);
-    if (!Number.isInteger(n) || n < LEAD_COUNT_MIN || n > LEAD_COUNT_MAX) {
+    const n = Number(businessesPerRun);
+    if (!Number.isInteger(n) || n < BUSINESSES_PER_RUN_MIN || n > BUSINESSES_PER_RUN_MAX) {
       e.preventDefault();
-      setClientError(`Leads per run must be a whole number between ${LEAD_COUNT_MIN} and ${LEAD_COUNT_MAX}`);
+      setClientError(RANGE_MESSAGE);
       return;
     }
     setClientError(null);
@@ -87,18 +96,18 @@ export default function VaultScheduleSettings({
           Run daily
         </label>
         <label className="field-label">
-          Leads per run ({LEAD_COUNT_MIN}–{LEAD_COUNT_MAX})
+          {BUSINESSES_PER_RUN_LABEL} ({BUSINESSES_PER_RUN_MIN}–{BUSINESSES_PER_RUN_MAX})
           <input
             type="number"
-            name="leadCount"
+            name="businessesPerRun"
             inputMode="numeric"
-            min={LEAD_COUNT_MIN}
-            max={LEAD_COUNT_MAX}
+            min={BUSINESSES_PER_RUN_MIN}
+            max={BUSINESSES_PER_RUN_MAX}
             step={1}
-            value={leadCount}
+            value={businessesPerRun}
             onChange={(e) => setLeadCount(e.target.value)}
             aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "schedule-error" : undefined}
+            aria-describedby={error ? "schedule-error schedule-yield" : "schedule-yield"}
             className="input w-32"
           />
         </label>
@@ -117,7 +126,23 @@ export default function VaultScheduleSettings({
           }
         />
       </div>
-      <p className="text-xs muted">The run time is fixed by the deployment (vercel.json); changing it needs a code change and redeploy.</p>
+      <div id="schedule-yield" className="flex flex-col gap-1 text-sm">
+        <p className="muted">
+          Not every business has a findable email address — usually only about 1 in 5 do — and each run stops looking after
+          about 30 seconds, so expect far fewer emails than businesses checked.
+        </p>
+        {lastCounted?.numbers ? (
+          <p>
+            <span className="font-medium">Last run ({lastCounted.startedAt}):</span> checked{" "}
+            {plural(lastCounted.numbers.businessesChecked, "business", "businesses")}, found{" "}
+            {plural(lastCounted.numbers.leadsFound, "address", "addresses")}, emailed{" "}
+            <strong>{plural(lastCounted.numbers.emailsSent, "lead", "leads")}</strong>.
+          </p>
+        ) : (
+          <p className="muted">No daily run has searched yet, so there are no results to show.</p>
+        )}
+      </div>
+      <p className="text-xs muted">The daily run time is fixed; ask your developer to change it.</p>
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Recent runs</h3>

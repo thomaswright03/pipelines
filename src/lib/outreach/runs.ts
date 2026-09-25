@@ -4,7 +4,9 @@ import { prisma } from "@/lib/db";
 import { describeError, logError, logInfo } from "@/lib/log";
 
 export type RunStatus = "succeeded" | "partial" | "failed" | "skipped";
-export type RunOutcome = { status: RunStatus; summary: string; errors?: string[] };
+/** What a daily discovery-and-send run actually did, as numbers. */
+export type RunNumbers = { businessesChecked: number; leadsFound: number; emailsSent: number };
+export type RunOutcome = { status: RunStatus; summary: string; errors?: string[]; numbers?: RunNumbers };
 
 export type RecordedRun = RunOutcome & { runId: string };
 
@@ -33,6 +35,7 @@ export async function recordRun(
         status: outcome.status,
         summary: outcome.summary,
         errors: outcome.errors?.length ? outcome.errors.join("\n") : null,
+        ...(outcome.numbers ?? {}),
         finishedAt: new Date(),
       },
     });

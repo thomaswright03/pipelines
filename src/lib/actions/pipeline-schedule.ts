@@ -7,7 +7,7 @@ import { savePipelineSchedule, scheduleSchema, VAULT_SCHEDULE_ID } from "@/lib/p
 export type UpdateScheduleState = {
   error?: string;
   saved?: boolean;
-  values?: { enabled: boolean; leadCount: string };
+  values?: { enabled: boolean; businessesPerRun: string };
 };
 
 export async function updateVaultScheduleAction(
@@ -16,11 +16,11 @@ export async function updateVaultScheduleAction(
 ): Promise<UpdateScheduleState> {
   const values = {
     enabled: formData.get("enabled") === "on",
-    leadCount: String(formData.get("leadCount") ?? ""),
+    businessesPerRun: String(formData.get("businessesPerRun") ?? ""),
   };
   const parsed = scheduleSchema.safeParse({
     enabled: values.enabled,
-    leadCount: values.leadCount.trim() === "" ? Number.NaN : Number(values.leadCount),
+    businessesPerRun: values.businessesPerRun.trim() === "" ? Number.NaN : Number(values.businessesPerRun),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message, values };

@@ -7,18 +7,27 @@ export const VAULT_SCHEDULE_ID = "vault-pipeline";
 /** The cron time in vercel.json ("33 15 * * *" UTC), as Arizona wall-clock time (MST, no DST). */
 export const VAULT_DAILY_RUN_TIME_LABEL = "8:33 AM Arizona time";
 
-export type PipelineScheduleData = { enabled: boolean; leadCount: number };
+/**
+ * `businessesPerRun` caps how many Yelp businesses one daily run checks for
+ * an email address — not how many get emailed: typically only 15–25% of
+ * businesses turn up a usable address, and the run also stops looking
+ * after about 30 seconds. (Stored in PipelineSchedule.leadCount.)
+ */
+export type PipelineScheduleData = { enabled: boolean; businessesPerRun: number };
 
-export const LEAD_COUNT_MIN = 1;
-export const LEAD_COUNT_MAX = 100;
+export const BUSINESSES_PER_RUN_MIN = 1;
+/** One Yelp search returns at most 50 businesses, so a higher cap would do nothing. */
+export const BUSINESSES_PER_RUN_MAX = 50;
 
-const RANGE_MESSAGE = `Leads per run must be a whole number between ${LEAD_COUNT_MIN} and ${LEAD_COUNT_MAX}`;
+export const BUSINESSES_PER_RUN_LABEL = "Businesses to check per run";
+
+export const RANGE_MESSAGE = `${BUSINESSES_PER_RUN_LABEL} must be a whole number between ${BUSINESSES_PER_RUN_MIN} and ${BUSINESSES_PER_RUN_MAX}`;
 
 export const scheduleSchema = z.object({
   enabled: z.boolean(),
-  leadCount: z
+  businessesPerRun: z
     .number({ error: RANGE_MESSAGE })
     .int(RANGE_MESSAGE)
-    .min(LEAD_COUNT_MIN, RANGE_MESSAGE)
-    .max(LEAD_COUNT_MAX, RANGE_MESSAGE),
+    .min(BUSINESSES_PER_RUN_MIN, RANGE_MESSAGE)
+    .max(BUSINESSES_PER_RUN_MAX, RANGE_MESSAGE),
 });

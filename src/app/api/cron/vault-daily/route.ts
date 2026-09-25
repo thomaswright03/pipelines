@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       if (!schedule.enabled) {
         return { status: "skipped", summary: "Daily automation is turned off on the Cold Outreach page." };
       }
-      return runDailyColdOutreach(schedule.leadCount);
+      return runDailyColdOutreach(schedule.businessesPerRun);
     });
     const failed = run.status === "failed";
     return Response.json({ ok: !failed, ...run }, { status: failed ? 500 : 200 });

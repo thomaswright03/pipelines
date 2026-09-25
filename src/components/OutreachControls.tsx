@@ -9,6 +9,7 @@ import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import { US_STATE_OPTIONS } from "@/lib/us-states";
 import { SOLD_COUNTIES, citiesInCounty } from "@/lib/agent-cities";
 import BulkSendButton from "@/components/BulkSendButton";
+import { plural } from "@/lib/format";
 import FindEmailsButton from "@/components/FindEmailsButton";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 
@@ -17,7 +18,16 @@ import ActionMessage, { type Feedback } from "@/components/ActionMessage";
  * pick), bulk-send the first pitch to New leads, and sweep unchecked leads
  * for an email.
  */
-export default function OutreachControls({ pipeline, paused }: { pipeline: PipelineId; paused: boolean }) {
+export default function OutreachControls({
+  pipeline,
+  paused,
+  unsent,
+}: {
+  pipeline: PipelineId;
+  paused: boolean;
+  /** New leads with an address that haven't been emailed yet. */
+  unsent: number;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -53,7 +63,23 @@ export default function OutreachControls({ pipeline, paused }: { pipeline: Pipel
         >
           Search a specific city
         </button>
-        <BulkSendButton pipeline={pipeline} disabled={isPending || paused} />
+      </div>
+      <div
+        className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-3 py-2 ${
+          unsent > 0 ? "bg-indigo-50 dark:bg-indigo-950/40" : "bg-zinc-50 dark:bg-zinc-900"
+        }`}
+      >
+        <p className="flex-1 text-sm">
+          {unsent > 0 ? (
+            <>
+              <strong>{plural(unsent, isAgents ? "agent" : "lead", isAgents ? "agents" : "leads")}</strong> found but not yet
+              emailed.
+            </>
+          ) : (
+            <span className="muted">Every lead with an email address has been emailed.</span>
+          )}
+        </p>
+        <BulkSendButton pipeline={pipeline} disabled={isPending || paused || unsent === 0} />
       </div>
       {paused && <p className="notice-warning">Outbound email is paused — sending is off until it&apos;s resumed in Settings.</p>}
       <ActionMessage feedback={feedback} />
@@ -71,8 +97,7 @@ export default function OutreachControls({ pipeline, paused }: { pipeline: Pipel
         {isAgents
           ? "An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox."
           : ""}{" "}
-        Replies forwarded to the inbound webhook are recorded automatically (see the README); record anything else from the
-        lead page.
+        Replies to your emails are logged automatically; record anything else from the lead page.
       </p>
     </section>
   );

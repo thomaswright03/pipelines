@@ -148,18 +148,20 @@ Vercel sends automatically when `CRON_SECRET` is set.
 
 | Route | Schedule (UTC) | Arizona time | What it does |
 | --- | --- | --- | --- |
-| `/api/cron/vault-daily` | `33 15 * * *` | 8:33 AM | Cold Outreach: searches one new city, saves businesses with a findable email, pitches them |
+| `/api/cron/vault-daily` | `33 15 * * *` | 8:33 AM | Cold Outreach: searches one new city, saves businesses with a findable email, pitches them and any leads earlier daily runs found but didn't email |
 | `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Both pipelines: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone) |
 
-- **Settings.** The Cold Outreach page controls whether the daily run happens and how many leads it takes (1–100). Changes apply to the next run.
+- **Settings.** The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 30 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
 - **Run log.** Every run is recorded in `PipelineRun`, whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on the Cold Outreach page.
   - The page warns when the last run is more than 26 hours old.
   - Both routes return JSON: `{ status, summary, errors }`. A failed run returns HTTP 500.
 
 Each run is time-budgeted to finish and record its outcome inside Vercel's 60-second function limit.
-Discovery gets 30 s, and no new send starts after 45 s. Leads found but not emailed in time stay New for
-the next bulk send.
+Discovery gets 30 s, and no new send starts after 45 s. Leads a daily run found but didn't email (out of
+time, or the email service was unreachable and nothing was sent) stay New and are emailed by the next daily
+run, oldest first, under all the usual send rules. Both pipeline pages show "N leads found but not yet
+emailed" next to the bulk-send button.
 
 ## Reply tracking
 

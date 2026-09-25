@@ -10,6 +10,7 @@ import { isRunOverdue, recentRuns } from "@/lib/outreach/runs";
 import { COLD_OUTREACH_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
 import { formatDateTime } from "@/lib/time";
+import { getPipeline } from "@/lib/outreach/pipelines";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Discovery guesses a website and finds an email per business.
@@ -21,13 +22,14 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     ...searchWhere(params.q, ["name", "company", "email", "city"]),
   };
 
-  const [filteredTotal, total, counts, schedule, settings, runs] = await Promise.all([
+  const [filteredTotal, total, counts, schedule, settings, runs, unsent] = await Promise.all([
     prisma.lead.count({ where }),
     prisma.lead.count(),
     prisma.lead.groupBy({ by: ["status"], _count: true }),
     getPipelineSchedule(VAULT_SCHEDULE_ID),
     getAppSettings(),
     recentRuns("cold-outreach", "daily", 5),
+    getPipeline("cold-outreach").countSendable(prisma),
   ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.lead.findMany({
@@ -40,7 +42,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
   const lastRun = runs[0];
   const staleWarning =
     schedule.enabled && !settings.outboundPaused && lastRun && isRunOverdue(lastRun.startedAt)
-      ? `The last daily run was ${formatDateTime(lastRun.startedAt)} — more than a day ago. Check the cron job in Vercel (see the README).`
+      ? `The last daily run was ${formatDateTime(lastRun.startedAt)} — more than a day ago. The automatic schedule may have stopped — ask your developer to check it.`
       : null;
   const runViews: RunView[] = runs.map((r) => ({
     id: r.id,
@@ -48,6 +50,10 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     startedAt: formatDateTime(r.startedAt),
     summary: r.summary,
     errors: r.errors ? r.errors.split("\n").filter(Boolean) : [],
+    numbers:
+      r.businessesChecked !== null && r.leadsFound !== null && r.emailsSent !== null
+        ? { businessesChecked: r.businessesChecked, leadsFound: r.leadsFound, emailsSent: r.emailsSent }
+        : null,
   }));
 
   return (
@@ -62,7 +68,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         </p>
       </div>
 
-      <OutreachControls pipeline="cold-outreach" paused={settings.outboundPaused} />
+      <OutreachControls pipeline="cold-outreach" paused={settings.outboundPaused} unsent={unsent} />
       <VaultScheduleSettings
         schedule={schedule}
         runTimeLabel={VAULT_DAILY_RUN_TIME_LABEL}
