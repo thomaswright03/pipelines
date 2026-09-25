@@ -16,6 +16,13 @@ export default defineConfig({
     // Every file shares one database, so files run one at a time.
     fileParallelism: false,
     testTimeout: 30_000,
+    // `npm run test:coverage` (CI) prints a per-file table and a summary.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/generated/**"],
+      reporter: ["text-summary", "text", "json-summary"],
+    },
     hookTimeout: 60_000,
     env: {
       PIPELINES_DATABASE_URL: testDatabaseUrl,

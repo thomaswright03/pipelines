@@ -105,8 +105,10 @@ missing.
 ## Tests
 
 ```bash
-npm test           # vitest run
+npm test               # vitest run
 npm run test:watch
+npm run test:coverage  # the same, plus a coverage report for src/
+npm run build && npm run test:e2e   # browser smoke tests (Playwright; first time: npx playwright install chromium)
 ```
 
 The suite runs against a real, disposable Postgres. It uses `TEST_DATABASE_URL` and defaults to
@@ -131,15 +133,25 @@ What's covered, by file:
 | `tests/discovery.test.ts`, `tests/email-finder.test.ts` | Discovery and email lookup |
 | `tests/adre.test.ts` | Resumable ADRE import |
 | `tests/cron.test.ts` | The cron routes |
+| `tests/daily-run.test.ts` | What "businesses to check per run" yields; leftovers emailed by the next run |
+| `tests/replies.test.ts` | Replies after the stale-contacts move, Lost-lead review flag, Mark replied, duplicate delivery, database outage and retry, stale-contacts race |
 | `tests/stats.test.ts` | Stats, including reply rate and Arizona days |
 | `tests/lead-actions.test.ts` | Stage rules |
 | `tests/e2e.test.ts` | One run per pipeline through the same server actions the pages use |
 
+**Browser smoke tests** (`e2e/smoke.spec.ts`, Playwright) run against a production build served on port
+4100. They cover adding a lead with an invalid email, a single send, a bulk send stopped midway,
+pause/resume, Enter on a destructive confirmation, and the lead list at 375–2560 px. The server uses
+`EMAIL_TRANSPORT=outbox` (mail is written to `test-results/e2e-outbox`, never delivered) and its own
+database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelines_e2e`), which
+`e2e/prepare-db.mjs` creates and migrates. It refuses non-local hosts.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every push and pull request. It uses a throwaway `postgres:16` service
-container and runs `npm ci`, `npm run build` (including the type check), `npm run lint` and `npm test`. CI
-has no secrets and reaches no external service.
+container and runs `npm ci`, `npm run build` (including the type check), `npm run lint`, the test suite
+with coverage (the summary appears on the run page), and the browser smoke tests. CI has no secrets and
+reaches no external service other than downloading Chromium.
 
 ## Daily automation
 
