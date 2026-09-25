@@ -52,8 +52,8 @@ describe("Cold Outreach, end to end", () => {
           { name: "Bravo Dental", phone: "+14805550112" },
           { name: "Charlie Nails", phone: "+14805550113" },
         ]),
-      "https://www.alphaplumbing.com": page(`Alpha Plumbing — hello@alphaplumbing.test`),
-      "https://www.bravodental.com": page(`Bravo Dental <a href="mailto:frontdesk@bravodental.test">email</a>`),
+      "https://www.alphaplumbing.com": page(`Alpha Plumbing, Mesa AZ — call (480) 555-0111 — hello@alphaplumbing.test`),
+      "https://www.bravodental.com": page(`Bravo Dental <a href="tel:+14805550112">480.555.0112</a> <a href="mailto:frontdesk@bravodental.test">email</a>`),
     });
 
     const search = await searchLeadsAction({}, form({ city: "Mesa", state: "Arizona", businessType: "" }));
@@ -92,7 +92,7 @@ describe("dataleadsell, end to end", () => {
           { name: "Eli Evans - Desert Realty", phone: "+16025550122" },
         ]),
       // The brokerage site lists its front desk and one agent's own address.
-      "https://www.desertrealty.com": page(`Desert Realty: frontdesk@desertrealty.test · dana.diaz@desertrealty.test`),
+      "https://www.desertrealty.com": page(`Desert Realty, serving Mesa: frontdesk@desertrealty.test · dana.diaz@desertrealty.test`),
     });
 
     const search = await searchAgentsAction({}, form({ county: "Maricopa", city: "Mesa" }));

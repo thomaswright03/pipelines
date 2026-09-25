@@ -66,7 +66,7 @@ describe("ADRE import", () => {
     await loadAdreRoster(roster(12));
     const fetches = stubFetch({
       // Licensee 2 has their own site with their own address.
-      "https://www.first2last2.com": page(`First2 Last2 homes — first2@first2last2.test`),
+      "https://www.first2last2.com": page(`First2 Last2 homes — (480) 555-0100 — first2@first2last2.test`),
     });
 
     const one = await processAdreChunk();

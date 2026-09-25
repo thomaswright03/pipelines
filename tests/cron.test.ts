@@ -22,9 +22,9 @@ function stubYelpCity() {
         { name: "Omega Bakery Downtown", phone: "+14805550102" },
         { name: "Zeta Roofing", phone: "+14805550103" },
       ]),
-    "https://www.omegabakery.com": page(`<a href="mailto:hello@omegabakery.test">Email</a>`),
-    "https://www.omegabakerydowntown.com": page(`Our downtown shop: hello@omegabakery.test`),
-    "https://www.zetaroofing.com": page(`owner@zetaroofing.test`),
+    "https://www.omegabakery.com": page(`(480) 555-0101 <a href="mailto:hello@omegabakery.test">Email</a>`),
+    "https://www.omegabakerydowntown.com": page(`Our downtown shop, (480) 555-0102: hello@omegabakery.test`),
+    "https://www.zetaroofing.com": page(`Zeta Roofing 480-555-0103 owner@zetaroofing.test`),
   });
 }
 

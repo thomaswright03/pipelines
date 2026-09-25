@@ -141,6 +141,7 @@ export async function processAdreChunk(options: { timeBudgetMs?: number } = {}):
       } else if (result.skipped.existingName) outcome = "existing_name";
       else if (result.skipped.addressInUse) outcome = "address_in_use";
       else if (result.skipped.optedOut) outcome = "opted_out";
+      else if (result.skipped.unverifiedSite) outcome = "unverified_site";
       else outcome = "no_email";
     } catch (err) {
       logError("adre.processChunk", err, { licenseeId: licensee.id });

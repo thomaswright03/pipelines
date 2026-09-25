@@ -125,36 +125,48 @@ async function fetchPage(url: string, outer?: AbortSignal): Promise<string | nul
   }
 }
 
+export type WebsiteScan = {
+  /** Every plausible address on the site, best first. */
+  emails: string[];
+  /** The HTML of every page that was fetched, so callers can check whose site it is. */
+  pages: string[];
+};
+
 /**
  * Every plausible address on a business's site (homepage, then its own
  * Contact link, then /contact and /contact-us), best first: addresses that
  * appear on more pages and generic business inboxes rank higher,
- * numeric-looking tracking ids lower.
+ * numeric-looking tracking ids lower. Also returns the pages it read.
  */
-export async function findEmailCandidatesOnWebsite(website: string, signal?: AbortSignal): Promise<string[]> {
+export async function scanWebsite(website: string, signal?: AbortSignal): Promise<WebsiteScan> {
   let base: URL;
   try {
     base = new URL(website);
   } catch {
-    return [];
+    return { emails: [], pages: [] };
   }
 
+  const pages: string[] = [];
   const candidates: string[] = [];
-  const homepage = await fetchPage(base.toString(), signal);
-  if (homepage) candidates.push(...extractEmails(homepage));
+  const read = async (url: string) => {
+    const html = await fetchPage(url, signal);
+    if (html) {
+      pages.push(html);
+      candidates.push(...extractEmails(html));
+    }
+    return html;
+  };
+
+  const homepage = await read(base.toString());
 
   if (candidates.length === 0 && homepage) {
     const contactLink = findContactLink(homepage, base);
-    if (contactLink) {
-      const page = await fetchPage(contactLink, signal);
-      if (page) candidates.push(...extractEmails(page));
-    }
+    if (contactLink) await read(contactLink);
   }
 
   if (candidates.length === 0) {
     for (const path of CONTACT_PATHS) {
-      const page = await fetchPage(new URL(path, base).toString(), signal);
-      if (page) candidates.push(...extractEmails(page));
+      await read(new URL(path, base).toString());
       if (candidates.length > 0) break;
     }
   }
@@ -162,9 +174,15 @@ export async function findEmailCandidatesOnWebsite(website: string, signal?: Abo
   const counts = new Map<string, number>();
   for (const email of candidates) counts.set(email, (counts.get(email) ?? 0) + 1);
 
-  return [...counts.entries()]
+  const emails = [...counts.entries()]
     .sort((a, b) => b[1] + scoreEmail(b[0]) - (a[1] + scoreEmail(a[0])))
     .map(([email]) => email);
+  return { emails, pages };
+}
+
+/** The addresses on a site, best first (see scanWebsite). */
+export async function findEmailCandidatesOnWebsite(website: string, signal?: AbortSignal): Promise<string[]> {
+  return (await scanWebsite(website, signal)).emails;
 }
 
 /**

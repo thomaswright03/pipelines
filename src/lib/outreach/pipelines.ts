@@ -2,7 +2,12 @@
 // EmailSendLog for dataleadsell, Lead + LeadEmailSendLog for Cold
 // Outreach); everything that decides *who* gets emailed lives once in the
 // shared modules next to this file and reaches the tables only through the
-// small adapter below.
+// adapter below.
+//
+// Both adapters are built by one factory: the tables have the same shape
+// for every column the shared rules touch, so the only per-pipeline
+// differences are data — which tables, which pitch, which sender, and the
+// one pipeline-specific column (company vs brokerage/county).
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { buildAgentOutreachEmail } from "@/lib/dataleadsell-email-template";
 import { buildOutreachEmail } from "@/lib/vault-email-template";
@@ -18,6 +23,7 @@ export type OutreachLead = {
   name: string;
   email: string | null;
   phone: string | null;
+  address: string | null;
   status: string;
   website: string | null;
   city: string | null;
@@ -35,6 +41,7 @@ export type OutreachLead = {
 export type LeadUpdate = {
   status?: string;
   email?: string | null;
+  emailEvidence?: string | null;
   website?: string | null;
   emailCheckedAt?: Date | null;
   sendBlockedReason?: string | null;
@@ -50,6 +57,7 @@ export type LeadUpdate = {
 export type NewLeadData = {
   name: string;
   email: string | null;
+  emailEvidence?: string | null;
   phone: string | null;
   address: string | null;
   website: string | null;
@@ -64,15 +72,19 @@ export type NewLeadData = {
   status?: string;
 };
 
+/** An existing lead with the same name, and what tells two of them apart. */
+export type NamedLead = { id: string; name: string; phone: string | null; address: string | null; city: string | null };
+
 export type PipelineAdapter = {
   id: PipelineId;
   label: string;
   basePath: string;
   senderEmail: string;
-  buildEmail(lead: OutreachLead): { subject: string; body: string };
+  buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): { subject: string; body: string };
   findLead(db: Db, id: string): Promise<OutreachLead | null>;
   findLeadsByEmail(db: Db, email: string, excludeId?: string): Promise<OutreachLead[]>;
-  findNamesTaken(db: Db, names: string[]): Promise<Set<string>>;
+  /** Leads whose name equals one of `names` (case-insensitively), for duplicate checks. */
+  findSameNamed(db: Db, names: string[]): Promise<NamedLead[]>;
   createLead(db: Db, data: NewLeadData): Promise<OutreachLead>;
   update(db: Db, id: string, data: LeadUpdate): Promise<void>;
   /**
@@ -91,265 +103,231 @@ export type PipelineAdapter = {
   /** Leads the bulk send may pitch: new, with an address, not flagged. */
   listSendable(db: Db, limit: number): Promise<OutreachLead[]>;
   countSendable(db: Db): Promise<number>;
+  /** New leads with an address that can't be sent (flagged), for the "why nothing to send" hint. */
+  countBlockedNew(db: Db): Promise<number>;
   listStaleContacted(db: Db, cutoff: Date): Promise<OutreachLead[]>;
   listNeedingEmailLookup(db: Db, limit: number): Promise<OutreachLead[]>;
   countNeedingEmailLookup(db: Db): Promise<number>;
+  /** Leads matching a name/email search, for attaching an unmatched reply. */
+  search(db: Db, query: string, limit: number): Promise<OutreachLead[]>;
   clearSendBlockedByPrefix(db: Db, email: string, prefix: string): Promise<void>;
+  /**
+   * Edits a lead's details only if its status and address are still what
+   * the edit was based on (a send moves New → Contacted, so an address can't
+   * be changed under a send in flight). Returns whether it applied.
+   */
+  updateIfUnchanged(db: Db, id: string, expected: { status: string; email: string | null }, data: Record<string, unknown>): Promise<boolean>;
+  /** Deletes the lead. Its send history rows and ledger entry stay (so the address is never re-pitched). */
+  deleteLead(db: Db, id: string): Promise<boolean>;
 };
 
 const SENDABLE = { status: "new", email: { not: null }, sendBlockedReason: null } as const;
+const BLOCKED_NEW = { status: "new", email: { not: null }, sendBlockedReason: { not: null } } as const;
 const NEEDS_LOOKUP = { email: null, emailCheckedAt: null } as const;
 
-function agentToOutreach(lead: {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  status: string;
-  website: string | null;
-  city: string | null;
-  state: string | null;
-  sendBlockedReason: string | null;
-  lastEmailedAt: Date | null;
-  repliedAt: Date | null;
-  notes: string | null;
-  brokerage: string | null;
-  county: string | null;
-}): OutreachLead {
-  return { ...pickCommon(lead), company: null, brokerage: lead.brokerage, county: lead.county };
-}
+// The two lead tables (and the two send-log tables) differ only in their
+// pipeline-specific columns, so the factory talks to them through these
+// minimal structural views. Prisma's own delegate types can't be unified
+// across two models, hence the loose argument types here — every call below
+// only uses columns both tables have.
+type Row = Omit<OutreachLead, "company" | "brokerage" | "county"> & {
+  company?: string | null;
+  brokerage?: string | null;
+  county?: string | null;
+};
+type Args = Record<string, unknown>;
+type LeadTable = {
+  findUnique(args: Args): Promise<Row | null>;
+  findMany(args: Args): Promise<Row[]>;
+  create(args: Args): Promise<Row>;
+  update(args: Args): Promise<unknown>;
+  updateMany(args: Args): Promise<{ count: number }>;
+  deleteMany(args: Args): Promise<{ count: number }>;
+  count(args: Args): Promise<number>;
+};
+type SendLogTable = {
+  create(args: Args): Promise<unknown>;
+  findFirst(args: Args): Promise<{ id: string } | null>;
+  update(args: Args): Promise<unknown>;
+  count(args: Args): Promise<number>;
+};
 
-function coldToOutreach(lead: {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  status: string;
-  website: string | null;
-  city: string | null;
-  state: string | null;
-  sendBlockedReason: string | null;
-  lastEmailedAt: Date | null;
-  repliedAt: Date | null;
-  notes: string | null;
-  company: string | null;
-}): OutreachLead {
-  return { ...pickCommon(lead), company: lead.company, brokerage: null, county: null };
-}
+type PipelineSpec = {
+  id: PipelineId;
+  senderEmail: string;
+  buildEmail: PipelineAdapter["buildEmail"];
+  leads: (db: Db) => LeadTable;
+  sendLogs: (db: Db) => SendLogTable;
+  /** Columns only this pipeline's lead table has, for a new lead. */
+  ownColumns: (data: NewLeadData) => Record<string, string | null>;
+  /** Extra columns searched besides name and email. */
+  searchColumns: string[];
+};
 
-function pickCommon(lead: Omit<OutreachLead, "company" | "brokerage" | "county">) {
+function toOutreach(row: Row): OutreachLead {
   return {
-    id: lead.id,
-    name: lead.name,
-    email: lead.email,
-    phone: lead.phone,
-    status: lead.status,
-    website: lead.website,
-    city: lead.city,
-    state: lead.state,
-    sendBlockedReason: lead.sendBlockedReason,
-    lastEmailedAt: lead.lastEmailedAt,
-    repliedAt: lead.repliedAt,
-    notes: lead.notes,
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    address: row.address,
+    status: row.status,
+    website: row.website,
+    city: row.city,
+    state: row.state,
+    sendBlockedReason: row.sendBlockedReason,
+    lastEmailedAt: row.lastEmailedAt,
+    repliedAt: row.repliedAt,
+    notes: row.notes,
+    company: row.company ?? null,
+    brokerage: row.brokerage ?? null,
+    county: row.county ?? null,
   };
 }
 
-const dataleadsell: PipelineAdapter = {
+function makeAdapter(spec: PipelineSpec): PipelineAdapter {
+  const { leads, sendLogs } = spec;
+  return {
+    id: spec.id,
+    label: PIPELINE_LABEL[spec.id],
+    basePath: PIPELINE_BASE_PATH[spec.id],
+    senderEmail: spec.senderEmail,
+    buildEmail: spec.buildEmail,
+    async findLead(db, id) {
+      const lead = await leads(db).findUnique({ where: { id } });
+      return lead && toOutreach(lead);
+    },
+    async findLeadsByEmail(db, email, excludeId) {
+      const rows = await leads(db).findMany({
+        where: { email: email.toLowerCase(), ...(excludeId ? { id: { not: excludeId } } : {}) },
+        orderBy: { createdAt: "asc" },
+      });
+      return rows.map(toOutreach);
+    },
+    async findSameNamed(db, names) {
+      const distinct = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+      if (distinct.length === 0) return [];
+      const rows = await leads(db).findMany({
+        where: { OR: distinct.map((name) => ({ name: { equals: name, mode: "insensitive" } })) },
+        select: { id: true, name: true, phone: true, address: true, city: true },
+      });
+      return rows as NamedLead[];
+    },
+    async createLead(db, data) {
+      const lead = await leads(db).create({
+        data: {
+          name: data.name,
+          email: data.email,
+          emailEvidence: data.emailEvidence ?? null,
+          phone: data.phone,
+          address: data.address,
+          website: data.website,
+          city: data.city,
+          state: data.state,
+          source: data.source,
+          notes: data.notes ?? null,
+          emailCheckedAt: data.emailCheckedAt ?? null,
+          status: data.status ?? "new",
+          ...spec.ownColumns(data),
+        },
+      });
+      return toOutreach(lead);
+    },
+    async update(db, id, data) {
+      await leads(db).update({ where: { id }, data });
+    },
+    async updateIfStatus(db, id, statuses, data) {
+      const { count } = await leads(db).updateMany({ where: { id, status: { in: [...statuses] } }, data });
+      return count === 1;
+    },
+    async claimForSend(db, leadId, email, at) {
+      const { count } = await leads(db).updateMany({
+        where: { id: leadId, status: "new", email, sendBlockedReason: null },
+        data: { status: "contacted", lastEmailedAt: at, repliedAt: null },
+      });
+      return count === 1;
+    },
+    async releaseClaim(db, leadId, claimedAt, previous) {
+      await leads(db).updateMany({
+        where: { id: leadId, status: "contacted", lastEmailedAt: claimedAt },
+        data: { status: "new", lastEmailedAt: previous.lastEmailedAt, repliedAt: previous.repliedAt },
+      });
+    },
+    async recordSend(db, leadId, email, providerMessageId, sentAt) {
+      await sendLogs(db).create({ data: { leadId, email, providerMessageId, sentAt } });
+    },
+    async markLatestSendBounced(db, leadId, at) {
+      const log = await sendLogs(db).findFirst({ where: { leadId, bounced: false }, orderBy: { sentAt: "desc" } });
+      if (!log) return false;
+      await sendLogs(db).update({ where: { id: log.id }, data: { bounced: true, bouncedAt: at } });
+      return true;
+    },
+    async hasBeenEmailed(db, leadId) {
+      return (await sendLogs(db).count({ where: { leadId } })) > 0;
+    },
+    async listSendable(db, limit) {
+      const rows = await leads(db).findMany({ where: SENDABLE, orderBy: { createdAt: "asc" }, take: limit });
+      return rows.map(toOutreach);
+    },
+    countSendable: (db) => leads(db).count({ where: SENDABLE }),
+    countBlockedNew: (db) => leads(db).count({ where: BLOCKED_NEW }),
+    async listStaleContacted(db, cutoff) {
+      const rows = await leads(db).findMany({ where: { status: "contacted", lastEmailedAt: { lte: cutoff } } });
+      return rows.map(toOutreach);
+    },
+    async listNeedingEmailLookup(db, limit) {
+      const rows = await leads(db).findMany({ where: NEEDS_LOOKUP, orderBy: { createdAt: "asc" }, take: limit });
+      return rows.map(toOutreach);
+    },
+    countNeedingEmailLookup: (db) => leads(db).count({ where: NEEDS_LOOKUP }),
+    async search(db, query, limit) {
+      const q = query.trim();
+      if (!q) return [];
+      const rows = await leads(db).findMany({
+        where: {
+          OR: ["name", "email", ...spec.searchColumns].map((column) => ({ [column]: { contains: q, mode: "insensitive" } })),
+        },
+        orderBy: { updatedAt: "desc" },
+        take: limit,
+      });
+      return rows.map(toOutreach);
+    },
+    async clearSendBlockedByPrefix(db, email, prefix) {
+      await leads(db).updateMany({
+        where: { email: email.toLowerCase(), sendBlockedReason: { startsWith: prefix } },
+        data: { sendBlockedReason: null },
+      });
+    },
+    async updateIfUnchanged(db, id, expected, data) {
+      const { count } = await leads(db).updateMany({ where: { id, status: expected.status, email: expected.email }, data });
+      return count === 1;
+    },
+    async deleteLead(db, id) {
+      const { count } = await leads(db).deleteMany({ where: { id } });
+      return count === 1;
+    },
+  };
+}
+
+const dataleadsell = makeAdapter({
   id: "dataleadsell",
-  label: PIPELINE_LABEL.dataleadsell,
-  basePath: PIPELINE_BASE_PATH.dataleadsell,
   senderEmail: DATALEADSELL_SENDER_EMAIL,
   buildEmail: (lead) => buildAgentOutreachEmail(lead.name, lead.county),
-  async findLead(db, id) {
-    const lead = await db.agentLead.findUnique({ where: { id } });
-    return lead && agentToOutreach(lead);
-  },
-  async findLeadsByEmail(db, email, excludeId) {
-    const leads = await db.agentLead.findMany({
-      where: { email: email.toLowerCase(), ...(excludeId ? { id: { not: excludeId } } : {}) },
-      orderBy: { createdAt: "asc" },
-    });
-    return leads.map(agentToOutreach);
-  },
-  async findNamesTaken(db, names) {
-    if (names.length === 0) return new Set();
-    const rows = await db.agentLead.findMany({
-      where: { OR: names.map((name) => ({ name: { equals: name.trim(), mode: "insensitive" as const } })) },
-      select: { name: true },
-    });
-    return new Set(rows.map((r) => r.name.trim().toLowerCase()));
-  },
-  async createLead(db, data) {
-    const lead = await db.agentLead.create({
-      data: {
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        website: data.website,
-        city: data.city,
-        state: data.state,
-        county: data.county ?? null,
-        brokerage: data.brokerage ?? null,
-        source: data.source,
-        notes: data.notes ?? null,
-        emailCheckedAt: data.emailCheckedAt ?? null,
-        status: data.status ?? "new",
-      },
-    });
-    return agentToOutreach(lead);
-  },
-  async update(db, id, data) {
-    await db.agentLead.update({ where: { id }, data });
-  },
-  async updateIfStatus(db, id, statuses, data) {
-    const { count } = await db.agentLead.updateMany({ where: { id, status: { in: [...statuses] } }, data });
-    return count === 1;
-  },
-  async claimForSend(db, leadId, email, at) {
-    const { count } = await db.agentLead.updateMany({
-      where: { id: leadId, status: "new", email, sendBlockedReason: null },
-      data: { status: "contacted", lastEmailedAt: at, repliedAt: null },
-    });
-    return count === 1;
-  },
-  async releaseClaim(db, leadId, claimedAt, previous) {
-    await db.agentLead.updateMany({
-      where: { id: leadId, status: "contacted", lastEmailedAt: claimedAt },
-      data: { status: "new", lastEmailedAt: previous.lastEmailedAt, repliedAt: previous.repliedAt },
-    });
-  },
-  async recordSend(db, leadId, email, providerMessageId, sentAt) {
-    await db.emailSendLog.create({ data: { leadId, email, providerMessageId, sentAt } });
-  },
-  async markLatestSendBounced(db, leadId, at) {
-    const log = await db.emailSendLog.findFirst({ where: { leadId, bounced: false }, orderBy: { sentAt: "desc" } });
-    if (!log) return false;
-    await db.emailSendLog.update({ where: { id: log.id }, data: { bounced: true, bouncedAt: at } });
-    return true;
-  },
-  async hasBeenEmailed(db, leadId) {
-    return (await db.emailSendLog.count({ where: { leadId } })) > 0;
-  },
-  async listSendable(db, limit) {
-    const leads = await db.agentLead.findMany({ where: SENDABLE, orderBy: { createdAt: "asc" }, take: limit });
-    return leads.map(agentToOutreach);
-  },
-  countSendable: (db) => db.agentLead.count({ where: SENDABLE }),
-  async listStaleContacted(db, cutoff) {
-    const leads = await db.agentLead.findMany({ where: { status: "contacted", lastEmailedAt: { lte: cutoff } } });
-    return leads.map(agentToOutreach);
-  },
-  async listNeedingEmailLookup(db, limit) {
-    const leads = await db.agentLead.findMany({ where: NEEDS_LOOKUP, orderBy: { createdAt: "asc" }, take: limit });
-    return leads.map(agentToOutreach);
-  },
-  countNeedingEmailLookup: (db) => db.agentLead.count({ where: NEEDS_LOOKUP }),
-  async clearSendBlockedByPrefix(db, email, prefix) {
-    await db.agentLead.updateMany({
-      where: { email: email.toLowerCase(), sendBlockedReason: { startsWith: prefix } },
-      data: { sendBlockedReason: null },
-    });
-  },
-};
+  leads: (db) => db.agentLead as unknown as LeadTable,
+  sendLogs: (db) => db.emailSendLog as unknown as SendLogTable,
+  ownColumns: (data) => ({ county: data.county ?? null, brokerage: data.brokerage ?? null }),
+  searchColumns: ["brokerage", "city"],
+});
 
-const coldOutreach: PipelineAdapter = {
+const coldOutreach = makeAdapter({
   id: "cold-outreach",
-  label: PIPELINE_LABEL["cold-outreach"],
-  basePath: PIPELINE_BASE_PATH["cold-outreach"],
   senderEmail: VAULT_PIPELINE_SENDER_EMAIL,
   buildEmail: (lead) => buildOutreachEmail(lead.company || lead.name),
-  async findLead(db, id) {
-    const lead = await db.lead.findUnique({ where: { id } });
-    return lead && coldToOutreach(lead);
-  },
-  async findLeadsByEmail(db, email, excludeId) {
-    const leads = await db.lead.findMany({
-      where: { email: email.toLowerCase(), ...(excludeId ? { id: { not: excludeId } } : {}) },
-      orderBy: { createdAt: "asc" },
-    });
-    return leads.map(coldToOutreach);
-  },
-  async findNamesTaken(db, names) {
-    if (names.length === 0) return new Set();
-    const rows = await db.lead.findMany({
-      where: { OR: names.map((name) => ({ name: { equals: name.trim(), mode: "insensitive" as const } })) },
-      select: { name: true },
-    });
-    return new Set(rows.map((r) => r.name.trim().toLowerCase()));
-  },
-  async createLead(db, data) {
-    const lead = await db.lead.create({
-      data: {
-        name: data.name,
-        company: data.company ?? null,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        website: data.website,
-        city: data.city,
-        state: data.state,
-        source: data.source,
-        notes: data.notes ?? null,
-        emailCheckedAt: data.emailCheckedAt ?? null,
-        status: data.status ?? "new",
-      },
-    });
-    return coldToOutreach(lead);
-  },
-  async update(db, id, data) {
-    await db.lead.update({ where: { id }, data });
-  },
-  async updateIfStatus(db, id, statuses, data) {
-    const { count } = await db.lead.updateMany({ where: { id, status: { in: [...statuses] } }, data });
-    return count === 1;
-  },
-  async claimForSend(db, leadId, email, at) {
-    const { count } = await db.lead.updateMany({
-      where: { id: leadId, status: "new", email, sendBlockedReason: null },
-      data: { status: "contacted", lastEmailedAt: at, repliedAt: null },
-    });
-    return count === 1;
-  },
-  async releaseClaim(db, leadId, claimedAt, previous) {
-    await db.lead.updateMany({
-      where: { id: leadId, status: "contacted", lastEmailedAt: claimedAt },
-      data: { status: "new", lastEmailedAt: previous.lastEmailedAt, repliedAt: previous.repliedAt },
-    });
-  },
-  async recordSend(db, leadId, email, providerMessageId, sentAt) {
-    await db.leadEmailSendLog.create({ data: { leadId, email, providerMessageId, sentAt } });
-  },
-  async markLatestSendBounced(db, leadId, at) {
-    const log = await db.leadEmailSendLog.findFirst({ where: { leadId, bounced: false }, orderBy: { sentAt: "desc" } });
-    if (!log) return false;
-    await db.leadEmailSendLog.update({ where: { id: log.id }, data: { bounced: true, bouncedAt: at } });
-    return true;
-  },
-  async hasBeenEmailed(db, leadId) {
-    return (await db.leadEmailSendLog.count({ where: { leadId } })) > 0;
-  },
-  async listSendable(db, limit) {
-    const leads = await db.lead.findMany({ where: SENDABLE, orderBy: { createdAt: "asc" }, take: limit });
-    return leads.map(coldToOutreach);
-  },
-  countSendable: (db) => db.lead.count({ where: SENDABLE }),
-  async listStaleContacted(db, cutoff) {
-    const leads = await db.lead.findMany({ where: { status: "contacted", lastEmailedAt: { lte: cutoff } } });
-    return leads.map(coldToOutreach);
-  },
-  async listNeedingEmailLookup(db, limit) {
-    const leads = await db.lead.findMany({ where: NEEDS_LOOKUP, orderBy: { createdAt: "asc" }, take: limit });
-    return leads.map(coldToOutreach);
-  },
-  countNeedingEmailLookup: (db) => db.lead.count({ where: NEEDS_LOOKUP }),
-  async clearSendBlockedByPrefix(db, email, prefix) {
-    await db.lead.updateMany({
-      where: { email: email.toLowerCase(), sendBlockedReason: { startsWith: prefix } },
-      data: { sendBlockedReason: null },
-    });
-  },
-};
+  leads: (db) => db.lead as unknown as LeadTable,
+  sendLogs: (db) => db.leadEmailSendLog as unknown as SendLogTable,
+  ownColumns: (data) => ({ company: data.company ?? null }),
+  searchColumns: ["company", "city"],
+});
 
 const ADAPTERS: Record<PipelineId, PipelineAdapter> = { dataleadsell, "cold-outreach": coldOutreach };
 
