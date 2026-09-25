@@ -2,18 +2,36 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
-  typecheck-and-lint:
+  build-lint-test:
     runs-on: ubuntu-latest
+
+    # A throwaway Postgres for the test suite. Tests never reach the real
+    # database, ZeptoMail, Yelp or any other network service: mail goes to
+    # a capturing transport and fetch is stubbed (see tests/setup.ts).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: pipelines_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d pipelines_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      # `prisma generate` (this project's postinstall) only needs this var
-      # to resolve, never an actual connection — CI never talks to a real
-      # database.
+      # `prisma generate` (postinstall) and `next build` only need this to
+      # resolve; neither connects. No real secrets are used anywhere in CI.
       PIPELINES_DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci"
+      TEST_DATABASE_URL: "postgresql://ci:ci@localhost:5432/pipelines_test"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,16 +40,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Skips the `prisma generate` postinstall step's need for a real
-      # database — it only reads prisma/schema.prisma, never connects.
       - run: npm ci
 
-      # `next build` runs the real TypeScript check itself — a bare `tsc
-      # --noEmit` misses Next's generated route types (LayoutProps etc.),
-      # which only exist after a build has run at least once. Confirmed
-      # this needs no real secrets, only the dummy PIPELINES_DIRECT_URL
-      # above — instrumentation.ts's env validation only runs when a
-      # server actually starts, not at build time.
+      # `next build` runs the TypeScript check (including Next's generated
+      # route types, which a bare `tsc --noEmit` wouldn't have yet).
       - run: npm run build
 
       - run: npm run lint
+
+      # Applies prisma/migrations to the service database, then runs every
+      # test file against it.
+      - run: npm test

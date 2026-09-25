@@ -1,0 +1,165 @@
+import { describe, expect, it } from "vitest";
+import { addressFilterFor, addressMatchesPerson, isRoleAddress } from "@/lib/outreach/email-policy";
+import { digitsOnly, formatPhone, normalizePhone } from "@/lib/phone";
+import { normalizeState } from "@/lib/us-states";
+import { dayKey, formatDateTime, parseZonedInputValue, startOfZoneDay, toZonedInputValue } from "@/lib/time";
+import { allowedTransitions, coldCallResult, isBackwardMove, isStatusOf } from "@/lib/lead-status";
+import { escapeVCardValue, buildVCard } from "@/lib/vcard";
+import { isAuthorizedBearer } from "@/lib/auth-header";
+import { agentLeadSchema, coldOutreachLeadSchema, fieldErrorsOf } from "@/lib/lead-forms";
+import { missingEnvVars } from "@/instrumentation";
+import { resolveTransportKind } from "@/lib/mail-transport-kind";
+import { classifySendError, MailConfigError } from "@/lib/send-email";
+import { smtpError } from "./helpers";
+
+describe("email policy", () => {
+  it("recognises shared office inboxes", () => {
+    for (const e of ["frontdesk@kw.test", "info@kw.test", "info2@kw.test", "sales.team@kw.test", "Office@kw.test"]) {
+      expect(isRoleAddress(e)).toBe(true);
+    }
+    expect(isRoleAddress("jane.doe@kw.test")).toBe(false);
+  });
+
+  it("matches an address to the person it belongs to", () => {
+    expect(addressMatchesPerson("jdoe@kw.test", "Jane Q Doe")).toBe(true);
+    expect(addressMatchesPerson("jane@kw.test", "Jane Doe")).toBe(true);
+    expect(addressMatchesPerson("bob.smith@kw.test", "Jane Doe")).toBe(false);
+  });
+
+  it("only accepts the agent's own address on a brokerage site", () => {
+    const filter = addressFilterFor("Jane Doe", "brokerage");
+    expect(filter("frontdesk@kellerwilliams.test")).toBe(false);
+    expect(filter("jane.doe@kellerwilliams.test")).toBe(true);
+    expect(addressFilterFor("Jane Doe", "name")("info@janedoehomes.test")).toBe(true);
+  });
+});
+
+describe("phones, states and money", () => {
+  it("normalises Yelp's E.164 and typed numbers to one format", () => {
+    expect(normalizePhone("+14805550101")).toBe("(480) 555-0101");
+    expect(normalizePhone("480.555.0199")).toBe("(480) 555-0199");
+    expect(normalizePhone("(480)555-0199")).toBe("(480) 555-0199");
+    expect(normalizePhone("  ")).toBeNull();
+    expect(digitsOnly("1-480-555-0101")).toBe("4805550101");
+    expect(formatPhone("12")).toBe("12");
+  });
+
+  it("stores two-letter state codes", () => {
+    expect(normalizeState("Arizona")).toBe("AZ");
+    expect(normalizeState(" az ")).toBe("AZ");
+    expect(normalizeState("new york")).toBe("NY");
+    expect(normalizeState("Narnia")).toBeNull();
+  });
+
+  it("validates the manual forms with field-level messages", () => {
+    const bad = coldOutreachLeadSchema.safeParse({
+      name: "x".repeat(300),
+      company: "",
+      email: "nope",
+      phone: "12",
+      address: "",
+      city: "",
+      state: "Narnia",
+      website: "",
+      source: "",
+      estimatedValue: "-5000",
+      notes: "",
+    });
+    expect(bad.success).toBe(false);
+    const errors = fieldErrorsOf<Record<string, string>>(bad.error!);
+    expect(Object.keys(errors).sort()).toEqual(["email", "estimatedValue", "name", "phone", "state"]);
+    expect(errors.phone).toMatch(/10-digit/);
+
+    const agent = agentLeadSchema.safeParse({ name: "A", brokerage: "", email: "", phone: "", city: "Tucson", county: "Pima", website: "", notes: "" });
+    expect(agent.success).toBe(false);
+    expect(fieldErrorsOf<Record<string, string>>(agent.error!).county).toMatch(/Maricopa, Salt Lake or Utah/);
+  });
+});
+
+describe("time zone handling (America/Phoenix)", () => {
+  it("stores 10:00 AM Arizona as 17:00Z and shows it back as 10:00 AM", () => {
+    const instant = parseZonedInputValue("2026-09-25T10:00")!;
+    expect(instant.toISOString()).toBe("2026-09-25T17:00:00.000Z");
+    expect(toZonedInputValue(instant)).toBe("2026-09-25T10:00");
+    expect(formatDateTime(instant)).toBe("Sep 25, 2026, 10:00 AM MST");
+  });
+
+  it("puts 6 PM Arizona in that Arizona day, not the next UTC day", () => {
+    const sixPm = new Date("2026-09-26T01:00:00Z"); // 6 PM MST on Sep 25
+    expect(dayKey(sixPm)).toBe("2026-09-25");
+    expect(startOfZoneDay(0, sixPm).toISOString()).toBe("2026-09-25T07:00:00.000Z");
+  });
+
+  it("rejects malformed appointment input", () => {
+    expect(parseZonedInputValue("tomorrow")).toBeNull();
+  });
+});
+
+describe("lead status machine", () => {
+  it("offers only valid moves and never 'contacted' from new", () => {
+    expect(allowedTransitions("cold-outreach", "new")).not.toContain("contacted");
+    expect(allowedTransitions("dataleadsell", "new")).not.toContain("contacted");
+    expect(allowedTransitions("cold-outreach", "lost")).toContain("responded");
+    expect(isStatusOf("cold-outreach", "banana")).toBe(false);
+    expect(isStatusOf("dataleadsell", "paying_client")).toBe(false);
+    expect(isBackwardMove("paying_client", "working_for")).toBe(true);
+    expect(isBackwardMove("contacted", "responded")).toBe(false);
+  });
+
+  it("maps cold-call outcomes per pipeline", () => {
+    expect(coldCallResult("dataleadsell", "not_interested").status).toBe("not_interested");
+    expect(coldCallResult("cold-outreach", "not_interested").status).toBe("lost");
+    expect(coldCallResult("cold-outreach", "no_answer").status).toBeUndefined();
+  });
+});
+
+describe("vCard", () => {
+  it("escapes RFC 6350 special characters", () => {
+    expect(escapeVCardValue("Smith, Jones; Co\\\nLine")).toBe("Smith\\, Jones\\; Co\\\\\\nLine");
+    expect(buildVCard("A;B", "(480) 555-0101")).toContain("FN:A\\;B\r\n");
+  });
+});
+
+describe("auth and startup checks", () => {
+  it("never authorizes when the secret is unset", () => {
+    expect(isAuthorizedBearer("Bearer undefined", undefined)).toBe(false);
+    expect(isAuthorizedBearer("Bearer ", "")).toBe(false);
+    expect(isAuthorizedBearer("Bearer s3cret", "s3cret")).toBe(true);
+    expect(isAuthorizedBearer("Bearer wrong", "s3cret")).toBe(false);
+  });
+
+  it("captures mail locally unless deployed or configured otherwise", () => {
+    expect(resolveTransportKind({})).toBe("outbox");
+    expect(resolveTransportKind({ VERCEL: "1" })).toBe("zeptomail");
+    expect(resolveTransportKind({ EMAIL_TRANSPORT: "smtp" })).toBe("smtp");
+  });
+
+  it("requires production secrets only where they're needed", () => {
+    expect(missingEnvVars({ PIPELINES_DATABASE_URL: "postgres://x" })).toEqual([]);
+    expect(missingEnvVars({ PIPELINES_DATABASE_URL: "postgres://x", VERCEL: "1" })).toEqual([
+      "ZEPTOMAIL_SMTP_PASSWORD",
+      "YELP_API_KEY",
+      "EMAIL_INBOUND_SECRET",
+      "CRON_SECRET",
+    ]);
+  });
+});
+
+describe("send error classification", () => {
+  it("treats connection problems as 'nothing was sent', in plain words", () => {
+    const refused = classifySendError(smtpError("connect ECONNREFUSED 127.0.0.1:587", { code: "ESOCKET", syscall: "connect" }));
+    expect(refused).toEqual({
+      delivery: "not_sent",
+      message: "Couldn't reach the email service — nothing was sent. Try again in a few minutes.",
+    });
+    expect(classifySendError(smtpError("Connection timeout", { code: "ETIMEDOUT" })).delivery).toBe("not_sent");
+    expect(classifySendError(smtpError("Invalid login", { code: "EAUTH" })).delivery).toBe("not_sent");
+    expect(classifySendError(smtpError("Message failed: 550", { code: "EMESSAGE", responseCode: 550 })).delivery).toBe("not_sent");
+    expect(classifySendError(new MailConfigError("no password")).delivery).toBe("not_sent");
+  });
+
+  it("treats a dropped connection mid-send as 'unknown'", () => {
+    expect(classifySendError(smtpError("Timeout", { code: "ETIMEDOUT" })).delivery).toBe("unknown");
+    expect(classifySendError(smtpError("Connection closed unexpectedly", { code: "ECONNECTION" })).delivery).toBe("unknown");
+  });
+});
