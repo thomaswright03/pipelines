@@ -78,7 +78,9 @@ export const ADDRESS_CORPUS: LabelledAddress[] = [
 // --- Held-out split ------------------------------------------------------
 // Written on 2026-09-25 after the rule was last changed and scored once
 // as-is; never used when changing the rule (see replies.ts for the policy).
-// First run (2026-09-25): precision 100%, recall 100%.
+// First run (2026-09-25): precision 100%, recall 100%. Round 6: grown to 50
+// with fresh cases, scored as-is — precision 100%, recall 96.0% (rejected
+// annemarie.dupont@ for "Anne-Marie Dupont").
 export const ADDRESS_HELD_OUT: LabelledAddress[] = [
   { agent: "Carla Mendez", email: "carla.mendez@homesmart.test", belongs: true },
   { agent: "Carla Mendez", email: "cmendez@homesmart.test", belongs: true },
@@ -100,4 +102,35 @@ export const ADDRESS_HELD_OUT: LabelledAddress[] = [
   { agent: "William Scott", email: "scott.properties@remax.test", belongs: false },
   { agent: "Hannah Kim", email: "kim.team@cb.test", belongs: false },
   { agent: "Hannah Kim", email: "hkim.assistant@cb.test", belongs: false },
+  // Fresh batch, 2026-09-25 (round 6), written before scoring and scored as-is.
+  { agent: "Derek Johnson", email: "derek.johnson@realtyone.test", belongs: true },
+  { agent: "Derek Johnson", email: "djohnson@realtyone.test", belongs: true },
+  { agent: "Derek Johnson", email: "derekjohnson@realtyone.test", belongs: true },
+  { agent: "Derek Johnson", email: "johnsond@realtyone.test", belongs: true },
+  { agent: "Sofia Alvarez", email: "sofia.alvarez@westusa.test", belongs: true },
+  { agent: "Sofia Alvarez", email: "salvarez@westusa.test", belongs: true },
+  { agent: "Sofia Alvarez", email: "sofia_alvarez@westusa.test", belongs: true },
+  { agent: "Michael McAllister", email: "michael.mcallister@russlyon.test", belongs: true },
+  { agent: "Michael McAllister", email: "mmcallister@russlyon.test", belongs: true },
+  { agent: "Priya Raman", email: "priya.raman@redfin.test", belongs: true },
+  { agent: "Priya Raman", email: "praman@redfin.test", belongs: true },
+  { agent: "Tom Nguyen", email: "tom.nguyen@exp.test", belongs: true },
+  { agent: "Tom Nguyen", email: "tnguyen@exp.test", belongs: true },
+  { agent: "Anne-Marie Dupont", email: "annemarie.dupont@cb.test", belongs: true },
+  { agent: "Anne-Marie Dupont", email: "adupont@cb.test", belongs: true },
+  { agent: "Derek Johnson", email: "info@realtyone.test", belongs: false },
+  { agent: "Derek Johnson", email: "sarah.johnson@realtyone.test", belongs: false },
+  { agent: "Derek Johnson", email: "derek.miller@realtyone.test", belongs: false },
+  { agent: "Derek Johnson", email: "johnsonteam@realtyone.test", belongs: false },
+  { agent: "Sofia Alvarez", email: "frontdesk@westusa.test", belongs: false },
+  { agent: "Sofia Alvarez", email: "salvarez.team@westusa.test", belongs: false },
+  { agent: "Sofia Alvarez", email: "carlos.alvarez@westusa.test", belongs: false },
+  { agent: "Michael McAllister", email: "mike@russlyon.test", belongs: false },
+  { agent: "Michael McAllister", email: "listings@russlyon.test", belongs: false },
+  { agent: "Priya Raman", email: "anand.raman@redfin.test", belongs: false },
+  { agent: "Priya Raman", email: "support@redfin.test", belongs: false },
+  { agent: "Tom Nguyen", email: "tnguyen.assistant@exp.test", belongs: false },
+  { agent: "Tom Nguyen", email: "linh.nguyen@exp.test", belongs: false },
+  { agent: "Anne-Marie Dupont", email: "marie@cb.test", belongs: false },
+  { agent: "Anne-Marie Dupont", email: "recruiting@cb.test", belongs: false },
 ];

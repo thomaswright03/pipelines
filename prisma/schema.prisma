@@ -143,6 +143,9 @@ model InboundReply {
   kindReason      String?
   // For a bounce: the address that couldn't be delivered to, if named.
   failedRecipient String?
+  // Which version of the reply and automatic-mail rules made the kind,
+  // opt-out and review verdicts above (see src/lib/outreach/rules-version.ts).
+  rulesVersion    String?
 
   @@index([dedupeKey, receivedAt])
   @@index([receivedAt])
@@ -208,6 +211,9 @@ model AgentLead {
   // Why the address is believed to be this lead's: the site it was found on
   // showed the lead's phone/street/city, or it was entered by hand.
   emailEvidence       String?
+  // Which version of the address and guessed-site rules accepted the
+  // address (null when it was entered or checked by hand).
+  emailRulesVersion   String?
   // Set when this lead must never be auto-sent (e.g. its address is
   // already held by another lead). Shown on the lead page.
   sendBlockedReason   String?
@@ -330,6 +336,7 @@ model Lead {
   emailCheckedAt      DateTime? // set whenever an email lookup finished, found or not — lets a sweep skip leads already tried
   emailLookupFailedAt DateTime? // see AgentLead.emailLookupFailedAt
   emailEvidence       String? // see AgentLead.emailEvidence
+  emailRulesVersion   String? // see AgentLead.emailRulesVersion
   // See AgentLead.sendBlockedReason.
   sendBlockedReason   String?
   lastEmailedAt       DateTime?

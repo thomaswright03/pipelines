@@ -79,6 +79,7 @@ export async function editLead(
     }
     data.email = newEmail;
     data.emailEvidence = newEmail ? enteredByHandEvidence() : null;
+    data.emailRulesVersion = null;
     // A block about the old address doesn't apply to the new one.
     if (lead.sendBlockedReason && ADDRESS_BLOCK_PREFIXES.some((p) => lead.sendBlockedReason!.startsWith(p))) {
       data.sendBlockedReason = null;
@@ -107,7 +108,7 @@ export async function confirmAddress(pipelineId: PipelineId, leadId: string): Pr
     prisma,
     leadId,
     { status: lead.status, email: lead.email },
-    { sendBlockedReason: null, emailEvidence: `Checked by hand on ${formatDate(new Date())}.` },
+    { sendBlockedReason: null, emailEvidence: `Checked by hand on ${formatDate(new Date())}.`, emailRulesVersion: null },
   );
   if (!applied) return { ok: false, error: `${lead.name} changed a moment ago — reload the page and try again.` };
   return { ok: true, message: `Marked ${lead.email} as checked — ${lead.name} can be emailed.` };

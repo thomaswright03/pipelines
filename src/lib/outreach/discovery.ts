@@ -7,8 +7,8 @@ import { logError } from "@/lib/log";
 import { scanWebsite } from "@/lib/email-finder";
 import { guessWebsiteForBusiness, splitPersonAndBrokerage } from "@/lib/website-finder";
 import { digitsOnly, normalizePhone } from "@/lib/phone";
-import { addressFilterFor, hostNamesPerson } from "@/lib/outreach/email-policy";
-import { siteEvidence, type LeadFacts } from "@/lib/outreach/site-evidence";
+import { ADDRESS_RULES_VERSION, addressFilterFor, hostNamesPerson } from "@/lib/outreach/email-policy";
+import { SITE_RULES_VERSION, siteEvidence, type LeadFacts } from "@/lib/outreach/site-evidence";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { DUPLICATE_BLOCK_PREFIX, findExistingPitch } from "@/lib/outreach/send";
 import { getPipeline, type NamedLead, type OutreachLead } from "@/lib/outreach/pipelines";
@@ -31,6 +31,9 @@ export type EmailLookup = {
   unverified: { website: string; email: string } | null;
   unreachable: boolean;
 };
+
+/** The rules that accept a found address, stored on the lead with it. */
+export const EMAIL_RULES_VERSION = `${ADDRESS_RULES_VERSION} ${SITE_RULES_VERSION}`;
 
 const NO_LOOKUP: EmailLookup = { website: null, email: null, evidence: null, unverified: null, unreachable: false };
 
@@ -291,6 +294,7 @@ export async function createLeadsFromCandidates(
       website: lookup.website,
       email,
       emailEvidence: lookup.evidence,
+      emailRulesVersion: EMAIL_RULES_VERSION,
       city: facts.city,
       county: ctx.county ?? null,
       state: ctx.state,
@@ -413,6 +417,7 @@ export async function findEmailForLead(pipelineId: PipelineId, lead: OutreachLea
   const saved = await pipeline.updateIfUnchanged(prisma, lead.id, expected, {
     email: lookup.email,
     emailEvidence: lookup.evidence,
+    emailRulesVersion: EMAIL_RULES_VERSION,
     website: lookup.website,
     emailCheckedAt: checkedAt,
     emailLookupFailedAt: null,

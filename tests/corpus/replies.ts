@@ -16,6 +16,13 @@
 // not send further emails" phrasings were then added to the classifier (a
 // genuine gap), so those two cases no longer measure anything new.
 //
+// Round 6 (2026-09-25): 61 fresh held-out cases (the "I don't want these
+// emails" family, Spanish and French opt-outs, look-alikes) were written
+// after the rules for those families were added from the development cases,
+// and scored as-is: precision 98.3%, recall 98.3% on 102 cases. Misses:
+// "Honestly I do not want any of these emails" (missed) and "Can I
+// unsubscribe later if it doesn't work out?" (false opt-out).
+//
 // optOut: true  — the sender is asking not to be contacted (CAN-SPAM opt-out).
 // optOut: false — anything else, including "no thanks" and complaints that
 //                 don't ask to stop (those are flagged for a look instead).
@@ -225,4 +232,68 @@ export const REPLY_HELD_OUT: LabelledReply[] = [
   { text: "Not for me. Unsubscribe.", optOut: true },
   { text: "", subject: "Remove me", optOut: true },
   { text: "Remove me from any lists you have for this address please", optOut: true },
+  // Fresh batch, 2026-09-25 (round 6), written before scoring and scored
+  // as-is: the "I don't want these emails" family, Spanish and French
+  // opt-outs, and look-alikes that aren't opt-outs.
+  { text: "I really don't want these emails.", optOut: true },
+  { text: "We don't want your marketing emails, thanks.", optOut: true },
+  { text: "Honestly I do not want any of these emails", optOut: true },
+  { text: "I don't wish to receive further emails from your company.", optOut: true },
+  { text: "Please, we no longer wish to receive these emails.", optOut: true },
+  { text: "Don't want these messages. Bye.", optOut: true },
+  { text: "I don’t want to receive emails like this.", optOut: true },
+  { text: "we dont want ur emails", optOut: true },
+  { text: "I don't want to keep getting these emails.", optOut: true },
+  { text: "I never signed up for this. Stop sending me emails.", optOut: true },
+  { text: "Please do not email this account in the future.", optOut: true },
+  { text: "Please remove my address from your system.", optOut: true },
+  { text: "Take me off whatever list this is.", optOut: true },
+  { text: "Opt me out please.", optOut: true },
+  { text: "unsubscribe", subject: "Re: Leads for your office", optOut: true },
+  { text: "Remove", optOut: true },
+  { text: "STOP.\n\nSent from my iPhone", optOut: true },
+  { text: "Stop contacting my business.", optOut: true },
+  { text: "Quit sending these.", optOut: true },
+  { text: "Leave us alone please.", optOut: true },
+  { text: "Kindly delete my contact details.", optOut: true },
+  { text: "Not interested and please don't email again.", optOut: true },
+  { text: "Don't ever contact me again.", optOut: true },
+  { text: "No more emails please.", optOut: true },
+  { text: "Por favor, no me manden más correos.", optOut: true },
+  { text: "Quiero darme de baja.", optOut: true },
+  { text: "No deseo recibir más correos electrónicos.", optOut: true },
+  { text: "Quítenme de su lista por favor.", optOut: true },
+  { text: "Bórrenme de su lista de correos.", optOut: true },
+  { text: "No me escriban más.", optOut: true },
+  { text: "Désabonner", optOut: true },
+  { text: "Merci de me désinscrire de votre liste.", optOut: true },
+  { text: "Ne me contactez plus, s'il vous plaît.", optOut: true },
+  { text: "Retirez-moi de votre liste de diffusion.", optOut: true },
+  { text: "Nous ne souhaitons plus recevoir vos courriels.", optOut: true },
+  { text: `Unsubscribe${QUOTED_PITCH}`, optOut: true },
+  { text: `I don't want these emails.${QUOTED_PITCH}`, optOut: true },
+  { text: "I don't want these emails to stop — they've been useful.", optOut: false },
+  { text: "I don't want emails about commercial, only residential.", optOut: false },
+  { text: "Don't want to miss this — call me Monday.", optOut: false },
+  { text: "I don't want to waste your time, so here's my budget: $300/month.", optOut: false },
+  { text: "We don't want more agents on the account, just me.", optOut: false },
+  { text: "Could you stop by our Mesa office on Friday?", optOut: false },
+  { text: "Our team can't stop talking about the sample list.", optOut: false },
+  { text: "Please keep the emails coming.", optOut: false },
+  { text: "Remove the Pinal leads, keep Maricopa.", optOut: false },
+  { text: "Can I unsubscribe later if it doesn't work out?", optOut: false },
+  { text: "Send it over. If I don't like it I'll tell you.", optOut: false },
+  { text: `Yes, interested — what's the cost?${QUOTED_PITCH}`, optOut: false },
+  { text: `Call me at 480-555-0199.${QUOTED_PITCH}`, optOut: false },
+  { text: "Not right now, maybe next quarter.", optOut: false },
+  { text: "Who else in Scottsdale uses this?", optOut: false },
+  { text: "Sí, me interesa. ¿Cuánto cuesta?", optOut: false },
+  { text: "Oui, envoyez-moi les détails.", optOut: false },
+  { text: "Llámeme el lunes por favor.", optOut: false },
+  { text: "I'd rather talk by phone than email.", optOut: false },
+  { text: "Please email my partner instead: she runs marketing.", optOut: false },
+  { text: "Stop by any time after 3.", optOut: false },
+  { text: "I don't want to commit yet, but send a sample.", optOut: false },
+  { text: "Removing the old listings now — thanks for the reminder.", optOut: false },
+  { text: "We have a lot of email to get through; I'll reply properly next week.", optOut: false },
 ];

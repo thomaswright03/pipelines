@@ -17,6 +17,7 @@
 // tests/heuristics-eval.test.ts scores this on a labelled set of guessed
 // sites (tests/corpus/sites.ts).
 import { digitsOnly, formatPhone } from "@/lib/phone";
+import { rulesVersion } from "@/lib/outreach/rules-version";
 
 export type LeadFacts = {
   /** The lead's name as Yelp/ADRE gave it, for the page-title check. */
@@ -96,7 +97,8 @@ const GENERIC_NAME_WORDS = new Set(
     "plumbing plumber hvac heating cooling air electric electrical roofing landscaping cleaning construction contractors " +
     "auto repair dental dentist clinic medical law firm agency studio center centre fitness gym home homes house " +
     "realty real estate properties property realtor realtors broker brokerage associates partners international " +
-    "llp mortgage insurance tax accounting care pets pet vet veterinary"
+    "llp mortgage insurance tax accounting care pets pet vet veterinary locksmith locksmiths towing movers moving " +
+    "storage glass windows doors pest control pool pools painting flooring carpet nails"
   ).split(" "),
 );
 
@@ -119,11 +121,13 @@ function pageTitles(html: string): string {
 // A site that lists more than one location (a chain, a franchise) can't be
 // tied to one lead by the city alone.
 const MULTI_LOCATION_RE =
-  /\b(?:our\s+locations|all\s+locations|other\s+locations|find\s+a\s+location|choose\s+(?:a|your)\s+location|locations\s+near\s+you|store\s+locator|location\s+finder|franchis(?:e|es|ing|ee|ees)|nationwide)\b/;
+  /\b(?:our\s+(?:locations|stores)|all\s+(?:locations|stores)|other\s+(?:locations|stores)|find\s+a\s+(?:location|store)|choose\s+(?:a|your)\s+(?:location|store)|(?:locations|stores?)\s+near\s+you|store\s+locator|location\s+finder|franchis(?:e|es|ing|ee|ees)|nationwide|\d[\d,]*\s+(?:more\s+)?(?:locations|stores|cities|branches))\b/;
 
-function titleNamesLead(html: string, name: string | null | undefined): boolean {
+function titleNamesLead(html: string, name: string | null | undefined, city: string): boolean {
   if (!name) return false;
-  const words = distinctiveNameWords(name);
+  // "Phoenix Locksmith" in Phoenix: the city in the name identifies nothing.
+  const cityWords = new Set(city.toLowerCase().split(/[^a-z0-9]+/));
+  const words = distinctiveNameWords(name).filter((w) => !cityWords.has(w));
   if (words.length === 0) return false;
   const title = pageTitles(html).replace(/'s\b/g, "");
   return words.every((w) => new RegExp(`\\b${escapeRegExp(w)}\\b`).test(title));
@@ -157,7 +161,7 @@ export function siteEvidence(website: string, pages: string[], facts: LeadFacts)
   }
   if (facts.city && showsCity(text, facts.city) && !MULTI_LOCATION_RE.test(text)) {
     const city = facts.city.trim();
-    if (titleNamesLead(html, facts.name)) {
+    if (titleNamesLead(html, facts.name, city)) {
       return `Found on ${host}, which is titled with the lead's name and mentions the lead's city (${city}), with no other locations listed.`;
     }
     if (facts.addressNamesLead) {
@@ -166,3 +170,10 @@ export function siteEvidence(website: string, pages: string[], facts: LeadFacts)
   }
   return null;
 }
+
+/**
+ * Identifies this version of the guessed-site rules; stored with every
+ * address discovery accepts. Bump the revision when the logic changes
+ * without a pattern or word list changing.
+ */
+export const SITE_RULES_VERSION = rulesVersion("site", 1, [GENERIC_NAME_WORDS, MULTI_LOCATION_RE]);

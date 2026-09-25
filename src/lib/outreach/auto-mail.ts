@@ -18,6 +18,8 @@
 // tests/auto-mail.test.ts holds the development cases;
 // tests/heuristics-eval.test.ts scores both detectors on labelled sets.
 
+import { rulesVersion } from "@/lib/outreach/rules-version";
+
 export type MailHeaders = Record<string, string | string[] | null | undefined>;
 
 export type AutoMailInput = {
@@ -140,7 +142,9 @@ export function detectBounce(input: AutoMailInput, ownDomains: string[] = []): B
 
   const fromDaemon = BOUNCE_SENDER_RE.test(local) || /mail delivery (?:subsystem|system)/i.test(from);
   const dsnContent = /multipart\/report;.*report-type=["']?delivery-status/i.test(contentType) || /^\s*Final-Recipient:/im.test(text);
-  const subjectSaysSo = BOUNCE_SUBJECT_RE.test(subject);
+  // A mail server's notice never starts "Re:" — that's a person replying
+  // to a subject that happens to say "Undeliverable".
+  const subjectSaysSo = !/^\s*re\s*:/i.test(subject) && BOUNCE_SUBJECT_RE.test(subject);
   const bodySaysSo = BOUNCE_BODY_RE.test(text);
   const smtp = SMTP_PERMANENT_RE.exec(text);
 
@@ -161,3 +165,18 @@ export function detectBounce(input: AutoMailInput, ownDomains: string[] = []): B
       : `delivery-failure notice (“${subject.slice(0, 120)}”)`;
   return { failedRecipient, reason, diagnostic: diagnosticLine ? diagnosticLine.trim().slice(0, 200) : null };
 }
+
+/**
+ * Identifies this version of the automatic-reply and bounce rules; stored
+ * on every InboundReply. Bump the revision when the logic changes without a
+ * pattern changing.
+ */
+export const AUTO_MAIL_RULES_VERSION = rulesVersion("auto", 1, [
+  AUTO_SUBJECT_RE,
+  AUTO_BODY_PATTERNS,
+  BOUNCE_SENDER_RE,
+  BOUNCE_SUBJECT_RE,
+  BOUNCE_BODY_RE,
+  SMTP_PERMANENT_RE,
+  EMAIL_RE,
+]);

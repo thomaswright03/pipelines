@@ -47,6 +47,7 @@ export type LeadUpdate = {
   status?: string;
   email?: string | null;
   emailEvidence?: string | null;
+  emailRulesVersion?: string | null;
   website?: string | null;
   emailCheckedAt?: Date | null;
   emailLookupFailedAt?: Date | null;
@@ -65,6 +66,7 @@ export type NewLeadData = {
   name: string;
   email: string | null;
   emailEvidence?: string | null;
+  emailRulesVersion?: string | null;
   phone: string | null;
   address: string | null;
   website: string | null;
@@ -245,6 +247,7 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
           name: data.name,
           email: data.email,
           emailEvidence: data.emailEvidence ?? null,
+          emailRulesVersion: data.emailRulesVersion ?? null,
           phone: data.phone,
           address: data.address,
           website: data.website,

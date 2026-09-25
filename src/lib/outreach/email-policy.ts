@@ -7,6 +7,8 @@
 // exactly what must not happen. So when the site came from the brokerage,
 // only an address that is recognisably the agent's own is accepted.
 
+import { rulesVersion } from "@/lib/outreach/rules-version";
+
 const ROLE_LOCAL_PARTS = new Set([
   "info",
   "hello",
@@ -166,3 +168,10 @@ export function addressFilterFor(
   if (siteBasis !== "brokerage") return () => true;
   return (email) => !isRoleAddress(email) && addressMatchesPerson(email, personName);
 }
+
+/**
+ * Identifies this version of the address rules; stored with every address
+ * discovery accepts. Bump the revision when the logic changes without a
+ * word list changing.
+ */
+export const ADDRESS_RULES_VERSION = rulesVersion("address", 1, [ROLE_LOCAL_PARTS, SHARED_SUFFIXES]);

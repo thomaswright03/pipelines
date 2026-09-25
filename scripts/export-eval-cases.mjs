@@ -37,7 +37,7 @@ await client.connect();
 try {
   await client.query("BEGIN TRANSACTION READ ONLY");
   const { rows } = await client.query(
-    `SELECT subject, text, "optedOut", "reviewReason", kind, "failedRecipient" IS NOT NULL AS "hasRecipient"
+    `SELECT subject, text, "optedOut", "reviewReason", kind, "failedRecipient" IS NOT NULL AS "hasRecipient", "rulesVersion"
        FROM "InboundReply" ORDER BY "receivedAt" DESC LIMIT $1`,
     [limit],
   );
@@ -45,7 +45,7 @@ try {
   const cases = rows.map((r) => ({
     subject: anonymise(r.subject),
     text: anonymise(r.text),
-    suggested: { optOut: r.optedOut, review: r.reviewReason !== null, kind: r.kind, bounceAddressFound: r.hasRecipient },
+    suggested: { optOut: r.optedOut, review: r.reviewReason !== null, kind: r.kind, bounceAddressFound: r.hasRecipient, rulesVersion: r.rulesVersion },
   }));
   process.stdout.write(`${JSON.stringify(cases, null, 2)}\n`);
   console.error(`Exported ${cases.length} cases. Check each label and the anonymisation before adding any to tests/corpus/.`);

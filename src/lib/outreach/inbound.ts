@@ -43,13 +43,16 @@ import { prisma } from "@/lib/db";
 import { suppressEmail } from "@/lib/email-suppression";
 import { formatDateTime } from "@/lib/time";
 import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@/lib/lead-status";
-import { classifyReply } from "@/lib/outreach/reply-classifier";
-import { detectAutoReply, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
+import { classifyReply, REPLY_RULES_VERSION } from "@/lib/outreach/reply-classifier";
+import { AUTO_MAIL_RULES_VERSION, detectAutoReply, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
 import { applyBounce } from "@/lib/outreach/lead-actions";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type PipelineAdapter } from "@/lib/outreach/pipelines";
+
+/** The rules behind every stored inbound verdict (kind, opt-out, review). */
+export const INBOUND_RULES_VERSION = `${REPLY_RULES_VERSION} ${AUTO_MAIL_RULES_VERSION}`;
 
 export type InboundEmail = {
   from: string;
@@ -193,6 +196,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           kind,
           kindReason: bounce ? [bounce.reason, bounce.diagnostic].filter(Boolean).join(" — ") : autoReason,
           failedRecipient: bounce?.failedRecipient ?? null,
+          rulesVersion: INBOUND_RULES_VERSION,
           matched,
           text: replyText || null,
           receivedAt: now,
