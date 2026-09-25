@@ -18,7 +18,9 @@ export default async function RepliesPage() {
         <h1 className="accent-text text-2xl font-bold tracking-tight">Replies</h1>
         <p className="mt-1 text-sm muted">
           Replies to both pipelines&apos; emails are recorded on the lead with that address automatically. Replies from any other
-          address — an assistant, a personal inbox, a forward — wait here until you match them to a lead.
+          address — an assistant, a personal inbox, a forward — wait here until you match them to a lead. Out-of-office and other
+          automatic replies are noted on the lead without counting as a reply, and bounce notices mark the email bounced; a
+          bounce notice that doesn&apos;t say which address failed waits here too.
         </p>
       </div>
 
@@ -66,6 +68,8 @@ export default async function RepliesPage() {
             subject: r.subject,
             text: r.text,
             optedOut: r.optedOut,
+            bounce: r.kind === "bounce",
+            kindReason: r.kindReason,
             receivedAt: formatDateTime(r.receivedAt),
           }))}
         />

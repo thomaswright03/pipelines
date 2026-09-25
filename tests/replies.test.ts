@@ -195,7 +195,10 @@ describe("a reply that arrives while the database is down", () => {
     const failed = await inbound(payload);
     outage.mockRestore(); // the database is back
     expect(failed.status).toBe(503);
-    expect(await failed.json()).toMatchObject({ retry: true });
+    const body = await failed.json();
+    expect(body).toMatchObject({ retry: true, code: "db_unavailable" });
+    expect(body).not.toHaveProperty("cause"); // internal details stay in the server log
+    expect(JSON.stringify(body)).not.toContain("5432");
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("contacted");
     expect(await prisma.inboundReply.count()).toBe(0); // nothing half-recorded
 

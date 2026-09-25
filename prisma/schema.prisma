@@ -107,27 +107,37 @@ model PipelineRun {
 // transaction as its effects (reply time, status, opt-out). A re-delivery
 // of the same reply finds its row here and changes nothing again.
 model InboundReply {
-  id           String    @id @default(cuid())
+  id              String    @id @default(cuid())
   // "mid:<Message-ID>" when the Worker sends one, otherwise
   // "hash:<sha256 of sender, subject and body>" (matched within a window).
-  dedupeKey    String
-  fromEmail    String
-  subject      String?
-  optedOut     Boolean
+  dedupeKey       String
+  fromEmail       String
+  subject         String?
+  optedOut        Boolean
   // "pipeline:leadId" for each lead the reply was recorded on.
-  matched      String[]
+  matched         String[]
   // The replier's own words (quoted history and signature removed), so an
   // unmatched reply can be read and attached to the right lead.
-  text         String?
-  receivedAt   DateTime  @default(now())
+  text            String?
+  receivedAt      DateTime  @default(now())
   // Set when the operator attached an unmatched reply to a lead
   // ("attached:<pipeline>:<leadId>") or dismissed it ("dismissed").
-  resolvedAt   DateTime?
-  resolution   String?
+  resolvedAt      DateTime?
+  resolution      String?
   // Set when the reply wasn't read as an opt-out but may be one ("not
   // interested", "wrong person"…): the lead is flagged for a look instead
   // of being moved to Responded.
-  reviewReason String?
+  reviewReason    String?
+  // What kind of message this was: "reply" (a person wrote it),
+  // "auto_reply" (out-of-office/autoresponder — recorded in the lead's
+  // history only) or "bounce" (a delivery-failure notice — marks the
+  // failed recipient's send bounced). See src/lib/outreach/auto-mail.ts.
+  kind            String    @default("reply")
+  // Why it was read as an automatic reply or a bounce (header, subject,
+  // SMTP diagnostic), shown on the Replies page.
+  kindReason      String?
+  // For a bounce: the address that couldn't be delivered to, if named.
+  failedRecipient String?
 
   @@index([dedupeKey, receivedAt])
   @@index([receivedAt])

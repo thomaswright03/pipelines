@@ -105,31 +105,45 @@ export async function markBounced(pipelineId: PipelineId, leadId: string): Promi
   if (!(await pipeline.hasBeenEmailed(prisma, leadId))) {
     return refuse(`${lead.name} hasn't been emailed, so there's nothing to mark as bounced.`);
   }
-  const moveToLost = BOUNCE_MOVES_TO_LOST.includes(lead.status);
-  const now = new Date();
-  const outcome = await prisma.$transaction(async (tx) => {
-    const applied = await pipeline.updateIfStatus(
-      tx,
-      leadId,
-      [lead.status],
-      moveToLost ? { status: "lost", ...(pipelineId === "cold-outreach" ? { callOutcome: "unable_to_contact" } : {}) } : {},
-    );
-    if (!applied) return "changed" as const;
-    if (!(await pipeline.markLatestSendBounced(tx, leadId, now))) return "already" as const;
-    await recordCorrectionIfFound(tx, pipelineId, lead);
-    return "marked" as const;
-  });
-  if (outcome === "changed") return changedMeanwhile(lead.name);
-  if (outcome === "already") return refuse(`The email to ${lead.name} is already marked as bounced.`);
+  const outcome = await prisma.$transaction((tx) => applyBounce(tx, pipelineId, lead, new Date()));
+  if (!outcome) return refuse(`The email to ${lead.name} is already marked as bounced.`);
   return ok(
-    moveToLost
-      ? `Marked ${lead.name} as bounced — moved from ${statusLabel(lead.status)} to Lost.`
-      : `Marked the email to ${lead.name} as bounced — they stay ${statusLabel(lead.status)}.`,
+    outcome.to !== outcome.from
+      ? `Marked ${lead.name} as bounced — moved from ${statusLabel(outcome.from)} to ${statusLabel(outcome.to)}.`
+      : `Marked the email to ${lead.name} as bounced — they stay ${statusLabel(outcome.to)}.`,
   );
 }
 
 // Statuses a bounce ends outreach for: we were still trying to reach them.
 const BOUNCE_MOVES_TO_LOST: readonly string[] = ["contacted", "responded", "cold_call_list", "contactless_list"];
+
+/**
+ * The bounce rules shared by "Mark bounced" and bounce notices arriving on
+ * the reply inbox (inbound.ts): the latest send is marked bounced, and a
+ * lead we were still working moves to Lost. Returns null when there was no
+ * unbounced send to mark (nothing is changed then), otherwise the lead's
+ * status before and after. The status move is conditional on the status
+ * just read, so a concurrent change is never overwritten — the lead is
+ * re-read and the rule applied to its new status.
+ */
+export async function applyBounce(
+  tx: Db,
+  pipelineId: PipelineId,
+  initial: OutreachLead,
+  at: Date,
+): Promise<{ from: string; to: string } | null> {
+  const pipeline = getPipeline(pipelineId);
+  if (!(await pipeline.markLatestSendBounced(tx, initial.id, at))) return null;
+  await recordCorrectionIfFound(tx, pipelineId, initial);
+  let lead: OutreachLead | null = initial;
+  for (let attempt = 0; lead && attempt < 3; attempt++) {
+    if (!BOUNCE_MOVES_TO_LOST.includes(lead.status)) return { from: initial.status, to: lead.status };
+    const lost = { status: "lost", ...(pipelineId === "cold-outreach" ? { callOutcome: "unable_to_contact" } : {}) };
+    if (await pipeline.updateIfStatus(tx, lead.id, [lead.status], lost)) return { from: initial.status, to: "lost" };
+    lead = await pipeline.findLead(tx, lead.id);
+  }
+  throw new Error(`Lead ${initial.id} kept changing while a bounce was being recorded`);
+}
 
 /** A bounce on an address the lookup found (not one typed in) is a wrong-address signal for the email finder. */
 async function recordCorrectionIfFound(tx: Db, pipelineId: PipelineId, lead: OutreachLead) {

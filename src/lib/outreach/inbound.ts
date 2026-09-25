@@ -19,6 +19,18 @@
 // (Not interested in dataleadsell). New leads just become unsendable;
 // customers keep their status.
 //
+// Mail no person wrote is told apart first (auto-mail.ts):
+// - An automatic reply (out-of-office, autoresponder) is added to the
+//   lead's history, marked as automatic, and changes nothing else: status,
+//   reply time and the reply rate are untouched, so the lead still moves to
+//   phone outreach after a week. A real reply later counts as usual. One
+//   that matches no lead is filed away rather than listed on Replies.
+// - A bounce notice marks the failed recipient's latest send bounced, with
+//   the same rules as "Mark bounced". One whose address can't be read, or
+//   matches no lead, is listed on Replies as a bounce for the operator.
+// An opt-out is checked before either, so an autoresponder that asks not
+// to be emailed is still honoured.
+//
 // The reply's text is added to the lead's history (AgentLeadActivity /
 // LeadActivity), never to its Notes, so it can't push the operator's notes
 // past their limit.
@@ -32,7 +44,11 @@ import { suppressEmail } from "@/lib/email-suppression";
 import { formatDateTime } from "@/lib/time";
 import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@/lib/lead-status";
 import { classifyReply } from "@/lib/outreach/reply-classifier";
+import { detectAutoReply, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
+import { applyBounce } from "@/lib/outreach/lead-actions";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
+import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
+import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type PipelineAdapter } from "@/lib/outreach/pipelines";
 
 export type InboundEmail = {
@@ -41,9 +57,15 @@ export type InboundEmail = {
   text?: string | null;
   /** The email's Message-ID header, when the Worker forwards it (preferred for de-duplication). */
   messageId?: string | null;
+  /** The email's headers, when the Worker forwards them (used to recognise automatic replies and bounces). */
+  headers?: MailHeaders | null;
 };
 
+export type InboundKind = "reply" | "auto_reply" | "bounce";
+
 export type InboundResult = {
+  /** A reply a person wrote, an automatic reply, or a bounce notice. */
+  kind: InboundKind;
   matched: string[];
   optedOut: boolean;
   trigger: string | null;
@@ -56,7 +78,7 @@ export type InboundResult = {
 };
 
 /** Without a Message-ID, an identical reply within this window is treated as a re-delivery. */
-export const HASH_DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const HASH_DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Namespaces this module's advisory locks (send.ts uses 4242).
 const INBOUND_LOCK_NAMESPACE = 4243;
@@ -80,13 +102,23 @@ export function inboundDedupeKey(message: InboundEmail): string {
   return `hash:${digest}`;
 }
 
+const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL].map((address) => address.split("@")[1]!);
+
 export async function handleInboundReply(message: InboundEmail, now: Date = new Date()): Promise<InboundResult> {
   const fromEmail = extractEmailAddress(message.from);
   const classification = classifyReply({ subject: message.subject, text: message.text });
   const dedupeKey = inboundDedupeKey(message);
+  // A bounce is recognised on the raw text (DSN fields sit below what the
+  // reply classifier would keep); an opt-out always wins over "automatic".
+  const bounce = classification.optOut ? null : detectBounce({ ...message, from: fromEmail }, OWN_DOMAINS);
+  const autoReason = classification.optOut || bounce ? null : detectAutoReply(message);
+  const kind: InboundKind = bounce ? "bounce" : autoReason ? "auto_reply" : "reply";
 
-  const replyText = classification.newText.slice(0, MAX_STORED_REPLY_CHARS);
-  const note = replyNote(now, message.subject ?? null, replyText || null, classification);
+  const replyText = (bounce ? (message.text ?? "").trim() : classification.newText).slice(0, MAX_STORED_REPLY_CHARS);
+  const note =
+    kind === "auto_reply"
+      ? autoReplyNote(now, message.subject ?? null, replyText || null, autoReason!)
+      : replyNote(now, message.subject ?? null, replyText || null, classification);
 
   return prisma.$transaction(
     async (tx) => {
@@ -101,6 +133,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
       });
       if (earlier) {
         return {
+          kind: earlier.kind as InboundKind,
           matched: earlier.matched,
           optedOut: earlier.optedOut,
           trigger: classification.trigger,
@@ -110,27 +143,43 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
         };
       }
 
-      if (classification.optOut) {
-        await suppressEmail(
-          fromEmail,
-          { reason: "Replied asking not to be emailed", source: "inbound_reply", evidence: classification.trigger },
-          tx,
-        );
-      }
-
       const matched: string[] = [];
       const needsReview: string[] = [];
-      for (const pipeline of ALL_PIPELINES) {
-        for (const lead of await pipeline.findLeadsByEmail(tx, fromEmail)) {
-          const flagged = await recordOnLead(tx, pipeline, lead, {
-            optOut: classification.optOut,
-            review: classification.review,
+
+      if (bounce) {
+        if (bounce.failedRecipient) {
+          for (const pipeline of ALL_PIPELINES) {
+            for (const lead of await pipeline.findLeadsByEmail(tx, bounce.failedRecipient)) {
+              if (!(await recordBounceOnLead(tx, pipeline, lead, bounce, now))) continue;
+              matched.push(`${pipeline.id}:${lead.id}`);
+            }
+          }
+        }
+      } else {
+        if (classification.optOut) {
+          await suppressEmail(
             fromEmail,
-            note,
-            now,
-          });
-          matched.push(`${pipeline.id}:${lead.id}`);
-          if (flagged) needsReview.push(`${pipeline.id}:${lead.id}`);
+            { reason: "Replied asking not to be emailed", source: "inbound_reply", evidence: classification.trigger },
+            tx,
+          );
+        }
+        for (const pipeline of ALL_PIPELINES) {
+          for (const lead of await pipeline.findLeadsByEmail(tx, fromEmail)) {
+            matched.push(`${pipeline.id}:${lead.id}`);
+            if (kind === "auto_reply") {
+              // History only: the lead is exactly where it was.
+              await pipeline.addActivity(tx, lead.id, { type: "email", notes: note, date: now });
+              continue;
+            }
+            const flagged = await recordOnLead(tx, pipeline, lead, {
+              optOut: classification.optOut,
+              review: classification.review,
+              fromEmail,
+              note,
+              now,
+            });
+            if (flagged) needsReview.push(`${pipeline.id}:${lead.id}`);
+          }
         }
       }
 
@@ -140,17 +189,23 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           fromEmail,
           subject: message.subject?.slice(0, 500) ?? null,
           optedOut: classification.optOut,
-          reviewReason: classification.review,
+          reviewReason: kind === "reply" ? classification.review : null,
+          kind,
+          kindReason: bounce ? [bounce.reason, bounce.diagnostic].filter(Boolean).join(" — ") : autoReason,
+          failedRecipient: bounce?.failedRecipient ?? null,
           matched,
           text: replyText || null,
           receivedAt: now,
+          // An automatic reply from an address no lead has is nothing to act on.
+          ...(kind === "auto_reply" && matched.length === 0 ? { resolvedAt: now, resolution: "auto_reply" } : {}),
         },
       });
       return {
+        kind,
         matched,
         optedOut: classification.optOut,
         trigger: classification.trigger,
-        review: classification.review,
+        review: kind === "reply" ? classification.review : null,
         needsReview,
         duplicate: false,
       };
@@ -159,8 +214,35 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
   );
 }
 
+/**
+ * Marks the lead's latest send bounced (only a lead that was emailed at
+ * this address) and adds the notice to its history. Returns whether the
+ * notice was recorded on this lead.
+ */
+async function recordBounceOnLead(
+  tx: Db,
+  pipeline: PipelineAdapter,
+  lead: OutreachLead,
+  bounce: { reason: string; diagnostic: string | null },
+  now: Date,
+): Promise<boolean> {
+  if (!(await pipeline.hasBeenEmailed(tx, lead.id))) return false;
+  const outcome = await applyBounce(tx, pipeline.id, lead, now);
+  const effect = !outcome
+    ? "The send was already marked bounced."
+    : outcome.to !== outcome.from
+      ? `Marked the email bounced — moved from ${statusLabel(outcome.from)} to ${statusLabel(outcome.to)}.`
+      : `Marked the email bounced — status kept (${statusLabel(outcome.to)}).`;
+  await pipeline.addActivity(tx, lead.id, {
+    type: "email",
+    notes: [`Bounce notice received ${formatDateTime(now)} (${bounce.reason})`, bounce.diagnostic, `→ ${effect}`].filter(Boolean).join("\n"),
+    date: now,
+  });
+  return true;
+}
+
 /** What a reply does to one lead's fields, given its current status. */
-export function replyUpdateFor(
+function replyUpdateFor(
   pipelineId: PipelineAdapter["id"],
   lead: Pick<OutreachLead, "status" | "repliedAt">,
   reply: { optOut: boolean; review?: string | null; pitched: boolean; fromEmail: string; now: Date },
@@ -198,6 +280,16 @@ export function replyUpdateFor(
   return { data, needsReview: false };
 }
 
+function autoReplyNote(receivedAt: Date, subject: string | null, text: string | null, reason: string): string {
+  return [
+    `Automatic reply received ${formatDateTime(receivedAt)}${subject ? ` — ${subject}` : ""}`,
+    text,
+    `→ Read as automatic because of the ${reason}, so the lead's status and reply time were left as they were. If a person wrote this, use "Mark replied".`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function replyNote(
   receivedAt: Date,
   subject: string | null,
@@ -227,6 +319,9 @@ export type UnmatchedReply = {
   subject: string | null;
   text: string | null;
   optedOut: boolean;
+  kind: string;
+  kindReason: string | null;
+  failedRecipient: string | null;
   receivedAt: Date;
 };
 
@@ -237,7 +332,17 @@ export async function listUnmatchedReplies(take = 20): Promise<UnmatchedReply[]>
     where: UNMATCHED,
     orderBy: { receivedAt: "desc" },
     take,
-    select: { id: true, fromEmail: true, subject: true, text: true, optedOut: true, receivedAt: true },
+    select: {
+      id: true,
+      fromEmail: true,
+      subject: true,
+      text: true,
+      optedOut: true,
+      kind: true,
+      kindReason: true,
+      failedRecipient: true,
+      receivedAt: true,
+    },
   });
 }
 
@@ -270,6 +375,25 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
       }
       const lead = await pipeline.findLead(tx, leadId);
       if (!lead) return { ok: false as const, error: "That lead no longer exists." };
+      const key = `${pipeline.id}:${lead.id}`;
+
+      if (reply.kind === "bounce") {
+        // A bounce notice the address couldn't be read from: the operator
+        // picked the lead whose email bounced.
+        if (!(await pipeline.hasBeenEmailed(tx, lead.id))) {
+          return { ok: false as const, error: `${lead.name} was never emailed, so this bounce can't be theirs.` };
+        }
+        await recordBounceOnLead(tx, pipeline, lead, { reason: reply.kindReason ?? "delivery-failure notice", diagnostic: null }, reply.receivedAt);
+        await tx.inboundReply.update({
+          where: { id: reply.id },
+          data: { matched: [key], resolvedAt: new Date(), resolution: `bounced:${key}` },
+        });
+        const after = await pipeline.findLead(tx, lead.id);
+        return {
+          ok: true as const,
+          message: `Marked the email to ${lead.name} as bounced${after && after.status !== lead.status ? ` — moved to ${statusLabel(after.status)}` : ""}.`,
+        };
+      }
 
       const trigger = reply.optedOut ? classifyReply({ subject: reply.subject, text: reply.text }).trigger : null;
       const verdict = { optOut: reply.optedOut, trigger, review: reply.optedOut ? null : reply.reviewReason };
@@ -292,7 +416,6 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
         note,
         now: reply.receivedAt,
       });
-      const key = `${pipeline.id}:${lead.id}`;
       await tx.inboundReply.update({
         where: { id: reply.id },
         data: { matched: [key], resolvedAt: new Date(), resolution: `attached:${key}` },

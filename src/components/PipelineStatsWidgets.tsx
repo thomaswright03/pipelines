@@ -129,7 +129,15 @@ export function EmailPerformance({
         <StatCard label="Sent today" value={s.emailsSentToday} />
         <StatCard label="Sent, last 7 days" value={s.emailsSentLast7Days} />
         <StatCard label="Sent, last 30 days" value={s.emailsSentLast30Days} />
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <StatCard label="Replied" value={s.replied} sublabel={shareOf(s.replied, s.leadsEmailed, "emailed leads replied")} />
+        <StatCard label="Opted out" value={s.optedOut} sublabel={shareOf(s.optedOut, s.leadsEmailed, "emailed leads asked not to be emailed")} />
+        <StatCard
+          label="Automatic replies"
+          value={s.autoReplied}
+          sublabel={shareOf(s.autoReplied, s.leadsEmailed, "emailed leads sent an out-of-office or autoresponder")}
+        />
         <StatCard label="Bounced" value={s.bounced} sublabel={shareOf(s.bounced, s.emailsSentTotal, "emails sent bounced")} />
         <StatCard label="We replied back" value={s.weReplied} sublabel={shareOf(s.weReplied, s.replied, "leads who replied got an answer")} />
         <StatCard
@@ -139,7 +147,8 @@ export function EmailPerformance({
         />
       </div>
       <p className="text-sm muted">
-        A reply counts whenever it arrives, even after the lead moved to the call deck. “Leads worked so far” means every lead
+        “Replied” counts replies a person wrote, whenever they arrive (even after the lead moved to the call deck); opt-outs
+        and automatic replies are counted separately and never as replies. “Leads worked so far” means every lead
         that is no longer New. “Today” and the daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
       </p>
     </StatSection>

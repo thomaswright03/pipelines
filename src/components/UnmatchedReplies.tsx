@@ -12,6 +12,9 @@ export type UnmatchedReplyView = {
   subject: string | null;
   text: string | null;
   optedOut: boolean;
+  /** A delivery-failure notice whose failed address couldn't be matched to a lead. */
+  bounce: boolean;
+  kindReason: string | null;
   receivedAt: string; // formatted
 };
 
@@ -78,6 +81,21 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
   }
 
   async function attach(lead: LeadMatch) {
+    if (reply.bounce) {
+      const confirmed = await confirm({
+        title: `Mark the email to ${lead.name} bounced?`,
+        body: (
+          <p>
+            The latest email to {lead.name} ({lead.pipelineLabel}, now {lead.status}) is marked bounced, exactly as with “Mark
+            bounced” on the lead page. A lead still being worked moves to Lost.
+          </p>
+        ),
+        confirmLabel: "Mark bounced",
+        danger: true,
+      });
+      if (confirmed) act(() => attachReplyAction(reply.id, lead.pipeline, lead.id));
+      return;
+    }
     const confirmed = await confirm({
       title: `Add this reply to ${lead.name}?`,
       body: (
@@ -100,7 +118,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
 
   async function dismiss() {
     const confirmed = await confirm({
-      title: `Dismiss the reply from ${reply.fromEmail}?`,
+      title: reply.bounce ? `Dismiss this bounce notice?` : `Dismiss the reply from ${reply.fromEmail}?`,
       body: <p>It leaves this list without changing any lead.</p>,
       confirmLabel: "Dismiss",
     });
@@ -114,6 +132,13 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
         <p className="break-all text-sm font-semibold">{reply.fromEmail}</p>
         <p className="text-sm muted">{reply.receivedAt}</p>
       </div>
+      {reply.bounce && (
+        <p className="notice-warning">
+          Bounce notice — one of our emails couldn&apos;t be delivered, but the notice doesn&apos;t say which address in a way
+          the app could match{reply.kindReason ? ` (${reply.kindReason})` : ""}. Find the lead it was sent to and mark it
+          bounced.
+        </p>
+      )}
       {reply.subject && <p className="text-sm font-medium">{reply.subject}</p>}
       <p className="whitespace-pre-wrap break-words text-sm">
         {reply.text ?? <span className="muted">(The text of replies from before this list existed wasn&apos;t kept.)</span>}
@@ -125,7 +150,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
       )}
       <form onSubmit={search} className="flex flex-wrap items-end gap-2">
         <label className="field-label min-w-0 flex-1">
-          Find the lead it belongs to
+          {reply.bounce ? "Find the lead whose email bounced" : "Find the lead it belongs to"}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -154,7 +179,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
                 </span>
               </span>
               <button type="button" disabled={isPending} onClick={() => attach(lead)} className="btn-secondary">
-                Attach
+                {reply.bounce ? "Mark bounced" : "Attach"}
               </button>
             </li>
           ))}

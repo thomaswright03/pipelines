@@ -21,7 +21,7 @@ const PIPELINE_META_DEFAULTS: Record<string, PipelineMetaFields> = {
     productDescription:
       "Probate Property Leads subscriptions sold by county to real estate agents — verified leads corroborated against the deceased's obituary, plus optional mailed letters to the heirs.",
     pipelineDescription:
-      "Finds real estate agents in Maricopa, Salt Lake, and Utah counties, finds their email, pitches them a subscription by email, tracks replies and bounces, and routes non-responders to a phone cold-call deck.",
+      "Finds real estate agents in Maricopa, Salt Lake, and Utah counties, finds their email, pitches them a subscription by email, tracks replies, opt-outs and bounce notices that reach the reply inbox, and routes non-responders to a phone cold-call deck.",
   },
   "cold-outreach": {
     name: "Cold Outreach",
@@ -29,7 +29,7 @@ const PIPELINE_META_DEFAULTS: Record<string, PipelineMetaFields> = {
     productDescription:
       "Custom websites, AI, automations, and software built around whatever a business actually needs — no fixed package.",
     pipelineDescription:
-      "Scrapes local businesses nationwide, finds contact info, sends cold email outreach, tracks replies/bounces, and routes non-responders into a phone cold-call queue.",
+      "Scrapes local businesses nationwide, finds contact info, sends cold email outreach, tracks replies, opt-outs and bounce notices that reach the reply inbox, and routes non-responders into a phone cold-call queue.",
   },
 };
 
