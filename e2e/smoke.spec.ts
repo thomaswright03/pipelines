@@ -246,3 +246,90 @@ test("each stats bar can be read: its date and count on hover or focus", async (
   await expect(today.getByRole("tooltip")).toBeVisible();
   await expect(today.getByRole("tooltip")).toHaveText(/: 3 leads added$/);
 });
+
+test("a call-deck card gives the caller context, opens the lead in a new tab, and keeps its place on refresh", async ({ page }) => {
+  const [first, second] = await seedColdLeads(2, { status: "cold_call_list" });
+  await withDb(async (db) => {
+    await db.query(`UPDATE "Lead" SET company = 'Bob''s Bakery', "lastEmailedAt" = '2026-09-10T18:00:00Z' WHERE id = $1`, [first]);
+    await db.query(
+      `INSERT INTO "LeadActivity" (id, "leadId", type, notes, date) VALUES ('a1', $1, 'note', 'Owner is in after 3pm', '2026-09-12T18:00:00Z')`,
+      [first],
+    );
+  });
+  await page.goto("/vault-pipeline/cold-call");
+
+  await expect(page.getByRole("heading", { name: "Test Business 1" })).toBeVisible();
+  await expect(page.getByText("Bob's Bakery")).toBeVisible();
+  await expect(page.getByText("Phoenix, AZ")).toBeVisible();
+  await expect(page.getByText("Emailed Sep 10, 2026")).toBeVisible();
+  await expect(page.getByText("Owner is in after 3pm")).toBeVisible();
+  const leadLink = page.getByRole("link", { name: /Open lead page/ });
+  await expect(leadLink).toHaveAttribute("href", `/vault-pipeline/${first}`);
+  await expect(leadLink).toHaveAttribute("target", "_blank");
+
+  await page.getByRole("button", { name: "Didn't answer" }).click();
+  await page.getByRole("button", { name: "Save and next" }).click();
+  await expect(page.getByRole("heading", { name: "Test Business 2" })).toBeVisible();
+  await expect(page.getByText("Never emailed")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Test Business 2" })).toBeVisible();
+  await expect(page.getByText("Card 2 of 2")).toBeVisible();
+  expect(second).toBeTruthy();
+});
+
+test("an empty lead list shows one first-run message; a search with no hits shows only that, with Clear", async ({ page }) => {
+  for (const path of ["/vault-pipeline", "/dataleadsell"]) {
+    await page.goto(path);
+    const list = page.getByRole("region", { name: /list$/ });
+    await expect(list.getByText(/yet — run the pipeline above, or add one by hand\./)).toBeVisible();
+    await expect(list.getByText(/match/)).toHaveCount(0);
+  }
+
+  await seedColdLeads(2);
+  await page.goto("/vault-pipeline?q=zzz");
+  const list = page.getByRole("region", { name: "leads list" });
+  await expect(list.getByText("No leads match “zzz”.")).toBeVisible();
+  await expect(list.getByText(/yet —/)).toHaveCount(0);
+  await list.getByRole("link", { name: "Clear search" }).click();
+  await expect(page.getByText("Showing 1–2 of 2 leads")).toBeVisible();
+});
+
+for (const width of [375, 768, 1440]) {
+  test(`the sender address never splits inside a word at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    for (const path of ["/vault-pipeline", "/dataleadsell"]) {
+      await page.goto(path);
+      // Each piece between the allowed break points ("@" and ".") is its own
+      // text node; none of them may wrap onto two lines.
+      const splitPieces = await page.locator("main p code").first().evaluate((code) => {
+        let split = 0;
+        for (const node of Array.from(code.childNodes)) {
+          if (node.nodeType !== Node.TEXT_NODE) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const lines = new Set(Array.from(range.getClientRects()).map((r) => Math.round(r.top)));
+          if (lines.size > 1) split++;
+        }
+        return split;
+      });
+      expect(splitPieces).toBe(0);
+    }
+  });
+}
+
+test("Settings shows whether each connection is working", async ({ page }) => {
+  await withDb((db) =>
+    db.query(
+      `INSERT INTO "PipelineRun" (id, pipeline, kind, status, summary, "startedAt", "finishedAt")
+       VALUES ('run1', 'cold-outreach', 'daily', 'failed', 'The run stopped with an error.', now(), now())`,
+    ),
+  );
+  await page.goto("/settings");
+  const connections = page.getByRole("region", { name: "Connections" });
+  await expect(connections.locator('[data-connection="daily-run"]')).toHaveAttribute("data-tone", "error");
+  await expect(connections.locator('[data-connection="daily-run"]')).toContainText("The run stopped with an error.");
+  // The browser tests use the local outbox and no Yelp key.
+  await expect(connections.locator('[data-connection="mail"]')).toContainText("Test mode");
+  await expect(connections.locator('[data-connection="yelp"]')).toHaveAttribute("data-tone", "warn");
+});

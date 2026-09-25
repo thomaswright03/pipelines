@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import EmailCode from "@/components/EmailCode";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
@@ -54,7 +55,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <p className="mt-1 text-sm muted">
           Finds real estate agents in Maricopa, Salt Lake and Utah counties (Yelp, plus Arizona&apos;s ADRE license roster for
           Maricopa) and pitches them a Probate Property Leads subscription from{" "}
-          <code className="break-all rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">{DATALEADSELL_SENDER_EMAIL}</code>.
+          <EmailCode email={DATALEADSELL_SENDER_EMAIL} />.
           Agents who don&apos;t reply within a week move to the call deck.
         </p>
       </div>

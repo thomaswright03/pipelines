@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import EmailCode from "@/components/EmailCode";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
@@ -69,7 +70,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         <p className="mt-1 text-sm muted">
           Wright AI Solutions&apos; own client-acquisition pipeline. Finds local businesses via Yelp, finds an email for each, and
           sends one pitch from{" "}
-          <code className="break-all rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">{VAULT_PIPELINE_SENDER_EMAIL}</code>.
+          <EmailCode email={VAULT_PIPELINE_SENDER_EMAIL} />.
           Leads that don&apos;t reply within a week move to the call deck.
         </p>
       </div>

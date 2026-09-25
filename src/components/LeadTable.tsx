@@ -107,17 +107,31 @@ export default function LeadTable({
       </Form>
 
       <p className="text-sm muted" aria-live="polite">
-        {filteredTotal === 0
-          ? `No ${noun.many} match${params.q ? ` “${params.q}”` : ""}${params.status ? ` in ${statusLabel(params.status)}` : ""}.`
-          : `Showing ${from.toLocaleString("en-US")}–${to.toLocaleString("en-US")} of ${filteredTotal.toLocaleString("en-US")} ${
-              filteredTotal === 1 ? noun.one : noun.many
-            }`}
+        {filteredTotal > 0 &&
+          `Showing ${from.toLocaleString("en-US")}–${to.toLocaleString("en-US")} of ${filteredTotal.toLocaleString("en-US")} ${
+            filteredTotal === 1 ? noun.one : noun.many
+          }`}
       </p>
 
       {rows.length === 0 ? (
-        <div className="card px-4 py-10 text-center text-sm muted">
-          {total === 0 ? `No ${noun.many} yet — run the pipeline or add one by hand.` : `Nothing here.`}
-        </div>
+        total === 0 ? (
+          <div className="card flex flex-col items-center gap-3 px-4 py-10 text-center text-sm">
+            <p className="muted">No {noun.many} yet — run the pipeline above, or add one by hand.</p>
+            <Link href={`${basePath}/new`} className="btn-secondary">
+              Add {noun.one === "agent" ? "an agent" : `a ${noun.one}`}
+            </Link>
+          </div>
+        ) : (
+          <div className="card flex flex-col items-center gap-3 px-4 py-10 text-center text-sm">
+            <p className="muted">
+              No {noun.many} match{params.q ? ` “${params.q}”` : ""}
+              {params.status ? ` in ${statusLabel(params.status)}` : ""}.
+            </p>
+            <Link href={listHref(basePath, params, { q: "", status: null })} className="btn-secondary">
+              Clear {params.q && params.status ? "search and filter" : params.q ? "search" : "filter"}
+            </Link>
+          </div>
+        )
       ) : (
         <>
           {/* Phones: one card per lead, with the name, status and last-emailed date always visible. */}
