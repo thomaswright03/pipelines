@@ -43,9 +43,12 @@ const COMMAND_WORDS = new Set([
   "stop all",
   "stopall",
   "unsubscribe",
+  "unsubscribe me",
+  "unsubscribe us",
   "unsub",
   "remove",
   "remove me",
+  "remove us",
   "optout",
   "opt out",
   "opt me out",
@@ -70,7 +73,9 @@ const OPT_OUT_PHRASES: RegExp[] = [
   // "remove me", "remove my email", "please remove from list"
   /\bremove\s+(?:me|us|my\s+(?:e-?mail|address|name|info)|this\s+(?:e-?mail|address))\b/i,
   new RegExp(String.raw`\bremove\s+(?:(?:me|us|it|this)\s+)?from\s+${LIST}\b`, "i"),
-  /\btake\s+(?:me|us|my\s+(?:e-?mail|address|name))\s+off\b/i,
+  /\btake\s+(?:me|us|(?:my|our)\s+(?:e-?mail(?:\s+address)?|address|name|office|team|company|business|firm))\s+off\b/i,
+  // "I'd like to be removed from your mailing list", "we want to be removed from future emails"
+  new RegExp(String.raw`\bbe\s+removed\s+from\s+(?:${LIST}|(?:your|all|any|future)\s+(?:e-?mails?|mailings?|messages?|contact))\b`, "i"),
   /\b(?:stop|quit|cease)\s+(?:e-?mailing|contacting|messaging|spamming|texting|calling|sending(?:\s+me)?(?:\s+(?:e-?mails?|these|this|messages?))?|writing\s+to|reaching\s+out)\b/i,
   // "don't email me", "do not contact us", "don't reach out to me again", "don't send me emails"
   new RegExp(String.raw`\b${NEG}\s+(?:ever\s+)?${CONTACT_VERB}(?:\s+${ME})?(?=\s+(?:again|anymore|any\s+more|ever)\b|\s*[.!,;]|\s*$)`, "im"),
@@ -174,9 +179,12 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   const newText = extractNewReplyText(input.text ?? "");
   const optOut = (trigger: string): ReplyClassification => ({ optOut: true, trigger, review: null, newText });
 
+  // A line, or a sentence of one ("Not interested. Remove."), that is just the command.
   for (const line of newText.split("\n")) {
-    const normalized = normalizeCommandLine(line);
-    if (normalized && COMMAND_WORDS.has(normalized)) return optOut(line.trim());
+    for (const part of [line, ...line.split(/(?<=[.!?])\s+/)]) {
+      const normalized = normalizeCommandLine(part);
+      if (normalized && COMMAND_WORDS.has(normalized)) return optOut(line.trim());
+    }
   }
 
   for (const re of OPT_OUT_PHRASES) {

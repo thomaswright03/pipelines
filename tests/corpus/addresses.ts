@@ -74,3 +74,30 @@ export const ADDRESS_CORPUS: LabelledAddress[] = [
   { agent: "Dana Whitfield", email: "danaw@realty.test", belongs: false },
   { agent: "Kevin Brooks Jr.", email: "kbrooks.team@realty.test", belongs: false },
 ];
+
+// --- Held-out split ------------------------------------------------------
+// Written on 2026-09-25 after the rule was last changed and scored once
+// as-is; never used when changing the rule (see replies.ts for the policy).
+// First run (2026-09-25): precision 100%, recall 100%.
+export const ADDRESS_HELD_OUT: LabelledAddress[] = [
+  { agent: "Carla Mendez", email: "carla.mendez@homesmart.test", belongs: true },
+  { agent: "Carla Mendez", email: "cmendez@homesmart.test", belongs: true },
+  { agent: "Carla Mendez", email: "carlamendez@homesmart.test", belongs: true },
+  { agent: "Greg O'Brien", email: "greg.obrien@exp.test", belongs: true },
+  { agent: "Greg O'Brien", email: "gobrien@exp.test", belongs: true },
+  { agent: "Nina Patel-Shah", email: "npatelshah@kw.test", belongs: true },
+  { agent: "Nina Patel-Shah", email: "nina.patel@kw.test", belongs: true },
+  { agent: "William Scott", email: "william.scott@remax.test", belongs: true },
+  { agent: "William Scott", email: "wscott@remax.test", belongs: true },
+  { agent: "Hannah Kim", email: "hkim@cb.test", belongs: true },
+  { agent: "Carla Mendez", email: "carla@homesmart.test", belongs: false },
+  { agent: "Carla Mendez", email: "mendezteam@homesmart.test", belongs: false },
+  { agent: "Carla Mendez", email: "luis.mendez@homesmart.test", belongs: false },
+  { agent: "Greg O'Brien", email: "office@exp.test", belongs: false },
+  { agent: "Greg O'Brien", email: "gregory.brown@exp.test", belongs: false },
+  { agent: "Nina Patel-Shah", email: "raj.patel@kw.test", belongs: false },
+  { agent: "William Scott", email: "bill@remax.test", belongs: false },
+  { agent: "William Scott", email: "scott.properties@remax.test", belongs: false },
+  { agent: "Hannah Kim", email: "kim.team@cb.test", belongs: false },
+  { agent: "Hannah Kim", email: "hkim.assistant@cb.test", belongs: false },
+];

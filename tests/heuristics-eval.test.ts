@@ -1,21 +1,32 @@
-// Scores the two heuristics that decide who is pitched and who has opted
-// out against labelled sets kept apart from the unit-test cases
-// (tests/corpus/). Prints precision and recall, lists every miss, and fails
-// if either drops below its floor — so a rule change that makes things
-// worse fails CI even when every hand-written unit test still passes.
+// Scores every heuristic that decides who is pitched, who has opted out and
+// what a reply means, against labelled sets kept apart from the unit-test
+// cases (tests/corpus/). For each heuristic it prints precision and recall
+// on the development split (cases the rules were written against) and on
+// the held-out split (written separately, scored as-is, never used when
+// changing a rule), lists every miss, and fails if either split drops below
+// its floor — so a rule change that makes things worse fails CI even when
+// every hand-written unit test still passes.
 //
-// The floors sit a little under the scores measured when they were set (see
-// the corpus files for the first-run numbers). Raise them as the rules
-// improve; lowering one needs a reason in the commit message.
+// Floors sit at or a little under the scores measured when they were set.
+// Raise them as the rules improve; lowering one needs a reason in the
+// commit message. The held-out score is the one to quote: the development
+// score is optimistic by construction.
 import { describe, expect, it } from "vitest";
 import { classifyReply } from "@/lib/outreach/reply-classifier";
 import { addressFilterFor } from "@/lib/outreach/email-policy";
-import { REPLY_CORPUS } from "./corpus/replies";
-import { ADDRESS_CORPUS } from "./corpus/addresses";
+import { detectAutoReply, detectBounce } from "@/lib/outreach/auto-mail";
+import { siteEvidence } from "@/lib/outreach/site-evidence";
+import { REPLY_CORPUS, REPLY_HELD_OUT } from "./corpus/replies";
+import { ADDRESS_CORPUS, ADDRESS_HELD_OUT } from "./corpus/addresses";
+import { AUTO_REPLY_DEV, AUTO_REPLY_HELD_OUT, BOUNCE_DEV, BOUNCE_HELD_OUT } from "./corpus/auto-mail";
+import { REVIEW_DEV, REVIEW_HELD_OUT } from "./corpus/review";
+import { SITE_DEV, SITE_HELD_OUT } from "./corpus/sites";
 
 type Score = { precision: number; recall: number; tp: number; fp: number; fn: number; tn: number };
+type Floor = { precision: number; recall: number };
+type Case = { expected: boolean; actual: boolean; label: string };
 
-function score(results: { expected: boolean; actual: boolean }[]): Score {
+function score(results: Case[]): Score {
   let tp = 0, fp = 0, fn = 0, tn = 0; // prettier-ignore
   for (const { expected, actual } of results) {
     if (actual && expected) tp++;
@@ -26,44 +37,91 @@ function score(results: { expected: boolean; actual: boolean }[]): Score {
   return { precision: tp + fp === 0 ? 1 : tp / (tp + fp), recall: tp + fn === 0 ? 1 : tp / (tp + fn), tp, fp, fn, tn };
 }
 
-function report(name: string, s: Score, misses: string[]) {
-  const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+
+/** Scores one split, prints it with its misses, and checks it against its floor. */
+function evaluate(name: string, split: "dev" | "held-out", results: Case[], floor: Floor, words: { fp: string; fn: string }) {
+  const s = score(results);
+  const misses = results
+    .filter((r) => r.actual !== r.expected)
+    .map((r) => `  miss: ${r.expected ? words.fn : words.fp}: ${r.label}`);
   console.log(
-    [
-      `${name}: precision ${pct(s.precision)}, recall ${pct(s.recall)} (tp ${s.tp}, fp ${s.fp}, fn ${s.fn}, tn ${s.tn})`,
-      ...misses.map((m) => `  miss: ${m}`),
-    ].join("\n"),
+    [`${name} [${split}]: precision ${pct(s.precision)}, recall ${pct(s.recall)} (tp ${s.tp}, fp ${s.fp}, fn ${s.fn}, tn ${s.tn})`, ...misses].join("\n"),
   );
+  expect(s.precision, `${name} [${split}] precision`).toBeGreaterThanOrEqual(floor.precision);
+  expect(s.recall, `${name} [${split}] recall`).toBeGreaterThanOrEqual(floor.recall);
 }
 
-// Opt-out detection: a missed opt-out means emailing someone who asked us
-// to stop, so recall matters most; a false opt-out only loses one prospect.
-const REPLY_FLOOR = { precision: 0.95, recall: 0.95 };
-// Brokerage-site addresses: a false accept pitches the wrong person (and
-// uses up their one pitch), so precision matters most.
-const ADDRESS_FLOOR = { precision: 0.95, recall: 0.9 };
+const firstLine = (text: string) => JSON.stringify(text.split("\n")[0]);
 
 describe("heuristics on the labelled evaluation sets", () => {
-  it(`reply opt-out classifier (${REPLY_CORPUS.length} replies)`, () => {
-    const results = REPLY_CORPUS.map((c) => ({ ...c, actual: classifyReply({ subject: c.subject ?? "Re: hello", text: c.text }).optOut }));
-    const s = score(results.map((r) => ({ expected: r.optOut, actual: r.actual })));
-    const misses = results
-      .filter((r) => r.actual !== r.optOut)
-      .map((r) => `${r.optOut ? "missed opt-out" : "false opt-out"}: ${JSON.stringify((r.subject ? `[${r.subject}] ` : "") + r.text.split("\n")[0])}`);
-    report("Reply opt-outs", s, misses);
+  // Opt-out detection: a missed opt-out means emailing someone who asked us
+  // to stop, so recall matters most; a false opt-out only loses one prospect.
+  it(`reply opt-out classifier (${REPLY_CORPUS.length} dev, ${REPLY_HELD_OUT.length} held-out)`, () => {
     expect(REPLY_CORPUS.length).toBeGreaterThanOrEqual(100);
-    expect(s.recall).toBeGreaterThanOrEqual(REPLY_FLOOR.recall);
-    expect(s.precision).toBeGreaterThanOrEqual(REPLY_FLOOR.precision);
+    const run = (cases: typeof REPLY_CORPUS) =>
+      cases.map((c) => ({
+        expected: c.optOut,
+        actual: classifyReply({ subject: c.subject ?? "Re: hello", text: c.text }).optOut,
+        label: (c.subject ? `[${c.subject}] ` : "") + firstLine(c.text),
+      }));
+    const words = { fp: "false opt-out", fn: "missed opt-out" };
+    evaluate("Reply opt-outs", "dev", run(REPLY_CORPUS), { precision: 0.95, recall: 0.95 }, words);
+    evaluate("Reply opt-outs", "held-out", run(REPLY_HELD_OUT), { precision: 0.95, recall: 0.95 }, words);
   });
 
-  it(`brokerage-site address filter (${ADDRESS_CORPUS.length} agent/address pairs)`, () => {
-    const results = ADDRESS_CORPUS.map((c) => ({ ...c, actual: addressFilterFor(c.agent, "brokerage")(c.email) }));
-    const s = score(results.map((r) => ({ expected: r.belongs, actual: r.actual })));
-    const misses = results
-      .filter((r) => r.actual !== r.belongs)
-      .map((r) => `${r.belongs ? "rejected own address" : "accepted someone else's"}: ${r.agent} <${r.email}>`);
-    report("Brokerage addresses", s, misses);
-    expect(s.precision).toBeGreaterThanOrEqual(ADDRESS_FLOOR.precision);
-    expect(s.recall).toBeGreaterThanOrEqual(ADDRESS_FLOOR.recall);
+  // "Needs a look": a miss moves a brush-off to Responded (inflating the
+  // reply rate); a false flag only asks the operator to glance at it.
+  it(`reply "needs a look" flag (${REVIEW_DEV.length} dev, ${REVIEW_HELD_OUT.length} held-out)`, () => {
+    const run = (cases: typeof REVIEW_DEV) =>
+      cases.map((c) => ({ expected: c.review, actual: classifyReply({ subject: "Re: hello", text: c.text }).review !== null, label: firstLine(c.text) }));
+    const words = { fp: "flagged a positive reply", fn: "missed a brush-off" };
+    evaluate("Needs-a-look replies", "dev", run(REVIEW_DEV), { precision: 0.95, recall: 0.95 }, words);
+    evaluate("Needs-a-look replies", "held-out", run(REVIEW_HELD_OUT), { precision: 0.85, recall: 0.85 }, words);
+  });
+
+  // Automatic replies: a false "automatic" hides a real reply (the lead
+  // still reaches the call deck, and the history note says how to undo it),
+  // so precision matters most; a miss inflates the reply rate.
+  it(`automatic-reply detector (${AUTO_REPLY_DEV.length} dev, ${AUTO_REPLY_HELD_OUT.length} held-out)`, () => {
+    const run = (cases: typeof AUTO_REPLY_DEV) =>
+      cases.map((c) => ({ expected: c.auto, actual: detectAutoReply(c) !== null, label: `[${c.subject}] ${firstLine(c.text)}` }));
+    const words = { fp: "read a person's reply as automatic", fn: "missed an automatic reply" };
+    evaluate("Automatic replies", "dev", run(AUTO_REPLY_DEV), { precision: 1, recall: 0.95 }, words);
+    evaluate("Automatic replies", "held-out", run(AUTO_REPLY_HELD_OUT), { precision: 0.95, recall: 0.85 }, words);
+  });
+
+  // Bounces: detection and the failed address must both be right — a
+  // wrong address would mark someone else's send bounced.
+  it(`bounce detector (${BOUNCE_DEV.length} dev, ${BOUNCE_HELD_OUT.length} held-out)`, () => {
+    const run = (cases: typeof BOUNCE_DEV) =>
+      cases.map((c) => {
+        const found = detectBounce(c, ["wright-ai-solutions.com"]);
+        const actual = found !== null && (!c.bounce || found.failedRecipient === c.recipient);
+        return { expected: c.bounce, actual, label: `[${c.subject}] from ${c.from}${found ? ` → ${found.failedRecipient}` : ""}` };
+      });
+    const words = { fp: "read a person's mail as a bounce", fn: "missed a bounce or its address" };
+    evaluate("Bounces", "dev", run(BOUNCE_DEV), { precision: 1, recall: 1 }, words);
+    evaluate("Bounces", "held-out", run(BOUNCE_HELD_OUT), { precision: 1, recall: 1 }, words);
+  });
+
+  // Brokerage-site addresses: a false accept pitches the wrong person (and
+  // uses up their one pitch), so precision matters most.
+  it(`brokerage-site address filter (${ADDRESS_CORPUS.length} dev, ${ADDRESS_HELD_OUT.length} held-out)`, () => {
+    const run = (cases: typeof ADDRESS_CORPUS) =>
+      cases.map((c) => ({ expected: c.belongs, actual: addressFilterFor(c.agent, "brokerage")(c.email), label: `${c.agent} <${c.email}>` }));
+    const words = { fp: "accepted someone else's", fn: "rejected own address" };
+    evaluate("Brokerage addresses", "dev", run(ADDRESS_CORPUS), { precision: 0.95, recall: 0.9 }, words);
+    evaluate("Brokerage addresses", "held-out", run(ADDRESS_HELD_OUT), { precision: 0.95, recall: 0.9 }, words);
+  });
+
+  // Guessed websites: a false accept spends the lead's one pitch on a
+  // stranger, so precision matters most; a miss only means no email.
+  it(`guessed-site evidence (${SITE_DEV.length} dev, ${SITE_HELD_OUT.length} held-out)`, () => {
+    const run = (cases: typeof SITE_DEV) =>
+      cases.map((c) => ({ expected: c.belongs, actual: siteEvidence(c.website, [c.html], c.facts) !== null, label: `${c.facts.name} on ${c.website}: ${JSON.stringify(c.html.slice(0, 80))}` }));
+    const words = { fp: "accepted a site that isn't the lead's", fn: "rejected the lead's own site" };
+    evaluate("Guessed sites", "dev", run(SITE_DEV), { precision: 1, recall: 1 }, words);
+    evaluate("Guessed sites", "held-out", run(SITE_HELD_OUT), { precision: 1, recall: 0.9 }, words);
   });
 });

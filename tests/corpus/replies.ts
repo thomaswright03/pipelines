@@ -94,6 +94,13 @@ export const REPLY_CORPUS: LabelledReply[] = [
   { text: "Take me off the list, thanks", optOut: true },
   { text: "Lose my email.", optOut: true },
   { text: "Do not send further emails.", optOut: true },
+  // Moved here from the held-out split after its first run (2026-09-25),
+  // where these four were missed; the rules were then fixed for them, so
+  // they are development cases now.
+  { text: "I would like to be removed from your mailing list.", optOut: true },
+  { text: "Not interested. Remove." + QUOTED_PITCH, optOut: true },
+  { text: "Please take our office off your email list.", optOut: true },
+  { text: "", subject: "unsubscribe me", optOut: true },
 
   // --- Not opt-outs -----------------------------------------------------
   { text: "Yes, interested! What does it cost?", optOut: false },
@@ -162,4 +169,60 @@ export const REPLY_CORPUS: LabelledReply[] = [
   { text: "Please email me the brochure.", optOut: false },
   { text: "Don't email me the PDF, just the link.", optOut: false },
   { text: "Stop sign on Main St is where our office is — come by.", optOut: false },
+];
+
+// --- Held-out split ------------------------------------------------------
+// Written on 2026-09-25 after the rules above were last changed, and scored
+// once as-is. First run: precision 100%, recall 80% (4 of 20 opt-outs
+// missed). Because a missed opt-out means emailing someone who asked us to
+// stop, those four were moved to the development split and the rules fixed
+// for them; the replacement cases below the "Fresh after the first run"
+// marker were written afterwards and scored once as-is. These cases are NEVER used when changing the classifier: a
+// miss here is recorded, not fixed by editing the rules against this list
+// (fix the rule from a development case or real traffic instead, and add
+// fresh held-out cases). tests/heuristics-eval.test.ts prints this split's
+// score separately.
+export const REPLY_HELD_OUT: LabelledReply[] = [
+  { text: "Unsubscribe me from this list.", optOut: true },
+  { text: "please stop", optOut: true },
+  { text: "STOP EMAILING ME", optOut: true },
+  { text: "Remove me from your database please.", optOut: true },
+  { text: "Do not email this address again.", optOut: true },
+  { text: "Opt-out.", optOut: true },
+  { text: "Stop contacting my team.", optOut: true },
+  { text: "Please quit sending me these.", optOut: true },
+  { text: "Don't contact me again, thanks.", optOut: true },
+  { text: "Remove", subject: "Re: Probate leads for Maricopa", optOut: true },
+  { text: "No more messages please.", optOut: true },
+  { text: "We don't want any emails from you.", optOut: true },
+  { text: "Delete our contact info.", optOut: true },
+  { text: "Please never email me again.", optOut: true },
+  { text: "Leave me alone or I'm reporting this.", optOut: true },
+  { text: "Take us off.", optOut: true },
+  { text: "Sure, what's the price for Utah County?", optOut: false },
+  { text: "Let's talk Thursday at 2.", optOut: false },
+  { text: "I'm not interested at this time.", optOut: false },
+  { text: "Can you stop by next week to demo it?", optOut: false },
+  { text: "Please don't stop — I want the free sample!", optOut: false },
+  { text: "Send it to my assistant, she handles this.", optOut: false },
+  { text: "Who gave you my email?", optOut: false },
+  { text: "I'm with a different brokerage now.", optOut: false },
+  { text: "Interested, but only for Salt Lake.", optOut: false },
+  { text: "How is this different from PropStream?", optOut: false },
+  { text: "Remove the watermark and I'll share it with my team.", optOut: false },
+  { text: "Emailing you from my personal account — yes, interested.", optOut: false },
+  { text: "Not now, try me in January.", optOut: false },
+  { text: "Thanks, I'll pass this along.", optOut: false },
+  { text: "Got it. What's the next step?", optOut: false },
+  { text: "Please keep me posted.", optOut: false },
+  { text: "No need to call, email works.", optOut: false },
+  { text: "Out of the office until Oct 2.", optOut: false },
+  { text: "I'm not a probate agent but my partner might be.", optOut: false },
+  // Fresh after the first run (2026-09-25):
+  { text: "Kindly take me off this email list.", optOut: true },
+  { text: "We'd like to be removed from future emails.", optOut: true },
+  { text: "Please unsubscribe us. Thank you.", optOut: true },
+  { text: "Not for me. Unsubscribe.", optOut: true },
+  { text: "", subject: "Remove me", optOut: true },
+  { text: "Remove me from any lists you have for this address please", optOut: true },
 ];
