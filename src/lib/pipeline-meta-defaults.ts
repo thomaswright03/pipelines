@@ -7,7 +7,7 @@ export type PipelineMetaFields = {
   pipelineDescription: string;
 };
 
-export const PIPELINE_META_DEFAULTS: Record<string, PipelineMetaFields> = {
+const PIPELINE_META_DEFAULTS: Record<string, PipelineMetaFields> = {
   "ai-lead-responder": {
     name: "AI Lead Responder",
     company: "Mountain High Disposal / Eastern Waste & Recycling / Garden State Bin Cleaning",
@@ -21,7 +21,7 @@ export const PIPELINE_META_DEFAULTS: Record<string, PipelineMetaFields> = {
     productDescription:
       "Probate Property Leads subscriptions sold by county to real estate agents — verified leads corroborated against the deceased's obituary, plus optional mailed letters to the heirs.",
     pipelineDescription:
-      "Finds real estate agents in Maricopa, Salt Lake, and Utah counties, finds their contact info, and pitches them a subscription over email/SMS — tracks replies and bounces.",
+      "Finds real estate agents in Maricopa, Salt Lake, and Utah counties, finds their email, pitches them a subscription by email, tracks replies and bounces, and routes non-responders to a phone cold-call deck.",
   },
   "cold-outreach": {
     name: "Cold Outreach",

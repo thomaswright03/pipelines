@@ -1,0 +1,181 @@
+"use server";
+
+// Server actions shared by both pipelines' pages. Each validates its
+// input, calls the shared rules in src/lib/outreach/, refreshes the pages
+// that show the result, and turns unexpected failures into a plain message
+// (the technical detail goes to the server log with the lead id).
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/db";
+import { logError } from "@/lib/log";
+import { parsePipelineId, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
+import { getPipeline } from "@/lib/outreach/pipelines";
+import {
+  previewBulkSend,
+  sendBulkChunk,
+  sendFirstTouch,
+  type BulkChunkResult,
+  type BulkPreview,
+} from "@/lib/outreach/send";
+import { findEmailForLead, findEmailsChunk, type BulkFindResult } from "@/lib/outreach/discovery";
+import {
+  changeStatus,
+  confirmColdCall,
+  markBounced,
+  markOptedOut,
+  markReplied,
+  removeSuppression,
+  setOurReply,
+  setStarred,
+  type ActionResult,
+} from "@/lib/outreach/lead-actions";
+import { statusLabel } from "@/lib/lead-status";
+
+function refresh(pipeline: PipelineId, leadId?: string) {
+  const base = PIPELINE_BASE_PATH[pipeline];
+  revalidatePath(base);
+  revalidatePath(`${base}/stats`);
+  revalidatePath(`${base}/cold-call`);
+  if (leadId) revalidatePath(`${base}/${leadId}`);
+}
+
+async function guarded(
+  scope: string,
+  pipelineRaw: unknown,
+  leadId: string | undefined,
+  fn: (pipeline: PipelineId) => Promise<ActionResult>,
+): Promise<ActionResult> {
+  let pipeline: PipelineId;
+  try {
+    pipeline = parsePipelineId(pipelineRaw);
+  } catch {
+    return { ok: false, error: "Unknown pipeline." };
+  }
+  try {
+    const result = await fn(pipeline);
+    refresh(pipeline, leadId);
+    return result;
+  } catch (err) {
+    logError(`action.${scope}`, err, { pipeline, leadId });
+    return { ok: false, error: "Something went wrong saving that — nothing was changed. Try again in a moment." };
+  }
+}
+
+export async function sendOutreachEmailAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("sendOutreachEmail", pipeline, leadId, async (p) => {
+    const outcome = await sendFirstTouch(p, leadId);
+    if (outcome.ok) return { ok: true, message: outcome.warning ? `${outcome.message} ${outcome.warning}` : outcome.message };
+    return { ok: false, error: outcome.message };
+  });
+}
+
+export async function findLeadEmailAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("findLeadEmail", pipeline, leadId, async (p) => {
+    const lead = await getPipeline(p).findLead(prisma, leadId);
+    if (!lead) return { ok: false, error: "This lead no longer exists." };
+    const outcome = await findEmailForLead(p, lead);
+    if (outcome.found) {
+      return {
+        ok: true,
+        message: outcome.blockedReason
+          ? `Found ${outcome.email}, but ${outcome.blockedReason.replace(/^[^—]+— /, "")}`
+          : `Found ${outcome.email} for ${lead.name}.`,
+      };
+    }
+    return {
+      ok: false,
+      error: outcome.routedTo
+        ? `No usable email found for ${lead.name} — moved to the ${statusLabel(outcome.routedTo)} for phone outreach.`
+        : `No usable email found for ${lead.name}.`,
+    };
+  });
+}
+
+export async function updateLeadStatusAction(pipeline: string, leadId: string, status: string): Promise<ActionResult> {
+  return guarded("updateLeadStatus", pipeline, leadId, (p) => changeStatus(p, leadId, status));
+}
+
+export async function markRepliedAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("markReplied", pipeline, leadId, (p) => markReplied(p, leadId));
+}
+
+export async function markBouncedAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("markBounced", pipeline, leadId, (p) => markBounced(p, leadId));
+}
+
+export async function markOptedOutAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("markOptedOut", pipeline, leadId, (p) => markOptedOut(p, leadId));
+}
+
+export async function removeSuppressionAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("removeSuppression", pipeline, leadId, (p) => removeSuppression(p, leadId));
+}
+
+export async function setStarredAction(pipeline: string, leadId: string, starred: boolean): Promise<ActionResult> {
+  return guarded("setStarred", pipeline, leadId, (p) => setStarred(p, leadId, Boolean(starred)));
+}
+
+export async function setOurReplyAction(pipeline: string, leadId: string, replied: boolean): Promise<ActionResult> {
+  return guarded("setOurReply", pipeline, leadId, (p) => setOurReply(p, leadId, Boolean(replied)));
+}
+
+export async function confirmColdCallAction(
+  pipeline: string,
+  leadId: string,
+  outcome: string,
+  notes: string,
+): Promise<ActionResult> {
+  return guarded("confirmColdCall", pipeline, leadId, (p) => confirmColdCall(p, leadId, outcome, String(notes ?? "")));
+}
+
+// --- Bulk operations (the client loops over these to show progress) ---
+
+export type BulkPreviewResult = { ok: true; preview: BulkPreview } | { ok: false; error: string };
+
+export async function previewBulkSendAction(pipeline: string): Promise<BulkPreviewResult> {
+  try {
+    return { ok: true, preview: await previewBulkSend(parsePipelineId(pipeline)) };
+  } catch (err) {
+    logError("action.previewBulkSend", err, { pipeline });
+    return { ok: false, error: "Couldn't work out who would be emailed — nothing was sent. Try again in a moment." };
+  }
+}
+
+export type BulkChunkActionResult = { ok: true; result: BulkChunkResult } | { ok: false; error: string };
+
+export async function sendBulkChunkAction(pipeline: string, leadIds: string[]): Promise<BulkChunkActionResult> {
+  let p: PipelineId;
+  try {
+    p = parsePipelineId(pipeline);
+  } catch {
+    return { ok: false, error: "Unknown pipeline." };
+  }
+  try {
+    const ids = Array.isArray(leadIds) ? leadIds.filter((id): id is string => typeof id === "string") : [];
+    const result = await sendBulkChunk(p, ids);
+    refresh(p);
+    return { ok: true, result };
+  } catch (err) {
+    logError("action.sendBulkChunk", err, { pipeline });
+    refresh(p);
+    return { ok: false, error: "The bulk send stopped because of an unexpected error. Leads already emailed are marked Contacted." };
+  }
+}
+
+export type BulkFindActionResult = { ok: true; result: BulkFindResult } | { ok: false; error: string };
+
+export async function findEmailsChunkAction(pipeline: string): Promise<BulkFindActionResult> {
+  let p: PipelineId;
+  try {
+    p = parsePipelineId(pipeline);
+  } catch {
+    return { ok: false, error: "Unknown pipeline." };
+  }
+  try {
+    const result = await findEmailsChunk(p);
+    refresh(p);
+    return { ok: true, result };
+  } catch (err) {
+    logError("action.findEmailsChunk", err, { pipeline });
+    return { ok: false, error: "The email search stopped because of an unexpected error. Progress so far is saved." };
+  }
+}

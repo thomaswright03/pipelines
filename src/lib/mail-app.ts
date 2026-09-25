@@ -1,13 +1,16 @@
-// The one remaining local-only Mail.app convenience: jumping to a lead's
-// message thread in your own Mail.app. Sending moved to ZeptoMail (see
-// send-email.ts) so it works from Vercel — this one function is inherently
-// local-only forever (it brings *this Mac's* Mail.app to the front), so it
-// stays guarded rather than needing a cloud equivalent.
+// The one local-only convenience: jumping to a lead's message thread in
+// the owner's own Mail.app. It brings *this Mac's* Mail.app to the front,
+// so it can only work when the app runs on a Mac — never on Vercel. The
+// lead page hides the button wherever canUseMailApp() is false.
 import { spawn } from "node:child_process";
-import { assertRunningLocally } from "@/lib/local-only";
+
+/** Mail.app is reachable only from a local run on macOS. */
+export function canUseMailApp(): boolean {
+  return !process.env.VERCEL && process.platform === "darwin";
+}
 
 async function runAppleScript(script: string): Promise<string> {
-  assertRunningLocally("Viewing an email thread in Mail.app", "Mail.app");
+  if (!canUseMailApp()) throw new Error("Mail.app is only available when the app runs locally on a Mac.");
   return new Promise<string>((resolve, reject) => {
     const child = spawn("osascript", ["-e", script]);
     let out = "";

@@ -1,55 +1,36 @@
 "use server";
 
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
+import { logError } from "@/lib/log";
+import { savePipelineSchedule, scheduleSchema, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 
-export type PipelineScheduleData = {
-  enabled: boolean;
-  hour: number;
-  minute: number;
-  leadCount: number;
+export type UpdateScheduleState = {
+  error?: string;
+  saved?: boolean;
+  values?: { enabled: boolean; leadCount: string };
 };
 
-const DEFAULT_SCHEDULE: PipelineScheduleData = { enabled: true, hour: 8, minute: 33, leadCount: 30 };
-
-export async function getPipelineSchedule(pipelineId: string): Promise<PipelineScheduleData> {
-  const row = await prisma.pipelineSchedule.findUnique({ where: { id: pipelineId } });
-  if (!row) return DEFAULT_SCHEDULE;
-  return { enabled: row.enabled, hour: row.hour, minute: row.minute, leadCount: row.leadCount };
-}
-
-const scheduleSchema = z.object({
-  enabled: z.boolean(),
-  hour: z.number().int().min(0).max(23),
-  minute: z.number().int().min(0).max(59),
-  leadCount: z.number().int().min(1).max(100),
-});
-
-export type UpdateScheduleState = { error?: string; saved?: boolean };
-
-export async function updatePipelineScheduleAction(
-  pipelineId: string,
-  revalidatePathName: string,
+export async function updateVaultScheduleAction(
   _prevState: UpdateScheduleState,
   formData: FormData,
 ): Promise<UpdateScheduleState> {
-  const parsed = scheduleSchema.safeParse({
+  const values = {
     enabled: formData.get("enabled") === "on",
-    hour: Number(formData.get("hour")),
-    minute: Number(formData.get("minute")),
-    leadCount: Number(formData.get("leadCount")),
+    leadCount: String(formData.get("leadCount") ?? ""),
+  };
+  const parsed = scheduleSchema.safeParse({
+    enabled: values.enabled,
+    leadCount: values.leadCount.trim() === "" ? Number.NaN : Number(values.leadCount),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid schedule" };
+    return { error: parsed.error.issues[0]?.message, values };
   }
-
-  await prisma.pipelineSchedule.upsert({
-    where: { id: pipelineId },
-    create: { id: pipelineId, ...parsed.data },
-    update: parsed.data,
-  });
-
-  revalidatePath(revalidatePathName);
-  return { saved: true };
+  try {
+    await savePipelineSchedule(VAULT_SCHEDULE_ID, parsed.data);
+  } catch (err) {
+    logError("action.updateVaultSchedule", err);
+    return { error: "Couldn't save the schedule — nothing changed. Try again in a moment.", values };
+  }
+  revalidatePath("/vault-pipeline");
+  return { saved: true, values };
 }

@@ -1,503 +1,263 @@
 "use server";
 
-import { z } from "zod";
+// Cold Outreach–only server actions. Everything both pipelines share
+// (sending, email lookup, status changes, reply/bounce/opt-out) lives in
+// ./outreach.ts on top of src/lib/outreach/.
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { digitsOnly, formatPhone } from "@/lib/phone";
-import { findEmailForBusiness } from "@/lib/email-finder";
-import { guessWebsiteForBusiness } from "@/lib/website-finder";
-import { revealLatestMessageInMailApp } from "@/lib/mail-app";
-import { sendOutreachEmail } from "@/lib/send-email";
-import { isSuppressed, suppressEmail } from "@/lib/email-suppression";
-import { buildOutreachEmail, OUTREACH_MAILING_ADDRESS } from "@/lib/vault-email-template";
-import { routeLeadToPhase2 } from "@/lib/vault-phase-two";
-import { findBusinessesViaYelp } from "@/lib/yelp-discovery";
+import { logError } from "@/lib/log";
+import { normalizePhone } from "@/lib/phone";
+import { normalizeState } from "@/lib/us-states";
+import { revealLatestMessageInMailApp, canUseMailApp } from "@/lib/mail-app";
+import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
+import { parseZonedInputValue, formatDateTime } from "@/lib/time";
+import { statusLabel, CALL_OUTCOME_LABEL } from "@/lib/lead-status";
+import {
+  coldOutreachLeadSchema,
+  fieldErrorsOf,
+  normalizeWebsite,
+  parseMoney,
+  type ColdOutreachLeadInput,
+  type FormState,
+} from "@/lib/lead-forms";
+import { createLeadsFromCandidates, describeAddressConflict, routeToPhoneOutreach } from "@/lib/outreach/discovery";
+import { getPipeline } from "@/lib/outreach/pipelines";
+import type { ActionResult } from "@/lib/outreach/lead-actions";
 
 const BASE_PATH = "/vault-pipeline";
+const pipeline = getPipeline("cold-outreach");
 
 function revalidate(leadId?: string) {
   revalidatePath(BASE_PATH);
+  revalidatePath(`${BASE_PATH}/stats`);
   if (leadId) revalidatePath(`${BASE_PATH}/${leadId}`);
 }
 
-// --- Manual CRUD ---
+const UNEXPECTED = "Something went wrong saving that — nothing was changed. Try again in a moment.";
 
-export type LeadFormState = { error?: string };
+// --- Manual entry ---
 
-const leadSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  company: z.string().trim().optional(),
-  email: z.string().trim().email().optional().or(z.literal("")),
-  phone: z
-    .string()
-    .trim()
-    .optional()
-    .refine((val) => !val || digitsOnly(val).length === 10, "Phone must be 10 digits"),
-  address: z.string().trim().optional(),
-  city: z.string().trim().optional(),
-  state: z.string().trim().optional(),
-  website: z.string().trim().optional(),
-  source: z.string().trim().optional(),
-  estimatedValue: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
-});
+export type LeadFormState = FormState<ColdOutreachLeadInput> & { leadId?: string };
 
-function readLeadFields(formData: FormData) {
-  return {
-    name: String(formData.get("name") ?? ""),
-    company: String(formData.get("company") ?? ""),
-    email: String(formData.get("email") ?? ""),
-    phone: String(formData.get("phone") ?? ""),
-    address: String(formData.get("address") ?? ""),
-    city: String(formData.get("city") ?? ""),
-    state: String(formData.get("state") ?? ""),
-    website: String(formData.get("website") ?? ""),
-    source: String(formData.get("source") ?? ""),
-    estimatedValue: String(formData.get("estimatedValue") ?? ""),
-    notes: String(formData.get("notes") ?? ""),
-  };
-}
-
-export async function createLeadAction(
-  _prevState: LeadFormState,
-  formData: FormData,
-): Promise<LeadFormState> {
-  const parsed = leadSchema.safeParse(readLeadFields(formData));
+export async function createLeadAction(input: ColdOutreachLeadInput): Promise<LeadFormState> {
+  const parsed = coldOutreachLeadSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
   }
+  const d = parsed.data;
+  const email = d.email ? d.email.toLowerCase() : null;
 
-  const estimatedValue = parsed.data.estimatedValue ? Number(parsed.data.estimatedValue) : null;
-  if (parsed.data.estimatedValue && Number.isNaN(estimatedValue)) {
-    return { error: "Estimated value must be a number" };
+  try {
+    if (email) {
+      const conflict = await describeAddressConflict("cold-outreach", email);
+      if (conflict) {
+        return {
+          error: "This email is already in use.",
+          fieldErrors: { email: `${conflict} — each address gets one pitch. Edit that lead instead.` },
+        };
+      }
+    }
+    const lead = await prisma.lead.create({
+      data: {
+        name: d.name,
+        company: d.company || null,
+        email,
+        phone: normalizePhone(d.phone),
+        address: d.address || null,
+        city: d.city || null,
+        state: normalizeState(d.state),
+        website: normalizeWebsite(d.website),
+        source: d.source || "Manual entry",
+        estimatedValue: d.estimatedValue ? parseMoney(d.estimatedValue) : null,
+        notes: d.notes || null,
+      },
+    });
+    revalidate();
+    return { ok: true, leadId: lead.id };
+  } catch (err) {
+    logError("action.createLead", err);
+    return { error: UNEXPECTED };
   }
-
-  await prisma.lead.create({
-    data: {
-      name: parsed.data.name,
-      company: parsed.data.company || null,
-      email: parsed.data.email || null,
-      phone: parsed.data.phone ? formatPhone(parsed.data.phone) : null,
-      address: parsed.data.address || null,
-      city: parsed.data.city || null,
-      state: parsed.data.state || null,
-      website: parsed.data.website || null,
-      source: parsed.data.source || "Manual entry",
-      estimatedValue,
-      notes: parsed.data.notes || null,
-    },
-  });
-
-  revalidate();
-  return {};
 }
 
 // --- Discovery ---
 
-export type LeadSearchState = { error?: string; created?: number; scraped?: number };
+export type LeadSearchState = { error?: string; message?: string };
+
+// Leaves room under the 60 s function limit for the Yelp call (≤10 s) and
+// the last lookup in flight (≤15 s).
+const RUN_TIME_BUDGET_MS = 25 * 1000;
 const MAX_PER_RUN = 50;
 
-// Vercel's function timeout is a hard wall — better to stop early and
-// return however many leads were found than to blow past it and lose the
-// whole run (and any leads already created stay saved either way).
-const RUN_TIME_BUDGET_MS = 35 * 1000;
-
-// Only businesses an email was actually found for get saved — same rule as
-// dataleadsell.ts. Yelp never returns a website (see yelp-discovery.ts), so
-// we guess one from the business's name first (see website-finder.ts)
-// before trying to find an email on it.
-async function dedupeAndCreate(
-  candidates: { name: string; phone: string | null; address: string | null; website: string | null }[],
-  city: string,
-  state: string,
-  source: string,
-) {
-  const existingNames = new Set(
-    (await prisma.lead.findMany({ select: { name: true } })).map((l) => l.name.trim().toLowerCase()),
-  );
-
-  const startedAt = Date.now();
-  const created: string[] = [];
-  for (const c of candidates) {
-    if (created.length >= MAX_PER_RUN) break;
-    if (Date.now() - startedAt > RUN_TIME_BUDGET_MS) break;
-    const key = c.name.trim().toLowerCase();
-    if (!c.name.trim() || existingNames.has(key)) continue;
-
-    const website = c.website ?? (await guessWebsiteForBusiness(c.name));
-    const email = await findEmailForBusiness(website);
-    if (!email) continue;
-
-    existingNames.add(key);
-    const lead = await prisma.lead.create({
-      data: { name: c.name, phone: c.phone, address: c.address, website, email, city, state, source, status: "new" },
-    });
-    created.push(lead.id);
-  }
-  return created;
-}
-
 const searchSchema = z.object({
-  city: z.string().trim().min(1, "Enter a city"),
-  state: z.string().trim().min(2, "Enter a state"),
-  businessType: z.string().trim().optional(),
+  city: z.string().trim().min(1, "Enter a city").max(80, "City can be at most 80 characters"),
+  state: z
+    .string()
+    .trim()
+    .refine((v) => normalizeState(v) !== null, "State must be a US state, like UT or Utah"),
+  businessType: z.string().trim().max(80, "Business type can be at most 80 characters"),
 });
 
-export async function searchLeadsAction(
-  _prevState: LeadSearchState,
-  formData: FormData,
-): Promise<LeadSearchState> {
+function describeDiscovery(where: string, scraped: number, result: Awaited<ReturnType<typeof createLeadsFromCandidates>>) {
+  const skipped: string[] = [];
+  if (result.skipped.existingName) skipped.push(`${result.skipped.existingName} already in the list`);
+  if (result.skipped.noEmail) skipped.push(`${result.skipped.noEmail} with no findable email`);
+  if (result.skipped.addressInUse) skipped.push(`${result.skipped.addressInUse} whose email is already in use`);
+  if (result.skipped.optedOut) skipped.push(`${result.skipped.optedOut} opted out`);
+  return (
+    `Found ${scraped} businesses in ${where} and added ${result.created.length} new lead${result.created.length === 1 ? "" : "s"}` +
+    (skipped.length ? ` (skipped ${skipped.join(", ")})` : "") +
+    (result.stoppedEarly ? ". Stopped early to stay within the time limit — run again for more." : ".")
+  );
+}
+
+export async function searchLeadsAction(_prev: LeadSearchState, formData: FormData): Promise<LeadSearchState> {
   const parsed = searchSchema.safeParse({
     city: String(formData.get("city") ?? ""),
     state: String(formData.get("state") ?? ""),
     businessType: String(formData.get("businessType") ?? ""),
   });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-
-  try {
-    const results = await findBusinessesViaYelp(parsed.data.businessType ?? "", `${parsed.data.city}, ${parsed.data.state}`);
-    if (results.length === 0) return { error: "No businesses found for that city." };
-
-    const created = await dedupeAndCreate(results, parsed.data.city, parsed.data.state, "Yelp search");
-    revalidate();
-    return { created: created.length, scraped: results.length };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Search failed" };
-  }
-}
-
-export type PipelineScrapeResult =
-  | { error: string }
-  | { city: string; state: string; created: number; scraped: number };
-
-export async function runPipelineScrapeAction(): Promise<PipelineScrapeResult> {
-  const target = await withRetry(() => pickNextCity(prisma));
-
-  let results;
-  try {
-    results = await findBusinessesViaYelp("", `${target.city}, ${target.state}`);
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Search failed" };
-  }
-  await withRetry(() => markCityUsed(prisma, target.city, target.state));
-
-  const created = await dedupeAndCreate(results, target.city, target.state, "Yelp search (Run pipeline button)");
-  revalidate();
-  return { city: target.city, state: target.state, created: created.length, scraped: results.length };
-}
-
-// --- Contact finding ---
-
-export async function findLeadEmailAction(
-  leadId: string,
-): Promise<{ error?: string; email?: string; routedToPhase2?: boolean }> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return { error: "Lead not found" };
-
-  try {
-    const website = lead.website ?? (await guessWebsiteForBusiness(lead.name));
-    const email = await findEmailForBusiness(website);
-    if (!email) {
-      await prisma.lead.update({ where: { id: leadId }, data: { website, emailCheckedAt: new Date() } });
-      if (lead.status === "new") {
-        await routeLeadToPhase2(prisma, lead);
-        revalidate(leadId);
-        return { error: "Couldn't find an email on this business's website.", routedToPhase2: true };
-      }
-      revalidate(leadId);
-      return { error: "Couldn't find an email on this business's website." };
-    }
-    await prisma.lead.update({ where: { id: leadId }, data: { email, website, emailCheckedAt: new Date() } });
-    revalidate(leadId);
-    return { email };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Email search failed" };
-  }
-}
-
-// Bulk sweep for the "Find emails for all leads" button — same per-lead
-// logic as findLeadEmailAction, just looped over every lead that's never
-// been checked before (emailCheckedAt is what makes "never checked"
-// knowable, so repeat calls move through the backlog instead of retrying
-// the same failures). Deliberately processes a small chunk per call rather
-// than everything at once: the client calls this repeatedly in a loop to
-// show live "checked X of Y" progress between round trips, and it also
-// keeps each individual call well under Vercel's function timeout.
-const BULK_FIND_TIME_BUDGET_MS = 20 * 1000;
-const BULK_FIND_CHUNK_SIZE = 5;
-
-export type BulkFindEmailResult = { checked: number; found: number; remaining: number };
-
-export async function findAllLeadEmailsAction(): Promise<BulkFindEmailResult> {
-  const candidates = await prisma.lead.findMany({
-    where: { email: null, emailCheckedAt: null },
-    orderBy: { createdAt: "asc" },
-    take: BULK_FIND_CHUNK_SIZE,
-  });
-
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the search fields." };
+  const state = normalizeState(parsed.data.state)!;
   const startedAt = Date.now();
-  let checked = 0;
-  let found = 0;
-  for (const lead of candidates) {
-    if (Date.now() - startedAt > BULK_FIND_TIME_BUDGET_MS) break;
-    checked++;
 
-    let website: string | null = null;
-    let email: string | null = null;
-    try {
-      website = lead.website ?? (await guessWebsiteForBusiness(lead.name));
-      email = await findEmailForBusiness(website);
-    } catch {
-      // treat a failed lookup the same as "not found" — still mark it checked
-    }
-
-    if (email) {
-      await prisma.lead.update({ where: { id: lead.id }, data: { email, website, emailCheckedAt: new Date() } });
-      found++;
-    } else {
-      await prisma.lead.update({ where: { id: lead.id }, data: { website, emailCheckedAt: new Date() } });
-      if (lead.status === "new") {
-        await routeLeadToPhase2(prisma, lead);
-      }
-    }
-  }
-
-  const remaining = await prisma.lead.count({ where: { email: null, emailCheckedAt: null } });
-  revalidate();
-  return { checked, found, remaining };
-}
-
-// --- Sending ---
-
-export async function markLeadEmailedAction(leadId: string): Promise<void> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return;
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: { lastEmailedAt: new Date(), repliedAt: null, status: lead.status === "new" ? "contacted" : lead.status },
-  });
-  revalidate(leadId);
-}
-
-async function sendOneOutreachEmail(leadId: string): Promise<{ error?: string }> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return { error: "Lead not found" };
-  if (!lead.email) return { error: "Lead has no email" };
-  if (await isSuppressed(lead.email)) return { error: "This recipient opted out — not sending." };
-
-  const { subject, body } = buildOutreachEmail(lead.company || lead.name);
-  const { providerMessageId } = await sendOutreachEmail(VAULT_PIPELINE_SENDER_EMAIL, lead.email, subject, body);
-
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: { lastEmailedAt: new Date(), repliedAt: null, status: lead.status === "new" ? "contacted" : lead.status },
-  });
-  await prisma.leadEmailSendLog.create({ data: { leadId, email: lead.email, providerMessageId } });
-
-  return {};
-}
-
-export async function sendOutreachEmailAction(leadId: string): Promise<{ error?: string }> {
   try {
-    const result = await sendOneOutreachEmail(leadId);
-    revalidate(leadId);
-    return result;
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Send failed" };
-  }
-}
-
-const MAX_SENDS_PER_RUN = 50;
-const SEND_DELAY_MS = 1000;
-
-export type SendAllResult = { sent: number; failed: number; errors: string[] };
-
-export async function sendAllOutreachEmailsAction(): Promise<SendAllResult> {
-  if (OUTREACH_MAILING_ADDRESS.startsWith("[")) {
-    return {
-      sent: 0,
-      failed: 0,
-      errors: ["Add a real mailing address to vault-email-template.ts before auto-sending — CAN-SPAM requires one, and there's no draft review step here."],
-    };
-  }
-
-  const candidates = await prisma.lead.findMany({
-    where: { email: { not: null }, lastEmailedAt: null, status: "new" },
-    orderBy: { createdAt: "asc" },
-    take: MAX_SENDS_PER_RUN,
-  });
-
-  let sent = 0;
-  const errors: string[] = [];
-  for (const lead of candidates) {
-    try {
-      const result = await sendOneOutreachEmail(lead.id);
-      if (result.error) errors.push(`${lead.name}: ${result.error}`);
-      else sent += 1;
-    } catch (err) {
-      errors.push(`${lead.name}: ${err instanceof Error ? err.message : "unknown error"}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, SEND_DELAY_MS));
-  }
-
-  revalidate();
-  return { sent, failed: errors.length, errors };
-}
-
-// --- Reply / bounce ---
-
-// Neither reply nor bounce detection is automated right now (see
-// send-email.ts — no webhook wired up for ZeptoMail yet) — both of these
-// just record what a human saw happen in their own inbox.
-export async function markLeadRepliedAction(leadId: string): Promise<void> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return;
-  if (lead.status !== "contacted") return; // never move a lead backward/sideways
-  await prisma.lead.update({ where: { id: leadId }, data: { repliedAt: new Date(), status: "responded" } });
-  revalidate(leadId);
-}
-
-export async function markLeadBouncedAction(leadId: string): Promise<void> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return;
-
-  const log = await prisma.leadEmailSendLog.findFirst({ where: { leadId, bounced: false }, orderBy: { sentAt: "desc" } });
-  if (log) {
-    await prisma.leadEmailSendLog.update({ where: { id: log.id }, data: { bounced: true, bouncedAt: new Date() } });
-  }
-
-  if (lead.status !== "paying_client") {
-    await prisma.lead.update({ where: { id: leadId }, data: { status: "lost", callOutcome: "unable_to_contact" } });
-  }
-  revalidate(leadId);
-}
-
-// Manual fallback for the automated STOP-detection in /api/email-inbound —
-// that route is currently unreachable in production (see README's Known
-// limitations), so this is how an opt-out you see in your own inbox
-// actually gets enforced today: same suppression list, checked before
-// every future send across both pipelines.
-export async function markLeadOptedOutAction(leadId: string): Promise<void> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return;
-  if (lead.email) await suppressEmail(lead.email, "Marked opted out manually");
-  await prisma.lead.update({ where: { id: leadId }, data: { status: "lost" } });
-  revalidate(leadId);
-}
-
-export async function viewLeadEmailThreadAction(email: string): Promise<{ found: boolean }> {
-  return { found: await revealLatestMessageInMailApp(VAULT_PIPELINE_SENDER_EMAIL, email) };
-}
-
-// Corrects a false positive from a manual "mark replied": it was actually
-// a non-delivery notice you saw and mistook for a real reply.
-export async function markResponseAsNonDeliveryAction(leadId: string): Promise<void> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return;
-
-  const log = await prisma.leadEmailSendLog.findFirst({ where: { leadId, bounced: false }, orderBy: { sentAt: "desc" } });
-  if (log) {
-    await prisma.leadEmailSendLog.update({
-      where: { id: log.id },
-      data: { bounced: true, bouncedAt: lead.repliedAt ?? new Date() },
+    const results = await findBusinessesViaYelp(parsed.data.businessType, `${parsed.data.city}, ${state}`);
+    if (results.length === 0) return { error: `Yelp found no businesses in ${parsed.data.city}, ${state}.` };
+    const result = await createLeadsFromCandidates("cold-outreach", results, {
+      city: parsed.data.city,
+      state,
+      source: "Yelp search",
+      maxCreate: MAX_PER_RUN,
+      deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
+    revalidate();
+    return { message: describeDiscovery(`${parsed.data.city}, ${state}`, results.length, result) };
+  } catch (err) {
+    if (err instanceof YelpError) return { error: err.message };
+    logError("action.searchLeads", err);
+    return { error: "The search stopped because of an unexpected error. Any leads already added are saved." };
   }
-
-  await prisma.lead.update({ where: { id: leadId }, data: { repliedAt: null, ourReplyAt: null } });
-  await routeLeadToPhase2(prisma, lead);
-  revalidate(leadId);
 }
 
-// --- Status transitions ---
-
-export async function updateLeadStatusAction(leadId: string, status: string): Promise<void> {
-  await prisma.lead.update({ where: { id: leadId }, data: { status } });
-  revalidate(leadId);
+export async function runPipelineScrapeAction(): Promise<ActionResult> {
+  const startedAt = Date.now();
+  try {
+    const target = await withRetry(() => pickNextCity(prisma));
+    const results = await findBusinessesViaYelp("", `${target.city}, ${target.state}`);
+    await withRetry(() => markCityUsed(prisma, target.city, target.state));
+    const result = await createLeadsFromCandidates("cold-outreach", results, {
+      city: target.city,
+      state: target.state,
+      source: "Yelp search (Run pipeline button)",
+      maxCreate: MAX_PER_RUN,
+      deadline: startedAt + RUN_TIME_BUDGET_MS,
+    });
+    revalidate();
+    return { ok: true, message: describeDiscovery(`${target.city}, ${target.state}`, results.length, result) };
+  } catch (err) {
+    if (err instanceof YelpError) return { ok: false, error: err.message };
+    logError("action.runPipelineScrape", err);
+    return { ok: false, error: "The run stopped because of an unexpected error. Any leads already added are saved." };
+  }
 }
 
-export async function setLeadStarredAction(leadId: string, starred: boolean): Promise<void> {
-  await prisma.lead.update({ where: { id: leadId }, data: { starred } });
-  revalidate(leadId);
-}
+// --- Pipeline stage (Cold Outreach only) ---
 
-export async function setOurReplyAction(leadId: string, replied: boolean): Promise<void> {
-  await prisma.lead.update({ where: { id: leadId }, data: { ourReplyAt: replied ? new Date() : null } });
-  revalidate(leadId);
-}
+const APPOINTMENT_FROM = ["contacted", "responded", "cold_call_list", "appointment_set"];
 
-export async function scheduleAppointmentAction(leadId: string, appointmentAt: string): Promise<{ error?: string }> {
-  const date = new Date(appointmentAt);
-  if (Number.isNaN(date.getTime())) return { error: "Invalid appointment date" };
-  await prisma.lead.update({ where: { id: leadId }, data: { appointmentAt: date, status: "appointment_set" } });
-  revalidate(leadId);
-  return {};
-}
-
-// Manual, simplified from Vault's own version: bizhub auto-advances
-// appointment_set -> working_for when the first Project is created for the
-// converted Client. This pipeline has no Client/Project system (out of
-// scope — see LEAD_GEN_PIPELINE_SPEC.md §1), so these are plain manual
-// buttons instead of that automatic trigger.
-export async function markWorkingForAction(leadId: string): Promise<void> {
-  await prisma.lead.update({ where: { id: leadId }, data: { status: "working_for" } });
-  revalidate(leadId);
-}
-
-export async function markPayingClientAction(leadId: string): Promise<void> {
-  await prisma.lead.update({ where: { id: leadId }, data: { status: "paying_client" } });
-  revalidate(leadId);
+export async function scheduleAppointmentAction(leadId: string, localDateTime: string): Promise<ActionResult> {
+  const date = parseZonedInputValue(String(localDateTime ?? ""));
+  if (!date) return { ok: false, error: "Pick a date and time for the appointment." };
+  try {
+    const lead = await pipeline.findLead(prisma, leadId);
+    if (!lead) return { ok: false, error: "This lead no longer exists." };
+    if (!APPOINTMENT_FROM.includes(lead.status)) {
+      return { ok: false, error: `An appointment can't be set for a ${statusLabel(lead.status)} lead.` };
+    }
+    await prisma.lead.update({ where: { id: leadId }, data: { appointmentAt: date, status: "appointment_set" } });
+    revalidate(leadId);
+    return { ok: true, message: `Appointment with ${lead.name} set for ${formatDateTime(date)} — moved to Appointment set.` };
+  } catch (err) {
+    logError("action.scheduleAppointment", err, { leadId });
+    return { ok: false, error: UNEXPECTED };
+  }
 }
 
 const LOST_REASONS = ["not_interested", "too_busy", "no_answer", "no_need", "unable_to_contact"] as const;
 
-export async function markLeadLostAction(leadId: string, reason: (typeof LOST_REASONS)[number]): Promise<void> {
-  if (!LOST_REASONS.includes(reason)) throw new Error("Invalid reason");
-  await prisma.lead.update({ where: { id: leadId }, data: { status: "lost", callOutcome: reason } });
-  revalidate(leadId);
+export async function markLeadLostAction(leadId: string, reason: string): Promise<ActionResult> {
+  if (!(LOST_REASONS as readonly string[]).includes(reason)) return { ok: false, error: "Pick a reason first." };
+  try {
+    const lead = await pipeline.findLead(prisma, leadId);
+    if (!lead) return { ok: false, error: "This lead no longer exists." };
+    if (lead.status === "lost") return { ok: false, error: `${lead.name} is already Lost.` };
+    await prisma.lead.update({ where: { id: leadId }, data: { status: "lost", callOutcome: reason } });
+    revalidate(leadId);
+    return { ok: true, message: `Marked ${lead.name} as Lost (${CALL_OUTCOME_LABEL[reason] ?? reason}).` };
+  } catch (err) {
+    logError("action.markLeadLost", err, { leadId });
+    return { ok: false, error: UNEXPECTED };
+  }
 }
 
-// --- Cold call flashcards ---
+// Corrects a "Mark replied" that was really a non-delivery notice: the
+// latest send is marked bounced, the reply timestamps are cleared, and the
+// lead goes to phone outreach.
+export async function markResponseAsNonDeliveryAction(leadId: string): Promise<ActionResult> {
+  try {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) return { ok: false, error: "This lead no longer exists." };
+    if (!lead.repliedAt || lead.status !== "responded") {
+      return { ok: false, error: `${lead.name} isn't marked as replied, so there's nothing to correct.` };
+    }
+    await pipeline.markLatestSendBounced(prisma, leadId, lead.repliedAt);
+    await prisma.lead.update({ where: { id: leadId }, data: { repliedAt: null, ourReplyAt: null } });
+    const status = await routeToPhoneOutreach("cold-outreach", lead);
+    revalidate(leadId);
+    return { ok: true, message: `Recorded the bounce for ${lead.name} — moved to the ${statusLabel(status)}.` };
+  } catch (err) {
+    logError("action.markResponseAsNonDelivery", err, { leadId });
+    return { ok: false, error: UNEXPECTED };
+  }
+}
 
-const COLD_CALL_OUTCOMES = ["no_answer", "invalid_number", "not_interested", "interested"] as const;
-export type ColdCallOutcome = (typeof COLD_CALL_OUTCOMES)[number];
-
-const COLD_CALL_RESULT: Record<ColdCallOutcome, { callOutcome: string; status?: string }> = {
-  no_answer: { callOutcome: "no_answer" },
-  invalid_number: { callOutcome: "unable_to_contact", status: "lost" },
-  not_interested: { callOutcome: "not_interested", status: "lost" },
-  interested: { callOutcome: "interested", status: "responded" },
-};
-
-export async function confirmColdCallAction(leadId: string, outcome: ColdCallOutcome, notes: string): Promise<void> {
-  if (!COLD_CALL_OUTCOMES.includes(outcome)) throw new Error("Invalid outcome");
-
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) throw new Error("Lead not found");
-
-  const trimmedNotes = notes.trim();
-  const stamp = `[Cold call ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}]`;
-  const newNoteLine = trimmedNotes ? `${stamp}: ${trimmedNotes}` : null;
-  const combinedNotes = [lead.notes, newNoteLine].filter(Boolean).join("\n\n") || null;
-
-  const result = COLD_CALL_RESULT[outcome];
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: { callOutcome: result.callOutcome, ...(result.status ? { status: result.status } : {}), notes: combinedNotes },
-  });
-
-  revalidate(leadId);
+export async function viewLeadEmailThreadAction(leadId: string): Promise<ActionResult> {
+  if (!canUseMailApp()) {
+    return { ok: false, error: "Opening Mail only works when the app runs on your Mac, not on the deployed site." };
+  }
+  try {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { email: true, name: true } });
+    if (!lead?.email) return { ok: false, error: "This lead has no email address." };
+    const found = await revealLatestMessageInMailApp(VAULT_PIPELINE_SENDER_EMAIL, lead.email);
+    return found
+      ? { ok: true, message: `Opened the latest message from ${lead.name} in Mail.` }
+      : { ok: false, error: `No message from ${lead.email} was found in Mail.` };
+  } catch (err) {
+    logError("action.viewLeadEmailThread", err, { leadId });
+    return { ok: false, error: "Mail couldn't be opened — is Mail.app set up with the sending account?" };
+  }
 }
 
 // --- Activity log ---
 
-export async function addLeadActivityAction(leadId: string, type: string, notes: string): Promise<void> {
-  const trimmed = notes.trim();
-  if (!trimmed) return;
-  await prisma.leadActivity.create({ data: { leadId, type, notes: trimmed } });
-  revalidate(leadId);
+const ACTIVITY_TYPES = ["note", "call", "email", "meeting"] as const;
+
+export async function addLeadActivityAction(leadId: string, type: string, notes: string): Promise<ActionResult> {
+  const trimmed = String(notes ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Write what happened first." };
+  if (trimmed.length > 2_000) return { ok: false, error: "Keep an activity note under 2,000 characters." };
+  if (!(ACTIVITY_TYPES as readonly string[]).includes(type)) return { ok: false, error: "Pick an activity type." };
+  try {
+    await prisma.leadActivity.create({ data: { leadId, type, notes: trimmed } });
+    revalidate(leadId);
+    return { ok: true, message: "Activity added." };
+  } catch (err) {
+    logError("action.addLeadActivity", err, { leadId });
+    return { ok: false, error: UNEXPECTED };
+  }
 }

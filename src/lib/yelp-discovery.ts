@@ -1,15 +1,13 @@
-// Cloud-native replacement for lead-discovery.ts/vault-lead-discovery.ts's
-// Selenium/Google-Maps scrape — Yelp's own Business Search API, a
-// sanctioned REST endpoint (no anti-bot fight, no headless Chrome, works
-// fine from a Vercel function). Needs a free Yelp Fusion API key:
-// https://www.yelp.com/developers/v3/manage_app
+// Business discovery through Yelp's Business Search API — a sanctioned
+// REST endpoint that works from a Vercel function (no headless browser).
+// Needs a free Yelp Fusion API key: https://www.yelp.com/developers/v3/manage_app
 //
-// Trade-off worth knowing: Yelp's search response gives name/phone/address
-// reliably, but not a business's own website (only Yelp's page for it) —
-// so the free website-scrape step in email-finder.ts, which needs a
-// website to fetch, will come up empty more often than the old Google Maps
-// scrape did. Leads Yelp can't get an email for still get a phone number,
-// so they're usable via the cold-call flow either way.
+// Trade-off worth knowing: Yelp gives name/phone/address reliably but not a
+// business's own website, so the email lookup has to guess the site from
+// the name (see website-finder.ts). Leads without an email still have a
+// phone number for the cold-call deck.
+import { logError } from "@/lib/log";
+
 export type YelpCandidate = {
   name: string;
   phone: string | null;
@@ -18,26 +16,32 @@ export type YelpCandidate = {
 };
 
 type YelpBusiness = {
-  name: string;
-  phone: string | null;
-  location: { display_address: string[] };
+  name?: string;
+  phone?: string | null;
+  location?: { display_address?: string[] };
 };
 
 type YelpSearchResponse = {
   businesses?: YelpBusiness[];
-  error?: { code: string; description: string };
+  error?: { code?: string; description?: string };
 };
 
 const YELP_SEARCH_URL = "https://api.yelp.com/v3/businesses/search";
 const PAGE_LIMIT = 50; // Yelp's max per request — matches our own per-run cap anyway.
+const FETCH_TIMEOUT_MS = 10_000;
 
-export async function findBusinessesViaYelp(
-  term: string,
-  location: string,
-): Promise<YelpCandidate[]> {
+/** A Yelp failure, with a message written for the operator. */
+export class YelpError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "YelpError";
+  }
+}
+
+export async function findBusinessesViaYelp(term: string, location: string): Promise<YelpCandidate[]> {
   const apiKey = process.env.YELP_API_KEY;
   if (!apiKey) {
-    throw new Error("YELP_API_KEY isn't set — business discovery can't run until it is.");
+    throw new YelpError("Yelp isn't set up on this deployment (YELP_API_KEY is missing), so the search can't run.");
   }
 
   const url = new URL(YELP_SEARCH_URL);
@@ -45,17 +49,51 @@ export async function findBusinessesViaYelp(
   url.searchParams.set("location", location);
   url.searchParams.set("limit", String(PAGE_LIMIT));
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-  const body = (await res.json()) as YelpSearchResponse;
-
-  if (!res.ok) {
-    throw new Error(body.error?.description ?? `Yelp search failed (${res.status})`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  let raw: string;
+  try {
+    res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal: controller.signal });
+    raw = await res.text();
+  } catch (err) {
+    logError("yelp.search", err, { location });
+    throw new YelpError("Couldn't reach Yelp — nothing was used up. Check the connection and try again.");
+  } finally {
+    clearTimeout(timer);
   }
 
-  return (body.businesses ?? []).map((b) => ({
-    name: b.name,
-    phone: b.phone || null,
-    address: b.location.display_address.join(", ") || null,
-    website: null, // Yelp's search API doesn't expose the business's own site.
-  }));
+  let body: YelpSearchResponse | null = null;
+  try {
+    body = JSON.parse(raw) as YelpSearchResponse;
+  } catch {
+    body = null;
+  }
+
+  if (!res.ok || !body) {
+    logError("yelp.search", new Error(`HTTP ${res.status}: ${raw.slice(0, 300)}`), { location });
+    throw new YelpError(describeYelpFailure(res.status, body?.error?.code));
+  }
+
+  return (body.businesses ?? [])
+    .filter((b) => b.name?.trim())
+    .map((b) => ({
+      name: b.name!.trim(),
+      phone: b.phone || null,
+      address: b.location?.display_address?.join(", ") || null,
+      website: null, // Yelp's search API doesn't expose the business's own site.
+    }));
+}
+
+function describeYelpFailure(status: number, code: string | undefined): string {
+  if (code === "LOCATION_NOT_FOUND" || code === "VALIDATION_ERROR") {
+    return "Yelp didn't recognise that location — check the city and state.";
+  }
+  if (status === 401 || status === 403 || code === "TOKEN_INVALID") {
+    return "Yelp rejected our API key — it needs to be checked in Vercel's environment settings.";
+  }
+  if (status === 429 || code === "ACCESS_LIMIT_REACHED" || code === "TOO_MANY_REQUESTS_PER_SECOND") {
+    return "Yelp's daily search limit is used up — try again tomorrow.";
+  }
+  return "Yelp isn't responding right now — nothing was used up, try again later.";
 }

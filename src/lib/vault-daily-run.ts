@@ -1,101 +1,83 @@
-// The daily automated Cold Outreach run: scrape one city's worth of
-// businesses (capped at a configurable count), keep only the ones an email
-// was actually found for (same policy as every other discovery path — see
-// dedupeAndCreate in actions/vault-pipeline.ts), then immediately send
-// outreach to exactly those leads. Deliberately self-contained rather than
-// reusing the "use server" actions file, since this runs unattended from a
-// cron route, not from a client click.
+// The daily automated Cold Outreach run: search one new city on Yelp,
+// save the businesses an address was found for (capped at the configured
+// count), then pitch exactly those leads. Discovery and sending go through
+// the same shared rules as the buttons on the page (src/lib/outreach/), so
+// a cron run and a manual bulk send can overlap without double-sending.
 import { prisma } from "@/lib/db";
 import { findBusinessesViaYelp } from "@/lib/yelp-discovery";
-import { guessWebsiteForBusiness } from "@/lib/website-finder";
-import { findEmailForBusiness } from "@/lib/email-finder";
-import { sendOutreachEmail } from "@/lib/send-email";
-import { isSuppressed } from "@/lib/email-suppression";
-import { buildOutreachEmail } from "@/lib/vault-email-template";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
-import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
+import { createLeadsFromCandidates } from "@/lib/outreach/discovery";
+import { sendFirstTouch } from "@/lib/outreach/send";
+import { getAppSettings } from "@/lib/outreach/settings";
+import type { RunOutcome } from "@/lib/outreach/runs";
 
-// Leaves headroom under Vercel Hobby's 60s function ceiling — an
-// unattended run has no "click again" to finish the rest, so whatever
-// doesn't fit in the budget just waits for tomorrow's city.
-const DAILY_RUN_TIME_BUDGET_MS = 45 * 1000;
+export const DAILY_RUN_SOURCE = "Yelp search (daily automated run)";
 const DEFAULT_LEAD_COUNT = 30;
 
-export type DailyRunResult = {
-  city: string;
-  state: string;
-  scraped: number;
-  created: number;
-  sent: number;
-  failed: number;
-};
+// Vercel Hobby functions stop at 60 s. Discovery gets the first 30 s; no new
+// send starts after 45 s, and a send fails within ~15 s at worst, so the run
+// always finishes (and records its outcome) inside the limit. Leads found
+// but not sent in time stay "new" for the next bulk send.
+const DISCOVERY_BUDGET_MS = 30_000;
+const SEND_BUDGET_MS = 45_000;
+const SEND_DELAY_MS = 500;
 
-export async function runDailyColdOutreach(leadCount: number = DEFAULT_LEAD_COUNT): Promise<DailyRunResult> {
+export async function runDailyColdOutreach(
+  leadCount: number = DEFAULT_LEAD_COUNT,
+  options: { sendDelayMs?: number } = {},
+): Promise<RunOutcome> {
+  const startedAt = Date.now();
+  if ((await getAppSettings()).outboundPaused) {
+    return { status: "skipped", summary: "Outbound email is paused, so the daily run didn't search or send." };
+  }
+
   const target = await withRetry(() => pickNextCity(prisma));
-
   const results = await findBusinessesViaYelp("", `${target.city}, ${target.state}`);
-  const candidates = results.slice(0, leadCount);
-
   await withRetry(() => markCityUsed(prisma, target.city, target.state));
 
-  const existingNames = new Set(
-    (await prisma.lead.findMany({ select: { name: true } })).map((l) => l.name.trim().toLowerCase()),
-  );
-
-  const startedAt = Date.now();
-  const createdIds: string[] = [];
-  for (const c of candidates) {
-    if (Date.now() - startedAt > DAILY_RUN_TIME_BUDGET_MS) break;
-    const key = c.name.trim().toLowerCase();
-    if (!c.name.trim() || existingNames.has(key)) continue;
-
-    let website: string | null = null;
-    let email: string | null = null;
-    try {
-      website = c.website ?? (await guessWebsiteForBusiness(c.name));
-      email = await findEmailForBusiness(website);
-    } catch {
-      // no email found this run — skip, same policy as every other discovery path
-    }
-    if (!email) continue;
-
-    existingNames.add(key);
-    const lead = await prisma.lead.create({
-      data: {
-        name: c.name,
-        phone: c.phone,
-        address: c.address,
-        website,
-        email,
-        city: target.city,
-        state: target.state,
-        source: "Yelp search (daily automated run)",
-        status: "new",
-        emailCheckedAt: new Date(),
-      },
-    });
-    createdIds.push(lead.id);
-  }
+  const discovery = await createLeadsFromCandidates("cold-outreach", results.slice(0, leadCount), {
+    city: target.city,
+    state: target.state,
+    source: DAILY_RUN_SOURCE,
+    maxCreate: leadCount,
+    deadline: startedAt + DISCOVERY_BUDGET_MS,
+  });
 
   let sent = 0;
-  let failed = 0;
-  for (const leadId of createdIds) {
-    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-    if (!lead?.email || (await isSuppressed(lead.email))) {
-      failed++;
-      continue;
+  let notSent = 0;
+  let deferred = 0;
+  const errors: string[] = [];
+  for (const lead of discovery.created) {
+    if (Date.now() > startedAt + SEND_BUDGET_MS) {
+      deferred = discovery.created.length - sent - notSent;
+      break;
     }
-    try {
-      const { subject, body } = buildOutreachEmail(lead.company || lead.name);
-      const { providerMessageId } = await sendOutreachEmail(VAULT_PIPELINE_SENDER_EMAIL, lead.email, subject, body);
-      await prisma.lead.update({ where: { id: leadId }, data: { lastEmailedAt: new Date(), status: "contacted" } });
-      await prisma.leadEmailSendLog.create({ data: { leadId, email: lead.email, providerMessageId } });
+    const outcome = await sendFirstTouch("cold-outreach", lead.id);
+    if (outcome.ok) {
       sent++;
-    } catch {
-      failed++;
+      if (outcome.warning) errors.push(`${lead.name}: ${outcome.warning}`);
+    } else {
+      notSent++;
+      errors.push(`${lead.name}: ${outcome.message}`);
+      if (outcome.reason === "paused") {
+        deferred = discovery.created.length - sent - notSent;
+        break;
+      }
     }
+    const delay = options.sendDelayMs ?? SEND_DELAY_MS;
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
-  return { city: target.city, state: target.state, scraped: candidates.length, created: createdIds.length, sent, failed };
+  const parts = [
+    `Searched ${target.city}, ${target.state}: ${results.length} businesses`,
+    `${discovery.created.length} new leads with an email`,
+    `${sent} emailed`,
+  ];
+  if (notSent) parts.push(`${notSent} not sent`);
+  if (deferred) parts.push(`${deferred} left for the next send (out of time)`);
+  const summary = `${parts.join(", ")}.`;
+
+  const status = notSent === 0 ? "succeeded" : sent === 0 ? "failed" : "partial";
+  return { status, summary, errors };
 }

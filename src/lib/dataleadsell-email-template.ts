@@ -1,13 +1,11 @@
 // Outreach copy for the dataleadsell.com pipeline — pitching a Probate
-// Property Leads subscription to real estate agents. Mirrors the shape of
-// bizhub's email-template.ts (shared subject/body builder used by both the
-// automatic sender and any manual "send email" flow), but this pipeline's
-// pitch instead of Vault's generic dev-services one.
+// Property Leads subscription to real estate agents. Used for every send
+// (single, bulk) and for the preview on each agent's page.
 
 // CAN-SPAM requires a valid physical postal address on commercial email —
 // same address Wright AI Solutions, LLC (dataleadsell.com's owner) uses on
 // Vault's outreach.
-export const OUTREACH_MAILING_ADDRESS = "28 E 14 Street, Tempe, AZ 85281";
+const OUTREACH_MAILING_ADDRESS = "28 E 14 Street, Tempe, AZ 85281";
 
 const COUNTY_PRICING: Record<string, string> = {
   Maricopa: "$500/mo",
@@ -46,9 +44,4 @@ export function buildAgentOutreachEmail(
   ].join("\n");
 
   return { subject, body };
-}
-
-export function buildAgentOutreachSms(agentName: string, county: string | null): string {
-  const countyLabel = county ? `${county} County` : "your area";
-  return `Hi ${agentName || "there"} — Thomas with Data Lead Sell. We send verified probate property leads (confirmed against the obituary) for ${countyLabel} weekly, plus mailed letters to the heirs. Worth a look? dataleadsell.com — reply STOP to opt out.`;
 }

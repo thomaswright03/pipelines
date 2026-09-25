@@ -1,25 +1,34 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/db";
+import { isAuthorizedBearer } from "@/lib/auth-header";
+import { describeError, logError } from "@/lib/log";
+import { getPipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
+import { recordRun } from "@/lib/outreach/runs";
 import { runDailyColdOutreach } from "@/lib/vault-daily-run";
 
-// The actual fire TIME comes from vercel.json's cron schedule (Vercel
-// Hobby cron can't be reconfigured without a redeploy — see
-// PipelineSchedule in schema.prisma), but "enabled" and "leadCount" are
-// read live from PipelineSchedule on every run, so those two knobs really
-// are editable from the website with no redeploy needed.
+// The fire time comes from vercel.json's cron schedule (Vercel Hobby can't
+// change it without a redeploy); "enabled" and "leads per run" are read
+// live from PipelineSchedule on every run. Every run — including a skipped
+// or failed one — is recorded in PipelineRun and shown on the Cold
+// Outreach page.
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response("Unauthorized", { status: 401 });
+  if (!isAuthorizedBearer(request.headers.get("authorization"), process.env.CRON_SECRET)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const schedule = await prisma.pipelineSchedule.findUnique({ where: { id: "vault-pipeline" } });
-  if (schedule && !schedule.enabled) {
-    return Response.json({ skipped: true, reason: "Automation disabled in PipelineSchedule" });
+  try {
+    const schedule = await getPipelineSchedule(VAULT_SCHEDULE_ID);
+    const run = await recordRun("cold-outreach", "daily", async () => {
+      if (!schedule.enabled) {
+        return { status: "skipped", summary: "Daily automation is turned off on the Cold Outreach page." };
+      }
+      return runDailyColdOutreach(schedule.leadCount);
+    });
+    const failed = run.status === "failed";
+    return Response.json({ ok: !failed, ...run }, { status: failed ? 500 : 200 });
+  } catch (err) {
+    logError("api.cron.vault-daily", err);
+    return Response.json({ ok: false, error: "Daily run failed to start", cause: describeError(err) }, { status: 500 });
   }
-
-  const result = await runDailyColdOutreach(schedule?.leadCount);
-  return Response.json(result);
 }
