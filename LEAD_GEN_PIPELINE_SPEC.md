@@ -1,3 +1,8 @@
+> **Historical document.** This is the spec the Cold Outreach pipeline was originally rebuilt from. It does
+> not describe the system in this repo any more: discovery uses Yelp, not Selenium; sending uses ZeptoMail;
+> the daily run is automated; and the send/opt-out rules live in `src/lib/outreach/`. Read `README.md` and
+> the code for current behaviour. This file is kept for its background on why some decisions were made.
+
 # Lead Gen Pipeline — Rebuild Spec
 
 This document is written for an AI coding assistant to rebuild a specific cold-outreach lead
