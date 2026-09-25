@@ -99,6 +99,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
           createdAt: lead.createdAt,
           starred: lead.starred,
           flagged: lead.status === "new" && lead.sendBlockedReason !== null,
+          needsReview: lead.replyNeedsReview,
         }))}
         filteredTotal={filteredTotal}
         total={total}

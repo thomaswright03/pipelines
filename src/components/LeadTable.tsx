@@ -20,8 +20,21 @@ export type LeadRow = {
   lastEmailedAt: Date | null;
   createdAt: Date;
   starred: boolean;
+  /** New, but will never be auto-sent (duplicate or opted-out address). */
   flagged: boolean;
+  /** A reply arrived while the lead was Lost / Not interested. */
+  needsReview: boolean;
 };
+
+function RowFlags({ row }: { row: LeadRow }) {
+  if (!row.flagged && !row.needsReview) return null;
+  return (
+    <div className="flex flex-wrap gap-x-2 text-xs font-medium">
+      {row.needsReview && <span className="text-amber-800 dark:text-amber-300">Replied — needs review</span>}
+      {row.flagged && <span className="text-amber-800 dark:text-amber-300">Won&apos;t be auto-sent</span>}
+    </div>
+  );
+}
 
 export default function LeadTable({
   pipeline,
@@ -101,62 +114,107 @@ export default function LeadTable({
             }`}
       </p>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
-            <tr>
-              <th className="w-10 px-2 py-3">
-                <span className="sr-only">Starred</span>
-              </th>
-              <SortHeader label="Name" sortKey="name" basePath={basePath} params={params} />
-              <th className="px-3 py-3">{locationLabel}</th>
-              <th className="px-3 py-3">Email</th>
-              <th className="px-3 py-3">Phone</th>
-              <th className="px-3 py-3">Status</th>
-              <SortHeader label="Last emailed" sortKey="emailed" basePath={basePath} params={params} />
-              <SortHeader label="Added" sortKey="created" basePath={basePath} params={params} />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center muted">
-                  {total === 0 ? `No ${noun.many} yet — run the pipeline or add one by hand.` : `Nothing here.`}
-                </td>
-              </tr>
-            )}
+      {rows.length === 0 ? (
+        <div className="card px-4 py-10 text-center text-sm muted">
+          {total === 0 ? `No ${noun.many} yet — run the pipeline or add one by hand.` : `Nothing here.`}
+        </div>
+      ) : (
+        <>
+          {/* Phones: one card per lead, with the name, status and last-emailed date always visible. */}
+          <ul className="card divide-y divide-zinc-100 md:hidden dark:divide-zinc-800/70">
             {rows.map((row) => (
-              <tr key={row.id} className="transition hover:bg-indigo-50/50 dark:hover:bg-indigo-500/[0.06]">
-                <td className="px-2 py-1">
-                  <StarButton pipeline={pipeline} leadId={row.id} leadName={row.name} starred={row.starred} />
-                </td>
-                <td className="min-w-[9rem] max-w-[16rem] px-3 py-2">
-                  <Link
-                    href={`${basePath}/${row.id}`}
-                    className="line-clamp-2 break-words font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
-                  >
-                    {row.name}
-                  </Link>
-                  {row.subtitle && <div className="truncate text-xs muted">{row.subtitle}</div>}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 muted">{row.location}</td>
-                <td className="max-w-[14rem] px-3 py-2 muted">
-                  <span className="block truncate" title={row.email ?? undefined}>
-                    {row.email ?? "—"}
-                  </span>
-                  {row.flagged && <span className="text-xs text-amber-800 dark:text-amber-300">Won&apos;t be auto-sent</span>}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 muted">{row.phone ?? "—"}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge status={row.status} />
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 muted">{formatDate(row.lastEmailedAt)}</td>
-                <td className="whitespace-nowrap px-3 py-2 muted">{formatDate(row.createdAt)}</td>
-              </tr>
+              <li key={row.id} className="flex items-start gap-1 px-2 py-2">
+                <StarButton pipeline={pipeline} leadId={row.id} leadName={row.name} starred={row.starred} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <Link
+                      href={`${basePath}/${row.id}`}
+                      title={row.name}
+                      className="line-clamp-2 min-w-0 break-words font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
+                    >
+                      {row.name}
+                    </Link>
+                    <StatusBadge status={row.status} />
+                  </div>
+                  <RowFlags row={row} />
+                  <div className="truncate text-xs muted" title={row.email ?? undefined}>
+                    {row.email ?? "No email"}
+                    {row.location !== "—" ? ` · ${row.location}` : ""}
+                  </div>
+                  <div className="text-xs muted">
+                    {row.lastEmailedAt ? `Emailed ${formatDate(row.lastEmailedAt)}` : "Not emailed yet"}
+                  </div>
+                </div>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+
+          {/* Tablets and up: a fixed-layout table that fits the page width; long values are cut short with the full text on hover. */}
+          <div className="card hidden md:block">
+            <table className="w-full table-fixed text-sm">
+              <thead className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+                <tr>
+                  <th className="w-11 px-1 py-3">
+                    <span className="sr-only">Starred</span>
+                  </th>
+                  <SortHeader label="Name" sortKey="name" basePath={basePath} params={params} />
+                  <th className="hidden w-[14%] px-3 py-3 lg:table-cell">{locationLabel}</th>
+                  <th className="w-[32%] px-3 py-3 lg:w-[24%]">Contact</th>
+                  <th className="w-36 px-2 py-3">Status</th>
+                  <SortHeader label="Emailed" sortKey="emailed" basePath={basePath} params={params} className="w-32" />
+                  <SortHeader
+                    label="Added"
+                    sortKey="created"
+                    basePath={basePath}
+                    params={params}
+                    className="hidden w-32 lg:table-cell"
+                  />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+                {rows.map((row) => (
+                  <tr key={row.id} className="transition hover:bg-indigo-50/50 dark:hover:bg-indigo-500/[0.06]">
+                    <td className="px-1 py-1 align-top">
+                      <StarButton pipeline={pipeline} leadId={row.id} leadName={row.name} starred={row.starred} />
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <Link
+                        href={`${basePath}/${row.id}`}
+                        title={row.name}
+                        className="line-clamp-2 break-words font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
+                      >
+                        {row.name}
+                      </Link>
+                      {row.subtitle && (
+                        <div className="truncate text-xs muted" title={row.subtitle}>
+                          {row.subtitle}
+                        </div>
+                      )}
+                      <RowFlags row={row} />
+                    </td>
+                    <td className="hidden px-3 py-2 align-top muted lg:table-cell">
+                      <span className="block truncate" title={row.location}>
+                        {row.location}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 align-top muted">
+                      <span className="block truncate" title={row.email ?? undefined}>
+                        {row.email ?? "—"}
+                      </span>
+                      {row.phone && <span className="block truncate text-xs">{row.phone}</span>}
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <StatusBadge status={row.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 align-top muted">{formatDate(row.lastEmailedAt)}</td>
+                    <td className="hidden whitespace-nowrap px-3 py-2 align-top muted lg:table-cell">{formatDate(row.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {pages > 1 && (
         <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -188,16 +246,18 @@ function SortHeader({
   sortKey,
   basePath,
   params,
+  className = "",
 }: {
   label: string;
   sortKey: SortKey;
   basePath: string;
   params: ListParams;
+  className?: string;
 }) {
   const active = params.sort === sortKey;
   const nextDir = active ? (params.dir === "asc" ? "desc" : "asc") : sortKey === "name" ? "asc" : "desc";
   return (
-    <th className="px-3 py-3" aria-sort={active ? (params.dir === "asc" ? "ascending" : "descending") : "none"}>
+    <th className={`px-3 py-3 ${className}`} aria-sort={active ? (params.dir === "asc" ? "ascending" : "descending") : "none"}>
       <Link
         href={listHref(basePath, params, { sort: sortKey, dir: nextDir })}
         className="inline-flex min-h-11 items-center gap-1 whitespace-nowrap hover:text-zinc-900 sm:min-h-0 dark:hover:text-zinc-100"
