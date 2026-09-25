@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import EmailCode from "@/components/EmailCode";
+import HowThisWorks from "@/components/HowThisWorks";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
@@ -68,11 +69,17 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
       <div>
         <h1 className="accent-text text-2xl font-bold tracking-tight">Cold Outreach</h1>
         <p className="mt-1 text-sm muted">
-          Wright AI Solutions&apos; own client-acquisition pipeline. Finds local businesses via Yelp, finds an email for each, and
-          sends one pitch from{" "}
-          <EmailCode email={VAULT_PIPELINE_SENDER_EMAIL} />.
-          Leads that don&apos;t reply within a week move to the call deck.
+          Finds local businesses and emails each one pitch from <EmailCode email={VAULT_PIPELINE_SENDER_EMAIL} />.
         </p>
+        <div className="mt-1">
+          <HowThisWorks>
+            <p>
+              Wright AI Solutions&apos; own client-acquisition pipeline. Businesses come from Yelp; an email address is looked for on
+              each one&apos;s website, and every address gets one pitch at most. Leads that don&apos;t reply within a week move to
+              the call deck.
+            </p>
+          </HowThisWorks>
+        </div>
       </div>
 
       <OutreachControls pipeline="cold-outreach" paused={settings.outboundPaused} unsent={unsent} blocked={blocked} />

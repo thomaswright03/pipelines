@@ -295,25 +295,17 @@ test("an empty lead list shows one first-run message; a search with no hits show
   await expect(page.getByText("Showing 1–2 of 2 leads")).toBeVisible();
 });
 
-for (const width of [375, 768, 1440]) {
-  test(`the sender address never splits inside a word at ${width}px`, async ({ page }) => {
+for (const width of [375, 768, 1440, 2560]) {
+  test(`the sender address never breaks inside itself at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     for (const path of ["/vault-pipeline", "/dataleadsell"]) {
       await page.goto(path);
-      // Each piece between the allowed break points ("@" and ".") is its own
-      // text node; none of them may wrap onto two lines.
-      const splitPieces = await page.locator("main p code").first().evaluate((code) => {
-        let split = 0;
-        for (const node of Array.from(code.childNodes)) {
-          if (node.nodeType !== Node.TEXT_NODE) continue;
-          const range = document.createRange();
-          range.selectNodeContents(node);
-          const lines = new Set(Array.from(range.getClientRects()).map((r) => Math.round(r.top)));
-          if (lines.size > 1) split++;
-        }
-        return split;
+      const lines = await page.locator("main p code").first().evaluate((code) => {
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        return new Set(Array.from(range.getClientRects()).map((r) => Math.round(r.top))).size;
       });
-      expect(splitPieces).toBe(0);
+      expect(lines).toBe(1);
     }
   });
 }
@@ -331,5 +323,12 @@ test("Settings shows whether each connection is working", async ({ page }) => {
   await expect(connections.locator('[data-connection="daily-run"]')).toContainText("The run stopped with an error.");
   // The browser tests use the local outbox and no Yelp key.
   await expect(connections.locator('[data-connection="mail"]')).toContainText("Test mode");
-  await expect(connections.locator('[data-connection="yelp"]')).toHaveAttribute("data-tone", "warn");
+  await expect(connections.locator('[data-connection="yelp"]')).toHaveAttribute("data-tone", "error");
+  // Nothing has proved reply forwarding works yet, so it isn't shown as working.
+  await expect(connections.locator('[data-connection="replies"]')).toContainText("Not confirmed yet");
+
+  // "Test connection" logs in to the mail service (here, the local outbox) without sending.
+  await connections.getByRole("button", { name: "Test connection: Sending email" }).click();
+  await expect(connections.locator('[data-connection="mail"]').getByRole("status")).toContainText("No email was sent");
+  await expect(connections.locator('[data-connection="mail"]')).toContainText("Connection test passed");
 });

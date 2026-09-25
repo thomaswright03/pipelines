@@ -1,19 +1,7 @@
-import { Fragment } from "react";
-
 /**
- * An email address in <code> that never splits inside a word: on a narrow
- * screen it may wrap only after the "@" or a ".".
+ * An email address in <code> that never breaks inside itself: it stays on
+ * one line and, when the line is full, wraps to the next as a whole.
  */
 export default function EmailCode({ email }: { email: string }) {
-  const parts = email.split(/(?<=[@.])/);
-  return (
-    <code className="whitespace-nowrap rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">
-      {parts.map((part, i) => (
-        <Fragment key={i}>
-          {part}
-          {i < parts.length - 1 && <wbr />}
-        </Fragment>
-      ))}
-    </code>
-  );
+  return <code className="inline-block whitespace-nowrap rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">{email}</code>;
 }

@@ -13,6 +13,7 @@ import BulkSendButton from "@/components/BulkSendButton";
 import { plural } from "@/lib/format";
 import FindEmailsButton from "@/components/FindEmailsButton";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import HowThisWorks from "@/components/HowThisWorks";
 
 /**
  * Each control's result message belongs to the latest action only: starting
@@ -121,15 +122,15 @@ export default function OutreachControls({
         <FindEmailsButton pipeline={pipeline} disabled={isPending} epoch={epoch} startControl={startControl} />
       </div>
 
-      <p className="text-sm muted">
-        Only {isAgents ? "agents" : "businesses"} an email was found for are saved. Yelp{isAgents ? " and ADRE don't" : " doesn't"} give
-        a website, so each search guesses one from the name and keeps it only if the site shows the{" "}
-        {isAgents ? "agent" : "business"}&apos;s phone number, street address or city — expect fewer new {noun.many} than results.{" "}
-        {isAgents
-          ? "An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox."
-          : ""}{" "}
-        Replies to your emails are logged automatically; record anything else from the lead page.
-      </p>
+      <HowThisWorks summary="How finding and sending work">
+        <p>
+          Only {isAgents ? "agents" : "businesses"} an email was found for are saved. Yelp{isAgents ? " and ADRE don't" : " doesn't"} give
+          a website, so each search guesses one from the name and keeps it only if the site shows the{" "}
+          {isAgents ? "agent" : "business"}&apos;s phone number, street address or city — expect fewer new {noun.many} than results.
+          {isAgents ? " An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox." : ""}
+        </p>
+        <p>Replies to your emails are logged automatically; record anything else from the lead page.</p>
+      </HowThisWorks>
     </section>
   );
 }

@@ -163,24 +163,7 @@ export default function VaultScheduleSettings({
                     <span className="muted">{run.startedAt}</span>
                   </div>
                   {run.summary && <p className="break-words">{run.summary}</p>}
-                  {run.errors.length > 0 && (
-                    <details>
-                      <summary
-                        className={`cursor-pointer text-sm font-medium ${
-                          run.status === "succeeded" ? "" : "text-red-800 dark:text-red-300"
-                        }`}
-                      >
-                        Details ({run.errors.length})
-                      </summary>
-                      <ul className="mt-1 list-disc pl-5 text-sm muted">
-                        {run.errors.map((e, i) => (
-                          <li key={i} className="break-words">
-                            {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
+                  <RunErrors status={run.status} errors={run.errors} />
                 </li>
               );
             })}
@@ -188,5 +171,33 @@ export default function VaultScheduleSettings({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * A failed or partial run says why right in its row; the rest of its
+ * messages (and a clean run's skipped leads) sit behind Details.
+ */
+function RunErrors({ status, errors }: { status: string; errors: string[] }) {
+  const problem = status !== "succeeded" && status !== "running" && errors.length > 0;
+  const rest = problem ? errors.slice(1) : errors;
+  return (
+    <>
+      {problem && <p className="break-words text-red-800 dark:text-red-300">{errors[0]}</p>}
+      {rest.length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-sm font-medium">
+            {problem ? "More details" : "Details"} ({rest.length})
+          </summary>
+          <ul className="mt-1 list-disc pl-5 text-sm muted">
+            {rest.map((e, i) => (
+              <li key={i} className="break-words">
+                {e}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
   );
 }
