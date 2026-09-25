@@ -61,7 +61,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <UnlessDatabaseDown>{children}</UnlessDatabaseDown>
         </main>
         <footer className="border-t border-zinc-200/70 px-6 py-4 text-center text-xs text-zinc-600 dark:border-zinc-800/70 dark:text-zinc-400">
-          © {new Date().getFullYear()} Wright AI Solutions LLC
+          © {new Date().getFullYear()} Wright AI Solutions LLC ·{" "}
+          <Link href="/help" className="underline underline-offset-2">
+            Operator guide
+          </Link>
         </footer>
       </body>
     </html>

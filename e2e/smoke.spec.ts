@@ -138,6 +138,37 @@ test("a lead's details can be edited, with a link to whoever already holds an ad
   await expect(page.getByRole("button", { name: "Send outreach email" })).toBeEnabled();
 });
 
+test("leaving a form with unsaved changes asks first; a saved form doesn't", async ({ page }) => {
+  const [id] = await seedColdLeads(1);
+  await page.goto(`/vault-pipeline/${id}/edit`);
+  const back = page.getByRole("link", { name: "← Back to Test Business 1" });
+
+  // Nothing typed yet: leaving just leaves.
+  await back.click();
+  await expect(page).toHaveURL(new RegExp(`/vault-pipeline/${id}$`));
+
+  await page.goto(`/vault-pipeline/${id}/edit`);
+  await page.locator("#field-notes").fill("Call back after 3pm");
+  await back.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Leave without saving?" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/vault-pipeline/${id}/edit$`));
+  await expect(page.locator("#field-notes")).toHaveValue("Call back after 3pm");
+
+  await back.click();
+  await page.getByRole("dialog").getByRole("button", { name: "Leave without saving" }).click();
+  await expect(page).toHaveURL(new RegExp(`/vault-pipeline/${id}$`));
+
+  // Saving navigates away without asking.
+  await page.goto(`/vault-pipeline/${id}/edit`);
+  await page.locator("#field-notes").fill("Saved note");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page).toHaveURL(new RegExp(`/vault-pipeline/${id}$`));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("deleting a lead asks first, naming it, then removes it from the list", async ({ page }) => {
   const [id] = await seedColdLeads(1);
   await page.goto(`/vault-pipeline/${id}`);
@@ -191,6 +222,7 @@ test("every page has its own tab title", async ({ page }) => {
     ["/vault-pipeline/cold-call", /^Cold Outreach — Call deck/],
     ["/dataleadsell/stats", /^dataleadsell — Stats/],
     ["/settings", /^Settings/],
+    ["/help", /^Operator guide/],
     [`/vault-pipeline/${id}`, /^Test Business 1 — Cold Outreach/],
     ["/nope", /^Page not found · Pipelines$/],
   ];
