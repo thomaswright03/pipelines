@@ -1,4 +1,4 @@
-// Aggregate numbers for each pipeline's "Data Central" page, computed fresh
+// Aggregate numbers for each pipeline's "Stats" page, computed fresh
 // on every load. Day boundaries ("today", "last 7 days", the per-day bars)
 // follow the operator's time zone (src/lib/time.ts), not the server's UTC.
 import { prisma } from "@/lib/db";

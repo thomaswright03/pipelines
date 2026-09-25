@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import ColdCallFlashcards from "@/components/ColdCallFlashcards";
 
+export const metadata: Metadata = { title: "dataleadsell — Call deck" };
 export const dynamic = "force-dynamic";
 
 // Agents who didn't answer the email (or had none) — the phone follow-up.

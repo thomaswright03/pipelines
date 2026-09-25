@@ -6,8 +6,8 @@ export function StatCard({ label, value, sublabel }: { label: string; value: str
   return (
     <div className="card p-4">
       <div className="accent-text text-2xl font-bold">{typeof value === "number" ? value.toLocaleString("en-US") : value}</div>
-      <div className="text-xs text-zinc-700 dark:text-zinc-300">{label}</div>
-      {sublabel && <div className="mt-1 text-xs muted">{sublabel}</div>}
+      <div className="text-sm text-zinc-700 dark:text-zinc-300">{label}</div>
+      {sublabel && <div className="mt-1 text-sm muted">{sublabel}</div>}
     </div>
   );
 }
@@ -105,12 +105,12 @@ export function EmailPerformance({
         <StatCard
           label={conversion.label}
           value={conversion.value}
-          sublabel={shareOf(conversion.value, s.pastNew, "leads that got past New")}
+          sublabel={shareOf(conversion.value, s.pastNew, "leads worked so far (emailed, called or closed)")}
         />
       </div>
-      <p className="text-xs muted">
-        A reply counts whenever it arrives, even after the lead moved to the call deck. “Past New” means any status other than
-        New. “Today” and the daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
+      <p className="text-sm muted">
+        A reply counts whenever it arrives, even after the lead moved to the call deck. “Leads worked so far” means every lead
+        that is no longer New. “Today” and the daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
       </p>
     </StatSection>
   );

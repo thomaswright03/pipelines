@@ -1,0 +1,142 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { addSuppressionAction, removeSuppressionByEmailAction } from "@/lib/actions/settings";
+import type { ActionResult } from "@/lib/outreach/lead-actions";
+import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import { useConfirm } from "@/components/ConfirmDialog";
+
+export type SuppressionRow = { email: string; since: string; why: string };
+
+/** The do-not-email list's rows with Remove, plus the "add an address" form. */
+export function DoNotEmailRows({ rows }: { rows: SuppressionRow[] }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [dialog, confirm] = useConfirm();
+
+  function run(fn: () => Promise<ActionResult>) {
+    setFeedback(null);
+    startTransition(async () => {
+      try {
+        const result = await fn();
+        setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
+      } catch {
+        setFeedback({ ok: false, text: "Couldn't reach the server — the list didn't change. Try again." });
+      }
+      router.refresh();
+    });
+  }
+
+  async function remove(row: SuppressionRow) {
+    const confirmed = await confirm({
+      title: `Remove ${row.email} from the do-not-email list?`,
+      body: (
+        <>
+          <p>
+            On the list since {row.since}. Why: <q className="font-medium">{row.why}</q>
+          </p>
+          <p className="mt-2">
+            Only do this if they did <strong>not</strong> ask to stop — for example, an entry added by mistake. Both pipelines
+            may email this address again.
+          </p>
+        </>
+      ),
+      confirmLabel: "Remove from list",
+      danger: true,
+    });
+    if (confirmed) run(() => removeSuppressionByEmailAction(row.email));
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {dialog}
+      <ActionMessage feedback={feedback} />
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+            <tr>
+              <th className="py-2 pr-3">Address</th>
+              <th className="py-2 pr-3">Since</th>
+              <th className="py-2 pr-3">Why</th>
+              <th className="py-2">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {rows.map((row) => (
+              <tr key={row.email}>
+                <td className="max-w-[16rem] break-all py-2 pr-3">{row.email}</td>
+                <td className="whitespace-nowrap py-2 pr-3 muted">{row.since}</td>
+                <td className="py-2 pr-3 muted">{row.why}</td>
+                <td className="py-2 text-right">
+                  <button type="button" disabled={isPending} onClick={() => remove(row)} className="btn-ghost text-sm">
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function AddSuppressionForm() {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setFeedback(null);
+    if (!email.trim()) {
+      setFeedback({ ok: false, text: "Enter the address to stop emailing." });
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const result = await addSuppressionAction(email, note);
+        if (result.ok) {
+          setEmail("");
+          setNote("");
+        }
+        setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
+      } catch {
+        setFeedback({ ok: false, text: "Couldn't reach the server — the list didn't change. Try again." });
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="field-label min-w-0 flex-1">
+          Address
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            maxLength={254}
+            placeholder="name@business.com"
+            className="input"
+          />
+        </label>
+        <label className="field-label min-w-0 flex-1">
+          Why (optional)
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Asked by phone" className="input" />
+        </label>
+        <button type="submit" disabled={isPending} className="btn-secondary">
+          {isPending ? "Adding…" : "Add to list"}
+        </button>
+      </div>
+      <ActionMessage feedback={feedback} />
+    </form>
+  );
+}

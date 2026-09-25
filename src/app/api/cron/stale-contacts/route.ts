@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       const result = await routeStaleContacts();
       routed = result;
       const parts = Object.entries(result).map(
-        ([pipeline, c]) => `${pipeline}: ${c.coldCall} to the cold-call list, ${c.contactless} to the contactless list`,
+        ([pipeline, c]) => `${pipeline}: ${c.coldCall} to the cold-call list, ${c.contactless} to the no-phone-number list`,
       );
       return {
         status: "succeeded",

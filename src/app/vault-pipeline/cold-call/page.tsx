@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import ColdCallFlashcards from "@/components/ColdCallFlashcards";
 
+export const metadata: Metadata = { title: "Cold Outreach — Call deck" };
 export const dynamic = "force-dynamic";
 
 export default async function ColdCallPage() {

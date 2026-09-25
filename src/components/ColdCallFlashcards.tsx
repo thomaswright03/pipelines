@@ -90,7 +90,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
     return (
       <div className="card p-8 text-center">
         <p className="text-sm muted">Nobody is on the call list right now.</p>
-        <p className="mt-1 text-xs muted">Leads land here a week after an unanswered email, or when no email could be found.</p>
+        <p className="mt-1 text-sm muted">Leads land here a week after an unanswered email, or when no email could be found.</p>
       </div>
     );
   }
@@ -236,7 +236,7 @@ function Summary({ log, basePath }: { log: Logged[]; basePath: string }) {
           </ul>
         </div>
       )}
-      <p className="text-center text-xs muted">No-answers stay on the list for another try. Reload the page to start a fresh deck.</p>
+      <p className="text-center text-sm muted">No-answers stay on the list for another try. Reload the page to start a fresh deck.</p>
     </div>
   );
 }

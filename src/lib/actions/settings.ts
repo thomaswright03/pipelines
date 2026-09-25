@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/log";
 import { setAllowCrossPipelineRepeats, setOutboundPaused } from "@/lib/outreach/settings";
-import type { ActionResult } from "@/lib/outreach/lead-actions";
+import { addSuppression, removeSuppressionByEmail, type ActionResult } from "@/lib/outreach/lead-actions";
 
 export async function setOutboundPausedAction(paused: boolean): Promise<ActionResult> {
   try {
@@ -35,5 +35,33 @@ export async function setAllowCrossPipelineRepeatsAction(allow: boolean): Promis
   } catch (err) {
     logError("action.setAllowCrossPipelineRepeats", err, { allow });
     return { ok: false, error: "Couldn't save that — the setting didn't change. Try again in a moment." };
+  }
+}
+
+function refreshLists() {
+  revalidatePath("/settings");
+  revalidatePath("/vault-pipeline", "layout");
+  revalidatePath("/dataleadsell", "layout");
+}
+
+export async function addSuppressionAction(email: string, note: string): Promise<ActionResult> {
+  try {
+    const result = await addSuppression(String(email ?? ""), String(note ?? ""));
+    refreshLists();
+    return result;
+  } catch (err) {
+    logError("action.addSuppression", err);
+    return { ok: false, error: "Couldn't save that — the list didn't change. Try again in a moment." };
+  }
+}
+
+export async function removeSuppressionByEmailAction(email: string): Promise<ActionResult> {
+  try {
+    const result = await removeSuppressionByEmail(String(email ?? ""));
+    refreshLists();
+    return result;
+  } catch (err) {
+    logError("action.removeSuppressionByEmail", err);
+    return { ok: false, error: "Couldn't save that — the list didn't change. Try again in a moment." };
   }
 }

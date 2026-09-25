@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getVaultStats } from "@/lib/pipeline-stats";
 import { makeColdLead } from "./helpers";
 
-describe("Data Central numbers", () => {
+describe("Stats page numbers", () => {
   it("reply rate is replied leads ÷ distinct leads emailed, not ÷ sends", async () => {
     const leads = await Promise.all(Array.from({ length: 10 }, (_, i) => makeColdLead({ email: `r${i}@x.test` })));
     for (const lead of leads) await prisma.leadEmailSendLog.create({ data: { leadId: lead.id, email: lead.email! } });

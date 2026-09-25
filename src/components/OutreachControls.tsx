@@ -1,17 +1,25 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { runPipelineScrapeAction, searchLeadsAction, type LeadSearchState } from "@/lib/actions/vault-pipeline";
 import { runAgentPipelineScrapeAction, searchAgentsAction, type AgentSearchState } from "@/lib/actions/dataleadsell";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { US_STATE_OPTIONS } from "@/lib/us-states";
 import { SOLD_COUNTIES, citiesInCounty } from "@/lib/agent-cities";
 import BulkSendButton from "@/components/BulkSendButton";
 import { plural } from "@/lib/format";
 import FindEmailsButton from "@/components/FindEmailsButton";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+
+/**
+ * Each control's result message belongs to the latest action only: starting
+ * any control bumps the "epoch", and a message is shown only while its
+ * control is the latest one started.
+ */
+type StartControl = () => number;
 
 /**
  * The pipeline's manual controls: find new leads (next city, or a city you
@@ -22,19 +30,33 @@ export default function OutreachControls({
   pipeline,
   paused,
   unsent,
+  blocked,
 }: {
   pipeline: PipelineId;
   paused: boolean;
   /** New leads with an address that haven't been emailed yet. */
   unsent: number;
+  /** New leads with an address that can't be sent (already pitched, opted out, unverified…). */
+  blocked: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [showSearch, setShowSearch] = useState(false);
   const isAgents = pipeline === "dataleadsell";
+  const noun = isAgents ? { one: "agent", many: "agents" } : { one: "lead", many: "leads" };
+
+  const epochRef = useRef(0);
+  const [epoch, setEpoch] = useState(0);
+  const [feedbackEpoch, setFeedbackEpoch] = useState(-1);
+  const startControl: StartControl = () => {
+    epochRef.current += 1;
+    setEpoch(epochRef.current);
+    return epochRef.current;
+  };
 
   function runPipeline() {
+    setFeedbackEpoch(startControl());
     setFeedback(null);
     startTransition(async () => {
       let result: ActionResult;
@@ -72,28 +94,37 @@ export default function OutreachControls({
         <p className="flex-1 text-sm">
           {unsent > 0 ? (
             <>
-              <strong>{plural(unsent, isAgents ? "agent" : "lead", isAgents ? "agents" : "leads")}</strong> found but not yet
-              emailed.
+              <strong>{plural(unsent, noun.one, noun.many)}</strong> found but not yet emailed.
             </>
           ) : (
-            <span className="muted">Every lead with an email address has been emailed.</span>
+            <span className="muted">No New {noun.many} are ready to email.</span>
+          )}
+          {blocked > 0 && (
+            <>
+              {" "}
+              <Link href={`${PIPELINE_BASE_PATH[pipeline]}?status=new`} className="text-indigo-700 underline underline-offset-2 dark:text-indigo-300">
+                {plural(blocked, `New ${noun.one}`, `New ${noun.many}`)} with an address {blocked === 1 ? "is" : "are"} held back
+              </Link>{" "}
+              <span className="muted">(already pitched, opted out, or the address needs checking — see the flagged rows).</span>
+            </>
           )}
         </p>
         <BulkSendButton pipeline={pipeline} disabled={isPending || paused || unsent === 0} />
       </div>
       {paused && <p className="notice-warning">Outbound email is paused — sending is off until it&apos;s resumed in Settings.</p>}
-      <ActionMessage feedback={feedback} />
+      <ActionMessage feedback={feedbackEpoch === epoch ? feedback : null} />
 
-      {showSearch && (isAgents ? <AgentSearchForm /> : <BusinessSearchForm />)}
+      {showSearch &&
+        (isAgents ? <AgentSearchForm epoch={epoch} startControl={startControl} /> : <BusinessSearchForm epoch={epoch} startControl={startControl} />)}
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
-        <FindEmailsButton pipeline={pipeline} disabled={isPending} />
+        <FindEmailsButton pipeline={pipeline} disabled={isPending} epoch={epoch} startControl={startControl} />
       </div>
 
-      <p className="text-xs muted">
+      <p className="text-sm muted">
         Only {isAgents ? "agents" : "businesses"} an email was found for are saved. Yelp{isAgents ? " and ADRE don't" : " doesn't"} give
-        a website, so each search guesses one from the name (a few plausible domains, checked directly) — expect fewer new leads
-        than results.{" "}
+        a website, so each search guesses one from the name and keeps it only if the site shows the{" "}
+        {isAgents ? "agent" : "business"}&apos;s phone number, street address or city — expect fewer new {noun.many} than results.{" "}
         {isAgents
           ? "An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox."
           : ""}{" "}
@@ -105,9 +136,10 @@ export default function OutreachControls({
 
 const initialSearch: LeadSearchState = {};
 
-function BusinessSearchForm() {
+function BusinessSearchForm({ epoch, startControl }: { epoch: number; startControl: StartControl }) {
   const router = useRouter();
   const [values, setValues] = useState({ city: "", state: "", businessType: "" });
+  const [submittedEpoch, setSubmittedEpoch] = useState(-1);
   const [clientError, setClientError] = useState<string | null>(null);
   const [state, action, pending] = useActionState(async (prev: LeadSearchState, formData: FormData) => {
     const result = await searchLeadsAction(prev, formData);
@@ -119,6 +151,7 @@ function BusinessSearchForm() {
     <form
       action={action}
       onSubmit={(e) => {
+        setSubmittedEpoch(startControl());
         if (!values.city.trim() || !values.state) {
           e.preventDefault();
           setClientError(!values.city.trim() ? "Enter a city." : "Pick a state.");
@@ -168,15 +201,16 @@ function BusinessSearchForm() {
           {pending ? "Searching…" : "Search"}
         </button>
       </div>
-      <SearchResult error={clientError ?? state.error} message={clientError ? undefined : state.message} />
+      {submittedEpoch === epoch && <SearchResult error={clientError ?? state.error} message={clientError ? undefined : state.message} />}
     </form>
   );
 }
 
 const initialAgentSearch: AgentSearchState = {};
 
-function AgentSearchForm() {
+function AgentSearchForm({ epoch, startControl }: { epoch: number; startControl: StartControl }) {
   const router = useRouter();
+  const [submittedEpoch, setSubmittedEpoch] = useState(-1);
   const [county, setCounty] = useState(SOLD_COUNTIES[0]?.county ?? "");
   const [city, setCity] = useState("");
   const [state, action, pending] = useActionState(async (prev: AgentSearchState, formData: FormData) => {
@@ -187,7 +221,7 @@ function AgentSearchForm() {
   const cities = citiesInCounty(county);
 
   return (
-    <form action={action} className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+    <form action={action} onSubmit={() => setSubmittedEpoch(startControl())} className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
       <div className="flex flex-wrap items-end gap-2">
         <label className="field-label w-44">
           County
@@ -222,7 +256,7 @@ function AgentSearchForm() {
           {pending ? "Searching…" : "Search"}
         </button>
       </div>
-      <SearchResult error={state.error} message={state.message} />
+      {submittedEpoch === epoch && <SearchResult error={state.error} message={state.message} />}
     </form>
   );
 }

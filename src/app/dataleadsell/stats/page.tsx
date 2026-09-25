@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { getDataleadsellStats } from "@/lib/pipeline-stats";
 import { DATALEADSELL_STATUSES } from "@/lib/lead-status";
 import { StatCard, StatSection, BreakdownList, DayTrend, EmailPerformance, StatusBreakdown } from "@/components/PipelineStatsWidgets";
 
+export const metadata: Metadata = { title: "dataleadsell — Stats" };
 export const dynamic = "force-dynamic";
 
 export default async function DataleadsellStatsPage() {
@@ -10,7 +12,7 @@ export default async function DataleadsellStatsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="accent-text text-2xl font-bold tracking-tight">dataleadsell.com — Data Central</h1>
+        <h1 className="accent-text text-2xl font-bold tracking-tight">dataleadsell.com — Stats</h1>
         <p className="mt-1 text-sm muted">Every number this pipeline tracks, worked out fresh on each visit.</p>
       </div>
 

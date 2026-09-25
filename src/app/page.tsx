@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { PIPELINES } from "@/lib/pipelines";
 import { getPipelineMeta } from "@/lib/pipeline-meta";
 import PipelineCard from "@/components/PipelineCard";
 
+export const metadata: Metadata = { title: { absolute: "Dashboard · Pipelines" } };
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {

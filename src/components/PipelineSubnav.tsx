@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Leads · Call deck · Data Central, shown on every page of a pipeline.
+// Leads · Call deck · Stats, shown on every page of a pipeline.
 export default function PipelineSubnav({ basePath, label }: { basePath: string; label: string }) {
   const pathname = usePathname();
   const links = [
     { href: basePath, label: "Leads", active: pathname === basePath || /^\/[^/]+\/(?!cold-call|stats)[^/]+$/.test(pathname) },
     { href: `${basePath}/cold-call`, label: "Call deck", active: pathname.startsWith(`${basePath}/cold-call`) },
-    { href: `${basePath}/stats`, label: "Data Central", active: pathname.startsWith(`${basePath}/stats`) },
+    { href: `${basePath}/stats`, label: "Stats", active: pathname.startsWith(`${basePath}/stats`) },
   ];
   return (
     <nav aria-label={`${label} sections`} className="flex flex-wrap gap-1.5">

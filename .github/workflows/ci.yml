@@ -62,9 +62,10 @@ jobs:
           ' >> "$GITHUB_STEP_SUMMARY"
 
       # Browser smoke tests against the production build: single send, bulk
-      # send with Stop, pause/resume, lead form validation, destructive
-      # confirm focus, and the lead list at phone-to-desktop widths. Mail
-      # goes to a local outbox; the app uses a separate local database.
+      # send with Stop, pause/resume, lead form validation, editing and
+      # deleting a lead, attaching an unmatched reply, confirm-dialog focus,
+      # tab titles, and the lead list at phone-to-desktop widths. Mail goes
+      # to a local outbox; the app uses a separate local database.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
         env:

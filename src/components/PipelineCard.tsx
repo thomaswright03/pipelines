@@ -132,9 +132,15 @@ export default function PipelineCard({
               Open pipeline
             </Link>
           ) : (
-            <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-              Open dashboard ↗
-            </a>
+            <div className="flex flex-col items-start gap-1">
+              <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
+                Open developer console (Vercel) ↗
+              </a>
+              <p className="text-sm muted">
+                Runs on its own, answering new GoHighLevel leads. The console shows whether it&apos;s deployed and its logs; there is
+                nothing to operate here.
+              </p>
+            </div>
           )}
         </div>
       )}

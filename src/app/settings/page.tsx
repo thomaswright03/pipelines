@@ -1,10 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import SettingsControls from "@/components/SettingsControls";
+import { AddSuppressionForm, DoNotEmailRows } from "@/components/DoNotEmailList";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { resolveTransportKind } from "@/lib/mail-transport-kind";
 import { formatDate, formatDateTime } from "@/lib/time";
 
+export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 
 const TRANSPORT_DESCRIPTION = {
@@ -13,13 +16,39 @@ const TRANSPORT_DESCRIPTION = {
   outbox: "Test mode — emails are saved, not delivered. Nobody receives them.",
 } as const;
 
-export default async function SettingsPage() {
-  const [settings, suppressed, suppressedCount] = await Promise.all([
+const DNE_PAGE_SIZE = 25;
+
+function first(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
+function whyText(s: { source: string | null; evidence: string | null; reason: string | null }): string {
+  if (s.source === "inbound_reply") return `Reply said “${s.evidence ?? "opt out"}”`;
+  if (s.source === "manual") return s.evidence ? `Marked by hand: ${s.evidence}` : "Marked by hand";
+  return s.reason ?? "—";
+}
+
+export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
+  const raw = await searchParams;
+  const q = first(raw.q).trim().slice(0, 100);
+  const requestedPage = Math.max(1, Number.parseInt(first(raw.page), 10) || 1);
+  const where = q ? { email: { contains: q.toLowerCase() } } : {};
+
+  const [settings, matching, suppressedCount] = await Promise.all([
     getAppSettings(),
-    prisma.suppressedEmail.findMany({ orderBy: { createdAt: "desc" }, take: 25 }),
+    prisma.suppressedEmail.count({ where }),
     prisma.suppressedEmail.count(),
   ]);
+  const pages = Math.max(1, Math.ceil(matching / DNE_PAGE_SIZE));
+  const page = Math.min(requestedPage, pages);
+  const suppressed = await prisma.suppressedEmail.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * DNE_PAGE_SIZE,
+    take: DNE_PAGE_SIZE,
+  });
   const transport = resolveTransportKind();
+  const pageHref = (n: number) => `/settings?${new URLSearchParams({ ...(q ? { q } : {}), page: String(n) })}#dne-heading`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,49 +68,55 @@ export default async function SettingsPage() {
           Where email goes
         </h2>
         <p className="text-sm">{TRANSPORT_DESCRIPTION[transport]}</p>
-        <p className="text-xs muted">This is part of how the app is set up; ask your developer if it looks wrong.</p>
+        <p className="text-sm muted">This is part of how the app is set up; ask your developer if it looks wrong.</p>
       </section>
 
-      <section aria-labelledby="dne-heading" className="card flex flex-col gap-2 p-4">
+      <section aria-labelledby="dne-heading" className="card flex flex-col gap-3 p-4">
         <h2 id="dne-heading" className="text-base font-semibold">
           Do-not-email list ({suppressedCount.toLocaleString("en-US")})
         </h2>
         <p className="text-sm muted">
-          Addresses that opted out. Neither pipeline emails them. To undo a wrong entry, open a lead with that address and use
-          “Remove from do-not-email list”.
+          Addresses that opted out. Neither pipeline emails them. Replies asking to stop are added automatically; add anyone
+          who asked another way below.
         </p>
+        <AddSuppressionForm />
+        <form method="get" action="/settings" className="flex flex-wrap items-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <label className="field-label min-w-0 flex-1">
+            Search the list
+            <input name="q" defaultValue={q} maxLength={100} placeholder="Part of an address" className="input" />
+          </label>
+          <button type="submit" className="btn-secondary">
+            Search
+          </button>
+          {q && (
+            <Link href="/settings#dne-heading" className="btn-ghost">
+              Clear
+            </Link>
+          )}
+        </form>
         {suppressed.length === 0 ? (
-          <p className="text-sm muted">Nobody has opted out.</p>
+          <p className="text-sm muted">{q ? `No address on the list contains “${q}”.` : "Nobody has opted out."}</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-                <tr>
-                  <th className="py-2 pr-3">Address</th>
-                  <th className="py-2 pr-3">Since</th>
-                  <th className="py-2">Why</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {suppressed.map((s) => (
-                  <tr key={s.email}>
-                    <td className="max-w-[16rem] truncate py-2 pr-3" title={s.email}>
-                      {s.email}
-                    </td>
-                    <td className="whitespace-nowrap py-2 pr-3 muted">{formatDate(s.createdAt)}</td>
-                    <td className="py-2 muted">
-                      {s.source === "inbound_reply"
-                        ? `Reply said “${s.evidence ?? "opt out"}”`
-                        : s.source === "manual"
-                          ? "Marked by hand"
-                          : (s.reason ?? "—")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {suppressedCount > suppressed.length && <p className="mt-2 text-xs muted">Showing the latest {suppressed.length}.</p>}
-          </div>
+          <DoNotEmailRows
+            rows={suppressed.map((s) => ({ email: s.email, since: formatDate(s.createdAt), why: whyText(s) }))}
+          />
+        )}
+        {pages > 1 && (
+          <nav aria-label="Do-not-email list pages" className="flex flex-wrap items-center gap-3 text-sm">
+            {page > 1 && (
+              <Link href={pageHref(page - 1)} className="btn-ghost">
+                ← Newer
+              </Link>
+            )}
+            <span className="muted">
+              Page {page} of {pages} · {matching.toLocaleString("en-US")} {q ? "matching" : "addresses"}
+            </span>
+            {page < pages && (
+              <Link href={pageHref(page + 1)} className="btn-ghost">
+                Older →
+              </Link>
+            )}
+          </nav>
         )}
       </section>
 

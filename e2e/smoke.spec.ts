@@ -2,7 +2,7 @@
 // local outbox only (see playwright.config.ts).
 import { readdir, rm } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { count, leadStatus, resetDb, seedColdLeads } from "./db";
+import { count, leadStatus, resetDb, seedColdLeads, withDb } from "./db";
 import { OUTBOX_DIR } from "../playwright.config";
 
 async function outboxCount(): Promise<number> {
@@ -50,7 +50,7 @@ test("a single send asks first, emails once and moves the lead to Contacted", as
   await expect(page.getByRole("button", { name: "Send outreach email" })).toHaveCount(0);
 });
 
-test("a bulk send shows who it will email, and Stop halts it between batches", async ({ page }) => {
+test("a bulk send shows who it will email, and Stop halts it after the email in progress", async ({ page }) => {
   await seedColdLeads(25);
   await page.goto("/vault-pipeline");
   await expect(page.getByText("25 leads found but not yet emailed.")).toBeVisible();
@@ -60,12 +60,12 @@ test("a bulk send shows who it will email, and Stop halts it between batches", a
   await expect(dialog).toContainText("25 leads");
   await dialog.getByRole("button", { name: "Send to 25 leads" }).click();
   await dialog.getByRole("button", { name: "Stop sending" }).click();
-  await expect(dialog.getByRole("button", { name: "Stopping after this batch…" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Stopping after this email…" })).toBeDisabled();
 
   await expect(dialog.getByText(/You stopped the send\./)).toBeVisible({ timeout: 60_000 });
   const sent = await count(`SELECT count(*) AS n FROM "Lead" WHERE status = 'contacted'`);
-  expect(sent).toBeGreaterThan(0);
-  expect(sent).toBeLessThan(25);
+  // One email per server call: at most the one in progress when Stop was pressed (plus one racing it).
+  expect(sent).toBeLessThanOrEqual(2);
   expect(await outboxCount()).toBe(sent);
 
   await dialog.getByRole("button", { name: "Close" }).click();
@@ -103,6 +103,100 @@ test("pressing Enter on a destructive confirmation cancels it", async ({ page })
   await expect(dialog).toHaveCount(0);
   expect(await count(`SELECT count(*) AS n FROM "SuppressedEmail"`)).toBe(0);
   expect(await leadStatus(id!)).toBe("new");
+});
+
+test("pressing Enter on a send confirmation sends", async ({ page }) => {
+  const [id] = await seedColdLeads(1);
+  await page.goto(`/vault-pipeline/${id}`);
+  await page.getByRole("button", { name: "Send outreach email" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Send email" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/Sent the pitch to Test Business 1/)).toBeVisible();
+  expect(await outboxCount()).toBe(1);
+});
+
+test("a lead's details can be edited, with a link to whoever already holds an address", async ({ page }) => {
+  const [id, otherId] = await seedColdLeads(2);
+  await page.goto(`/vault-pipeline/${id}`);
+  await page.getByRole("link", { name: "Edit details" }).click();
+  await expect(page).toHaveTitle(/^Edit Test Business 1/);
+
+  await page.locator("#field-email").fill("owner2@business2.test");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.locator("#field-email-error")).toContainText("already belongs to Test Business 2");
+  await expect(page.locator("#field-email-error").getByRole("link", { name: "Open Test Business 2" })).toHaveAttribute(
+    "href",
+    `/vault-pipeline/${otherId}`,
+  );
+
+  await page.locator("#field-email").fill("fixed@business1.test");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page).toHaveURL(new RegExp(`/vault-pipeline/${id}$`));
+  await expect(page.getByRole("link", { name: "fixed@business1.test" })).toBeVisible();
+  await expect(page.getByText(/Entered by hand on/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send outreach email" })).toBeEnabled();
+});
+
+test("deleting a lead asks first, naming it, then removes it from the list", async ({ page }) => {
+  const [id] = await seedColdLeads(1);
+  await page.goto(`/vault-pipeline/${id}`);
+  await page.getByRole("button", { name: "Delete lead…" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Delete Test Business 1?" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await dialog.getByRole("button", { name: "Delete Test Business 1" }).click();
+  await expect(page).toHaveURL(/\/vault-pipeline$/);
+  expect(await count(`SELECT count(*) AS n FROM "Lead"`)).toBe(0);
+});
+
+test("a reply from an unknown address can be attached to the right lead", async ({ page }) => {
+  const [id] = await seedColdLeads(1, { status: "contacted" });
+  await withDb((db) =>
+    db.query(
+      `INSERT INTO "InboundReply" (id, "dedupeKey", "fromEmail", subject, "optedOut", matched, text, "receivedAt")
+       VALUES ('r1', 'mid:r1', 'assistant@otherdomain.test', 'Re: hello', false, '{}', 'Forwarding for my boss - interested!', now())`,
+    ),
+  );
+  await page.goto("/vault-pipeline");
+  await page.getByRole("link", { name: "Match it to a lead" }).click();
+  await expect(page).toHaveTitle(/^Replies/);
+  await expect(page.getByText("Forwarding for my boss - interested!")).toBeVisible();
+
+  await page.getByLabel("Find the lead it belongs to").fill("Test Business 1");
+  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByRole("button", { name: "Attach" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add reply" }).click();
+  await expect(page.getByText(/moved to Responded/)).toBeVisible();
+  expect(await leadStatus(id!)).toBe("responded");
+});
+
+test("starting another control clears the previous control's message", async ({ page }) => {
+  await page.goto("/vault-pipeline");
+  // No Yelp key in the browser tests, so this fails straight away with a message.
+  await page.getByRole("button", { name: "Find leads in the next city" }).click();
+  await expect(page.locator(".notice-error", { hasText: "Yelp isn't set up yet" })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("button", { name: "Search a specific city" }).click();
+  await page.getByRole("region", { name: "Pipeline controls" }).getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText("Enter a city.")).toBeVisible();
+  await expect(page.locator(".notice-error")).toHaveCount(1);
+});
+
+test("every page has its own tab title", async ({ page }) => {
+  const [id] = await seedColdLeads(1);
+  const expected: [string, RegExp][] = [
+    ["/", /^Dashboard · Pipelines$/],
+    ["/vault-pipeline", /^Cold Outreach — Leads/],
+    ["/vault-pipeline/cold-call", /^Cold Outreach — Call deck/],
+    ["/dataleadsell/stats", /^dataleadsell — Stats/],
+    ["/settings", /^Settings/],
+    [`/vault-pipeline/${id}`, /^Test Business 1 — Cold Outreach/],
+  ];
+  for (const [path, title] of expected) {
+    await page.goto(path);
+    await expect(page).toHaveTitle(title);
+  }
 });
 
 async function expectNoSidewaysScroll(page: Page) {

@@ -13,14 +13,27 @@ type Progress = { checked: number; found: number; remaining: number };
  * never checked, a few at a time, with live progress and a Stop button.
  * Leads with no findable email move to the phone lists.
  */
-export default function FindEmailsButton({ pipeline, disabled }: { pipeline: PipelineId; disabled?: boolean }) {
+export default function FindEmailsButton({
+  pipeline,
+  disabled,
+  epoch,
+  startControl,
+}: {
+  pipeline: PipelineId;
+  disabled?: boolean;
+  /** See OutreachControls: this button's message shows only while it was the last control used. */
+  epoch?: number;
+  startControl?: () => number;
+}) {
   const router = useRouter();
   const stopRequested = useRef(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [stopping, setStopping] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [startedEpoch, setStartedEpoch] = useState<number | undefined>(undefined);
 
   async function run() {
+    setStartedEpoch(startControl?.());
     stopRequested.current = false;
     setStopping(false);
     setFeedback(null);
@@ -92,10 +105,10 @@ export default function FindEmailsButton({ pipeline, disabled }: { pipeline: Pip
         </div>
       ) : (
         <button type="button" onClick={run} disabled={disabled} className="btn-secondary self-start">
-          Find emails for unchecked leads
+          Look up emails for leads without one
         </button>
       )}
-      <ActionMessage feedback={feedback} />
+      <ActionMessage feedback={startedEpoch === epoch ? feedback : null} />
     </div>
   );
 }

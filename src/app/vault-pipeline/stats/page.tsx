@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { getVaultStats } from "@/lib/pipeline-stats";
 import { COLD_OUTREACH_STATUSES } from "@/lib/lead-status";
 import { StatCard, StatSection, BreakdownList, DayTrend, EmailPerformance, StatusBreakdown } from "@/components/PipelineStatsWidgets";
 
+export const metadata: Metadata = { title: "Cold Outreach — Stats" };
 export const dynamic = "force-dynamic";
 
 export default async function VaultStatsPage() {
@@ -10,7 +12,7 @@ export default async function VaultStatsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="accent-text text-2xl font-bold tracking-tight">Cold Outreach — Data Central</h1>
+        <h1 className="accent-text text-2xl font-bold tracking-tight">Cold Outreach — Stats</h1>
         <p className="mt-1 text-sm muted">Every number this pipeline tracks, worked out fresh on each visit.</p>
       </div>
 
