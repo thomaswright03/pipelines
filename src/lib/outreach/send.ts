@@ -124,6 +124,19 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
       }
 
       const existing = await findExistingPitch(tx, pipelineId, email, settings.allowCrossPipelineRepeats);
+      if (existing && existing.pipeline === pipelineId && existing.leadId === leadId) {
+        const current = await pipeline.findLead(tx, leadId);
+        if (current && current.status !== "new") {
+          // This very lead holds the claim: another tab or a bulk send got
+          // there first. Not a duplicate address — nothing to flag.
+          throw new Refusal("not_new", `${lead.name} was just emailed from another tab or send — nothing more was sent.`);
+        }
+        // Pitched earlier and since moved back to New by hand: never again.
+        throw new Refusal(
+          "duplicate_address",
+          `${email} was already pitched to ${lead.name} earlier — nothing was sent, and ${lead.name} won't be auto-sent.`,
+        );
+      }
       if (existing) {
         throw new Refusal(
           "duplicate_address",
@@ -132,7 +145,7 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
       }
 
       if (!(await pipeline.claimForSend(tx, leadId, email, claimedAt))) {
-        throw new Refusal("not_new", `${lead.name} was just contacted by another send — nothing more was sent.`);
+        throw new Refusal("not_new", `${lead.name} was just emailed from another tab or send — nothing more was sent.`);
       }
       const recipient = await tx.outreachRecipient.create({
         data: { pipeline: pipelineId, email, leadId, state: "claimed", claimedAt },

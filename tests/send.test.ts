@@ -167,6 +167,20 @@ describe("concurrency and crash safety", () => {
     expect(mail.messages).toHaveLength(1);
   });
 
+  it("the same lead sent from two tabs at once: one email, and the loser isn't flagged as a duplicate address", async () => {
+    mail = captureMail({ delayMs: 30 });
+    const lead = await makeColdLead({ name: "Bob's Bakery", email: "bob@bakery.test" });
+    const results = await Promise.all([sendFirstTouch("cold-outreach", lead.id), sendFirstTouch("cold-outreach", lead.id)]);
+
+    expect(mail.messages).toHaveLength(1);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.find((r) => !r.ok)).toMatchObject({
+      reason: "not_new",
+      message: "Bob's Bakery was just emailed from another tab or send — nothing more was sent.",
+    });
+    expect(await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({ status: "contacted", sendBlockedReason: null });
+  });
+
   it("a crash after the claim (before recording) never leads to a second send", async () => {
     mail = captureMail();
     const lead = await makeColdLead({ email: "crash@x.test" });
