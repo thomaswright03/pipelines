@@ -9,9 +9,7 @@ import { US_CITIES } from "@/lib/us-cities";
  * the scrape actually succeeds, so a city that timed out or errored isn't
  * burned for nothing.
  */
-export async function pickNextCity(
-  prisma: PrismaClient,
-): Promise<{ city: string; state: string; poolReset: boolean }> {
+export async function pickNextCity(prisma: PrismaClient): Promise<{ city: string; state: string; poolReset: boolean }> {
   const used = await prisma.scrapedCity.findMany({ select: { city: true, state: true } });
   const usedKeys = new Set(used.map((u) => `${u.city}, ${u.state}`));
 

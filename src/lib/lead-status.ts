@@ -175,10 +175,7 @@ export const COLD_CALL_OUTCOME_LABEL: Record<ColdCallOutcome, string> = {
 };
 
 /** What a cold-call outcome does to a lead, per pipeline. */
-export function coldCallResult(
-  pipeline: PipelineId,
-  outcome: ColdCallOutcome,
-): { callOutcome: string; status?: LeadStatus } {
+export function coldCallResult(pipeline: PipelineId, outcome: ColdCallOutcome): { callOutcome: string; status?: LeadStatus } {
   switch (outcome) {
     case "no_answer":
       return { callOutcome: "no_answer" }; // stays in the list for another try

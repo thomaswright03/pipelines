@@ -27,9 +27,7 @@ function usesNeonDriver(connectionString: string): boolean {
 // than while `next build` imports route modules.
 function createClient(): PrismaClient {
   const connectionString = process.env.PIPELINES_DATABASE_URL ?? "";
-  const adapter = usesNeonDriver(connectionString)
-    ? new PrismaNeon({ connectionString })
-    : new PrismaPg({ connectionString });
+  const adapter = usesNeonDriver(connectionString) ? new PrismaNeon({ connectionString }) : new PrismaPg({ connectionString });
   return new PrismaClient({ adapter });
 }
 

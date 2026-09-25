@@ -70,8 +70,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             Connections
           </h2>
           <p className="mt-1 text-sm muted">
-            Whether each outside service the pipelines depend on is working. &ldquo;Working&rdquo; means it has
-            actually worked — a send, a search, a reply or a test — not just that it&apos;s set up.
+            Whether each outside service the pipelines depend on is working. &ldquo;Working&rdquo; means it has actually worked — a send, a
+            search, a reply or a test — not just that it&apos;s set up.
           </p>
         </div>
         <ConnectionStatusList items={connections} />
@@ -82,8 +82,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           Do-not-email list ({suppressedCount.toLocaleString("en-US")})
         </h2>
         <p className="text-sm muted">
-          Addresses that opted out. Neither pipeline emails them. Replies asking to stop are added automatically; add anyone
-          who asked another way below.
+          Addresses that opted out. Neither pipeline emails them. Replies asking to stop are added automatically; add anyone who asked
+          another way below.
         </p>
         <AddSuppressionForm />
         <form method="get" action="/settings" className="flex flex-wrap items-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
@@ -103,9 +103,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         {suppressed.length === 0 ? (
           <p className="text-sm muted">{q ? `No address on the list contains “${q}”.` : "Nobody has opted out."}</p>
         ) : (
-          <DoNotEmailRows
-            rows={suppressed.map((s) => ({ email: s.email, since: formatDate(s.createdAt), why: whyText(s) }))}
-          />
+          <DoNotEmailRows rows={suppressed.map((s) => ({ email: s.email, since: formatDate(s.createdAt), why: whyText(s) }))} />
         )}
         {pages > 1 && (
           <nav aria-label="Do-not-email list pages" className="flex flex-wrap items-center gap-3 text-sm">

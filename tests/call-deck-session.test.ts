@@ -46,8 +46,14 @@ describe("call deck session", () => {
     expect(readSavedDeck(storage, "cold-outreach")).toBeNull();
     storage.data.set("call-deck:cold-outreach", JSON.stringify({ handled: "a", log: [] }));
     expect(readSavedDeck(storage, "cold-outreach")).toBeNull();
-    storage.data.set("call-deck:cold-outreach", JSON.stringify({ handled: ["a", 7], log: [{ lead: { id: "a", name: "A" }, outcome: "no_answer" }, { bogus: true }] }));
-    expect(readSavedDeck(storage, "cold-outreach")).toEqual({ handled: ["a"], log: [{ lead: { id: "a", name: "A" }, outcome: "no_answer" }] });
+    storage.data.set(
+      "call-deck:cold-outreach",
+      JSON.stringify({ handled: ["a", 7], log: [{ lead: { id: "a", name: "A" }, outcome: "no_answer" }, { bogus: true }] }),
+    );
+    expect(readSavedDeck(storage, "cold-outreach")).toEqual({
+      handled: ["a"],
+      log: [{ lead: { id: "a", name: "A" }, outcome: "no_answer" }],
+    });
 
     expect(readSavedDeck(null, "cold-outreach")).toBeNull();
     const throwing: DeckStorage = {

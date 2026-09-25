@@ -9,7 +9,8 @@
 // a change to the logic alone (a threshold in an `if`, the order checks run
 // in) needs the module's revision bumped.
 
-type RulePart = RegExp | string | number | boolean | null | ReadonlySet<string> | readonly RulePart[] | { readonly [key: string]: RulePart };
+type RulePart =
+  RegExp | string | number | boolean | null | ReadonlySet<string> | readonly RulePart[] | { readonly [key: string]: RulePart };
 
 function serialize(part: RulePart): string {
   if (part instanceof RegExp) return `/${part.source}/${part.flags}`;

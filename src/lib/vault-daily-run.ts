@@ -136,7 +136,9 @@ export async function runDailyColdOutreach(
           `checked ${examined} for an email${discovery.stoppedEarly ? " (stopped early: out of time)" : ""}`,
           `found ${created.length} new ${created.length === 1 ? "address" : "addresses"}`,
         ]
-      : [`Couldn't search ${target.city}, ${target.state}${listed === null ? " on Yelp" : " for email addresses"}, so no new leads were found`];
+      : [
+          `Couldn't search ${target.city}, ${target.state}${listed === null ? " on Yelp" : " for email addresses"}, so no new leads were found`,
+        ];
   if (carriedOver) parts.push(`${carriedOver} left over from earlier runs`);
   parts.push(`emailed ${sent}`);
   if (skipped) parts.push(`${skipped} skipped by the send rules`);

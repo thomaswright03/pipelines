@@ -10,10 +10,7 @@ export type UpdateScheduleState = {
   values?: { enabled: boolean; businessesPerRun: string };
 };
 
-export async function updateVaultScheduleAction(
-  _prevState: UpdateScheduleState,
-  formData: FormData,
-): Promise<UpdateScheduleState> {
+export async function updateVaultScheduleAction(_prevState: UpdateScheduleState, formData: FormData): Promise<UpdateScheduleState> {
   const values = {
     enabled: formData.get("enabled") === "on",
     businessesPerRun: String(formData.get("businessesPerRun") ?? ""),

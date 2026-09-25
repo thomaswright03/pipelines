@@ -13,7 +13,8 @@ const COUNTY_PRICING: Record<string, string> = {
 
 // Words that mean a listing is a team or company, not a person — "Hi
 // Realty," would be worse than "Hi there,".
-const NOT_A_PERSON = /\b(realty|realtors?|real estate|group|team|homes|properties|property|partners|associates|brokerage|llc|inc|co|company|agency|office|services|investments|estates?)\b/i;
+const NOT_A_PERSON =
+  /\b(realty|realtors?|real estate|group|team|homes|properties|property|partners|associates|brokerage|llc|inc|co|company|agency|office|services|investments|estates?)\b/i;
 const HONORIFICS = new Set(["mr", "mrs", "ms", "miss", "dr", "prof"]);
 
 function titleCase(word: string): string {
@@ -50,10 +51,7 @@ export function greetingName(rawName: string | null | undefined): string | null 
   return titleCase(first);
 }
 
-export function buildAgentOutreachEmail(
-  agentName: string,
-  county: string | null,
-): { subject: string; body: string } {
+export function buildAgentOutreachEmail(agentName: string, county: string | null): { subject: string; body: string } {
   const countyLabel = county ? `${county} County` : "your county";
   const price = county ? COUNTY_PRICING[county] : undefined;
   const priceLine = price ? ` — ${price} for ${countyLabel}` : "";

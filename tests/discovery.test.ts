@@ -48,11 +48,7 @@ describe("agent discovery (dataleadsell)", () => {
       "https://www.optoutrealty.com": { body: `<title>Optout Realty</title>Optout Realty, Mesa — opt@optoutrealty.test` },
     });
 
-    const result = await createLeadsFromCandidates(
-      "dataleadsell",
-      [agent("Sam Sells Homes", null), agent("Optout Realty", null)],
-      ctx,
-    );
+    const result = await createLeadsFromCandidates("dataleadsell", [agent("Sam Sells Homes", null), agent("Optout Realty", null)], ctx);
 
     expect(result.created).toHaveLength(0);
     expect(result.skipped).toMatchObject({ addressInUse: 1, optedOut: 1 });

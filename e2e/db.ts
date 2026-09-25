@@ -54,7 +54,9 @@ export async function seedColdLeads(
 }
 
 export async function leadStatus(id: string): Promise<string | null> {
-  return withDb(async (db) => (await db.query<{ status: string }>(`SELECT status FROM "Lead" WHERE id = $1`, [id])).rows[0]?.status ?? null);
+  return withDb(
+    async (db) => (await db.query<{ status: string }>(`SELECT status FROM "Lead" WHERE id = $1`, [id])).rows[0]?.status ?? null,
+  );
 }
 
 export async function count(sql: string): Promise<number> {

@@ -8,9 +8,7 @@ import { savePipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule
 import { captureMail, makeAgentLead, makeColdLead, page, smtpError, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
 
 function cron(handler: typeof dailyGET, auth: string | null = "Bearer test-cron-secret") {
-  return handler(
-    new NextRequest("http://localhost/api/cron/x", { headers: auth === null ? {} : { authorization: auth } }),
-  );
+  return handler(new NextRequest("http://localhost/api/cron/x", { headers: auth === null ? {} : { authorization: auth } }));
 }
 
 // Two Yelp listings for one bakery (same inbox) plus one more business.
@@ -133,19 +131,29 @@ describe("stale-contact routing", () => {
 describe("a cron job when the database is down", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  for (const [name, handler] of [["stale-contacts", staleGET], ["daily run", dailyGET]] as const) {
+  for (const [name, handler] of [
+    ["stale-contacts", staleGET],
+    ["daily run", dailyGET],
+  ] as const) {
     it(`${name}: answers 503 with a code and a plain message, never the database error`, async () => {
-      const outage = Object.assign(new Error("Invalid `prisma.pipelineRun.create()` invocation: Can't reach database server at `db:5432`"), {
-        name: "PrismaClientKnownRequestError",
-        code: "P1001",
-      });
+      const outage = Object.assign(
+        new Error("Invalid `prisma.pipelineRun.create()` invocation: Can't reach database server at `db:5432`"),
+        {
+          name: "PrismaClientKnownRequestError",
+          code: "P1001",
+        },
+      );
       vi.spyOn(prisma.pipelineRun, "create").mockRejectedValueOnce(outage);
 
       const res = await cron(handler);
       const text = await res.text();
 
       expect(res.status).toBe(503);
-      expect(JSON.parse(text)).toMatchObject({ ok: false, code: "db_unavailable", error: expect.stringMatching(/database can't be reached/) });
+      expect(JSON.parse(text)).toMatchObject({
+        ok: false,
+        code: "db_unavailable",
+        error: expect.stringMatching(/database can't be reached/),
+      });
       expect(text).not.toMatch(/prisma|P1001|invocation/i);
     });
   }

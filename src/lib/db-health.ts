@@ -12,7 +12,9 @@ export function isDatabaseUnavailable(err: unknown): boolean {
   const code = e?.code ?? e?.errorCode;
   if (typeof code === "string" && /^(?:P1001|P1002|P1017|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)$/.test(code)) return true;
   if (e?.name === "PrismaClientInitializationError") return true;
-  return /can't reach database|connection (?:refused|terminated)|ECONNREFUSED|ENOTFOUND|timeout exceeded when trying to connect/i.test(String(err));
+  return /can't reach database|connection (?:refused|terminated)|ECONNREFUSED|ENOTFOUND|timeout exceeded when trying to connect/i.test(
+    String(err),
+  );
 }
 
 /** Whether a trivial query succeeds within a few seconds. Never throws. */

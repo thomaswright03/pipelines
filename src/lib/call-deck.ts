@@ -31,7 +31,15 @@ const ORDER = [{ starred: "desc" as const }, { createdAt: "asc" as const }, { id
 const LATEST_ACTIVITY = { activities: { orderBy: { date: "desc" as const }, take: 1 } };
 
 function toCard(
-  lead: { id: string; name: string; phone: string | null; city: string | null; state: string | null; lastEmailedAt: Date | null; activities: { date: Date; notes: string }[] },
+  lead: {
+    id: string;
+    name: string;
+    phone: string | null;
+    city: string | null;
+    state: string | null;
+    lastEmailedAt: Date | null;
+    activities: { date: Date; notes: string }[];
+  },
   subtitle: string | null,
 ): CallDeckCard {
   const note = lead.activities[0];
@@ -44,15 +52,27 @@ function toCard(
     city: lead.city,
     state: lead.state,
     emailed: lead.lastEmailedAt ? `Emailed ${formatDate(lead.lastEmailedAt)}` : "Never emailed",
-    lastNote: note ? { date: formatDate(note.date), text: text.length > NOTE_PREVIEW_CHARS ? `${text.slice(0, NOTE_PREVIEW_CHARS)}…` : text } : null,
+    lastNote: note
+      ? { date: formatDate(note.date), text: text.length > NOTE_PREVIEW_CHARS ? `${text.slice(0, NOTE_PREVIEW_CHARS)}…` : text }
+      : null,
   };
 }
 
 export async function loadCallDeck(pipelineId: PipelineId): Promise<CallDeckCard[]> {
   if (pipelineId === "cold-outreach") {
-    const leads = await prisma.lead.findMany({ where: { status: "cold_call_list" }, orderBy: ORDER, take: DECK_LIMIT, include: LATEST_ACTIVITY });
+    const leads = await prisma.lead.findMany({
+      where: { status: "cold_call_list" },
+      orderBy: ORDER,
+      take: DECK_LIMIT,
+      include: LATEST_ACTIVITY,
+    });
     return leads.map((lead) => toCard(lead, lead.company));
   }
-  const leads = await prisma.agentLead.findMany({ where: { status: "cold_call_list" }, orderBy: ORDER, take: DECK_LIMIT, include: LATEST_ACTIVITY });
+  const leads = await prisma.agentLead.findMany({
+    where: { status: "cold_call_list" },
+    orderBy: ORDER,
+    take: DECK_LIMIT,
+    include: LATEST_ACTIVITY,
+  });
   return leads.map((lead) => toCard(lead, lead.brokerage));
 }

@@ -53,8 +53,8 @@ export default function SettingsControls({
         title: "Allow both pipelines to pitch the same address?",
         body: (
           <p>
-            An address that already got the Cold Outreach pitch could also get the dataleadsell.com pitch (and the reverse). Each
-            pipeline still sends at most once per address, and opt-outs still block both.
+            An address that already got the Cold Outreach pitch could also get the dataleadsell.com pitch (and the reverse). Each pipeline
+            still sends at most once per address, and opt-outs still block both.
           </p>
         ),
         confirmLabel: "Allow",
@@ -78,7 +78,12 @@ export default function SettingsControls({
             ? `Paused${pausedSince ? ` since ${pausedSince}` : ""}. Nothing is sent from either pipeline — manual, bulk or the daily run — until you resume.`
             : "The emergency stop. Pausing takes effect on the very next send, including one in the middle of a bulk send."}
         </p>
-        <button type="button" disabled={isPending} onClick={togglePause} className={paused ? "btn-primary self-start" : "btn-danger-solid self-start"}>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={togglePause}
+          className={paused ? "btn-primary self-start" : "btn-danger-solid self-start"}
+        >
           {paused ? "Resume outbound email" : "Pause all outbound email"}
         </button>
       </section>

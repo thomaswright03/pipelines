@@ -52,10 +52,7 @@ export function listHref(basePath: string, params: ListParams, change: Partial<L
 /** Prisma orderBy for the params; ties broken by id so paging is stable. */
 export function orderByFor(params: ListParams) {
   const field = params.sort === "name" ? "name" : params.sort === "emailed" ? "lastEmailedAt" : "createdAt";
-  const primary =
-    field === "lastEmailedAt"
-      ? { lastEmailedAt: { sort: params.dir, nulls: "last" as const } }
-      : { [field]: params.dir };
+  const primary = field === "lastEmailedAt" ? { lastEmailedAt: { sort: params.dir, nulls: "last" as const } } : { [field]: params.dir };
   return [primary, { id: "asc" as const }];
 }
 

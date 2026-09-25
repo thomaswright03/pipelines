@@ -76,8 +76,7 @@ export async function loadAdreRoster(csvText?: string): Promise<{ total: number;
   // Throws before anything is saved if the file's format changed or it lists nobody.
   const licensees = parseAdreRoster(text, ADRE_COUNTY);
 
-  const maxPosition = (await prisma.adreLicensee.aggregate({ where: { county: ADRE_COUNTY }, _max: { position: true } }))._max
-    .position;
+  const maxPosition = (await prisma.adreLicensee.aggregate({ where: { county: ADRE_COUNTY }, _max: { position: true } }))._max.position;
   const offset = (maxPosition ?? -1) + 1;
   let added = 0;
   for (let i = 0; i < licensees.length; i += INSERT_BATCH_SIZE) {

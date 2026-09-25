@@ -17,10 +17,10 @@ export default async function RepliesPage() {
       <div>
         <h1 className="accent-text text-2xl font-bold tracking-tight">Replies</h1>
         <p className="mt-1 text-sm muted">
-          Replies to both pipelines&apos; emails are recorded on the lead with that address automatically. Replies from any other
-          address — an assistant, a personal inbox, a forward — wait here until you match them to a lead. Out-of-office and other
-          automatic replies are noted on the lead without counting as a reply, and bounce notices mark the email bounced; a
-          bounce notice that doesn&apos;t say which address failed waits here too.
+          Replies to both pipelines&apos; emails are recorded on the lead with that address automatically. Replies from any other address —
+          an assistant, a personal inbox, a forward — wait here until you match them to a lead. Out-of-office and other automatic replies
+          are noted on the lead without counting as a reply, and bounce notices mark the email bounced; a bounce notice that doesn&apos;t
+          say which address failed waits here too.
         </p>
       </div>
 
@@ -37,8 +37,8 @@ export default async function RepliesPage() {
             How the automatic checks are doing (last {quality.sinceDays} days)
           </h2>
           <p className="mt-1 text-sm muted">
-            Each time you correct the app — undo an opt-out it read from a reply, mark someone opted out that it missed, or mark
-            a found address bounced — it counts here. Rising numbers mean the rules need a look.
+            Each time you correct the app — undo an opt-out it read from a reply, mark someone opted out that it missed, or mark a found
+            address bounced — it counts here. Rising numbers mean the rules need a look.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

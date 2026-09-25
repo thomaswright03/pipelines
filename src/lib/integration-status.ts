@@ -35,8 +35,20 @@ export type ConnectionStatus = {
 export const NOT_CONFIRMED = "Not confirmed yet";
 
 const CRON_JOBS = [
-  { key: "daily-run" as const, label: "Daily Cold Outreach run", pipeline: "cold-outreach", kind: "daily", schedule: "8:33 AM Arizona time" },
-  { key: "stale-contacts" as const, label: "Move silent leads to the call deck", pipeline: "all", kind: "stale-contacts", schedule: "6:00 AM Arizona time" },
+  {
+    key: "daily-run" as const,
+    label: "Daily Cold Outreach run",
+    pipeline: "cold-outreach",
+    kind: "daily",
+    schedule: "8:33 AM Arizona time",
+  },
+  {
+    key: "stale-contacts" as const,
+    label: "Move silent leads to the call deck",
+    pipeline: "all",
+    kind: "stale-contacts",
+    schedule: "6:00 AM Arizona time",
+  },
 ];
 
 type Evidence = { at: Date; ok: boolean; text: string; kind: "send" | "test" };
@@ -57,10 +69,22 @@ async function mailStatus(env: Env): Promise<ConnectionStatus> {
   const sentAt = lastSent?.sentAt ?? null;
   const last = latest([
     sentAt ? { at: sentAt, ok: true, kind: "send", text: `Last email sent ${formatDateTime(sentAt)}.` } : null,
-    failure ? { at: failure.at, ok: false, kind: "send", text: `The last send failed ${formatDateTime(failure.at)}: ${failure.message ?? "the email service refused it"}` } : null,
+    failure
+      ? {
+          at: failure.at,
+          ok: false,
+          kind: "send",
+          text: `The last send failed ${formatDateTime(failure.at)}: ${failure.message ?? "the email service refused it"}`,
+        }
+      : null,
     checks.mail
       ? checks.mail.error
-        ? { at: checks.mail.at, ok: false, kind: "test", text: `The connection test ${formatDateTime(checks.mail.at)} failed: ${checks.mail.error}` }
+        ? {
+            at: checks.mail.at,
+            ok: false,
+            kind: "test",
+            text: `The connection test ${formatDateTime(checks.mail.at)} failed: ${checks.mail.error}`,
+          }
         : { at: checks.mail.at, ok: true, kind: "test", text: `Connection test passed ${formatDateTime(checks.mail.at)}.` }
       : null,
   ]);
@@ -78,7 +102,10 @@ async function mailStatus(env: Env): Promise<ConnectionStatus> {
   });
 
   if (last && !last.ok) {
-    return status("error", "Press Test connection. If it fails again, tell your developer what it says — nothing is sent until this is fixed.");
+    return status(
+      "error",
+      "Press Test connection. If it fails again, tell your developer what it says — nothing is sent until this is fixed.",
+    );
   }
   if (settings.outboundPaused) {
     parts.push("Outbound email is paused, so nothing is being sent.");
@@ -171,7 +198,8 @@ async function cronStatus(job: (typeof CRON_JOBS)[number], env: Env, now: Date):
       next: "Tell your developer the scheduled job has stopped running.",
     };
   }
-  if (status === "partial") return { ...base, tone: "warn", summary, next: "Part of the run failed; see the run on the Cold Outreach page for why." };
+  if (status === "partial")
+    return { ...base, tone: "warn", summary, next: "Part of the run failed; see the run on the Cold Outreach page for why." };
   return { ...base, tone: "ok", summary, next: null };
 }
 

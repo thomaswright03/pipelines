@@ -63,7 +63,10 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
               <DetailField label="Replied" value={formatDateTime(lead.repliedAt)} />
               <DetailField label="We replied back" value={formatDateTime(lead.ourReplyAt)} />
               <DetailField label="Appointment" value={formatDateTime(lead.appointmentAt)} />
-              <DetailField label="Call outcome" value={lead.callOutcome ? (CALL_OUTCOME_LABEL[lead.callOutcome] ?? lead.callOutcome) : "—"} />
+              <DetailField
+                label="Call outcome"
+                value={lead.callOutcome ? (CALL_OUTCOME_LABEL[lead.callOutcome] ?? lead.callOutcome) : "—"}
+              />
               <DetailField label="Estimated value" value={formatCents(lead.estimatedValueCents)} />
             </dl>
             {lead.notes && (

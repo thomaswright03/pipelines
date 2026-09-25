@@ -51,7 +51,9 @@ function licenseeKey(row: AdreRow, name: string, licenseType: string, address: s
     const value = col(row, column);
     if (value) return `adre:${value}`;
   }
-  return `adre-hash:${createHash("sha1").update(`${name}|${licenseType}|${address ?? ""}`).digest("hex")}`;
+  return `adre-hash:${createHash("sha1")
+    .update(`${name}|${licenseType}|${address ?? ""}`)
+    .digest("hex")}`;
 }
 
 /** Columns the import can't work without: the filters and the name. */
@@ -119,7 +121,7 @@ export function parseAdreRoster(csvText: string, county: string): AzLicensee[] {
     licensees.push({
       key,
       name,
-      brokerage: (col(row, "EmployerDBAName") || col(row, "EmployerLegalName")) || null,
+      brokerage: col(row, "EmployerDBAName") || col(row, "EmployerLegalName") || null,
       phone: col(row, "EmployerPhone") || null,
       address,
       city: col(row, "MailingCity") || null,

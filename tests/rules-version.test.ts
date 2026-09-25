@@ -37,14 +37,18 @@ describe("stored decisions carry the rules version", () => {
 
   it("on every address discovery accepts", async () => {
     stubFetch({ "https://www.kellerwilliams.com": page("Keller Williams Mesa: jane.doe@kellerwilliams.test") });
-    await createLeadsFromCandidates("dataleadsell", [{ name: "Jane Doe", brokerage: "Keller Williams", phone: null, address: null, website: null }], {
-      city: "Mesa",
-      state: "AZ",
-      county: "Maricopa",
-      source: "test",
-      maxCreate: 10,
-      deadline: Number.POSITIVE_INFINITY,
-    });
+    await createLeadsFromCandidates(
+      "dataleadsell",
+      [{ name: "Jane Doe", brokerage: "Keller Williams", phone: null, address: null, website: null }],
+      {
+        city: "Mesa",
+        state: "AZ",
+        county: "Maricopa",
+        source: "test",
+        maxCreate: 10,
+        deadline: Number.POSITIVE_INFINITY,
+      },
+    );
     const lead = await prisma.agentLead.findFirstOrThrow();
     expect(lead.emailRulesVersion).toBe(EMAIL_RULES_VERSION);
   });

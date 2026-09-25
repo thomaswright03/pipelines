@@ -115,7 +115,11 @@ function distinctiveNameWords(name: string): string[] {
 function pageTitles(html: string): string {
   const titles = [...html.matchAll(/<title[^>]*>([\s\S]*?)<\/title>/gi)].map((m) => m[1]!);
   const siteNames = [...html.matchAll(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']*)["']/gi)].map((m) => m[1]!);
-  return [...titles, ...siteNames].join(" ").replace(/&amp;/gi, "&").replace(/&#0?39;|&apos;|’/gi, "'").toLowerCase();
+  return [...titles, ...siteNames]
+    .join(" ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#0?39;|&apos;|’/gi, "'")
+    .toLowerCase();
 }
 
 // A site that lists more than one location (a chain, a franchise) can't be

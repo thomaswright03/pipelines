@@ -23,7 +23,9 @@ describe("database health", () => {
     expect(await up.json()).toEqual({ database: "ok" });
 
     vi.spyOn(log, "logError").mockImplementation(() => {});
-    vi.spyOn(prisma, "$queryRaw").mockRejectedValue(Object.assign(new Error("Can't reach database server at secret-host:5432"), { code: "P1001" }));
+    vi.spyOn(prisma, "$queryRaw").mockRejectedValue(
+      Object.assign(new Error("Can't reach database server at secret-host:5432"), { code: "P1001" }),
+    );
     expect(await databaseReachable()).toBe(false);
     const down = await GET();
     expect(down.status).toBe(503);

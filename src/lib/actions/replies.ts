@@ -14,7 +14,9 @@ import type { ActionResult } from "@/lib/outreach/lead-actions";
 export type LeadMatch = { pipeline: string; pipelineLabel: string; id: string; name: string; email: string | null; status: string };
 
 export async function searchLeadsForReplyAction(query: string): Promise<{ ok: true; leads: LeadMatch[] } | { ok: false; error: string }> {
-  const q = String(query ?? "").trim().slice(0, 100);
+  const q = String(query ?? "")
+    .trim()
+    .slice(0, 100);
   if (q.length < 2) return { ok: true, leads: [] };
   try {
     const results = await Promise.all(

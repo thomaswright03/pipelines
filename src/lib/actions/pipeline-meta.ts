@@ -12,10 +12,7 @@ const metaSchema = z.object({
   pipelineDescription: z.string().trim().max(600, "Pipeline description can be at most 600 characters"),
 });
 
-export async function updatePipelineMetaAction(
-  pipelineId: string,
-  formData: FormData,
-): Promise<{ error?: string }> {
+export async function updatePipelineMetaAction(pipelineId: string, formData: FormData): Promise<{ error?: string }> {
   const parsed = metaSchema.safeParse({
     name: String(formData.get("name") ?? ""),
     company: String(formData.get("company") ?? ""),

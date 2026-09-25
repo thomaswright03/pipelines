@@ -21,9 +21,7 @@ export function register() {
 
   const missing = missingEnvVars();
   if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variable(s): ${missing.join(", ")}. See .env.example for what each one is for.`,
-    );
+    throw new Error(`Missing required environment variable(s): ${missing.join(", ")}. See .env.example for what each one is for.`);
   }
   console.info(`[startup] email transport: ${resolveTransportKind()}`);
 }

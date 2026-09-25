@@ -30,14 +30,7 @@ export const UNVERIFIED_BLOCK_PREFIX = "Unverified address";
 /** Blocks that are about the lead's current address, so they end when the address changes. */
 export const ADDRESS_BLOCK_PREFIXES = [DUPLICATE_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX, UNVERIFIED_BLOCK_PREFIX];
 
-export type SendRefusal =
-  | "paused"
-  | "not_found"
-  | "no_email"
-  | "not_new"
-  | "blocked"
-  | "suppressed"
-  | "duplicate_address";
+export type SendRefusal = "paused" | "not_found" | "no_email" | "not_new" | "blocked" | "suppressed" | "duplicate_address";
 
 export type SendOutcome =
   | { ok: true; leadId: string; leadName: string; email: string; message: string; warning?: string }

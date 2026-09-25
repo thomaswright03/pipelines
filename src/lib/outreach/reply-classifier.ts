@@ -100,7 +100,10 @@ const OPT_OUT_PHRASES: RegExp[] = [
   new RegExp(String.raw`\bbe\s+removed\s+from\s+(?:${LIST}|(?:your|all|any|future)\s+(?:e-?mails?|mailings?|messages?|contact))\b`, "i"),
   /\b(?:stop|quit|cease)\s+(?:e-?mailing|contacting|messaging|spamming|texting|calling|sending(?:\s+me)?(?:\s+(?:e-?mails?|these|this|messages?))?|writing\s+to|reaching\s+out)\b/i,
   // "don't email me", "do not contact us", "don't reach out to me again", "don't send me emails"
-  new RegExp(String.raw`\b${NEG}\s+(?:ever\s+)?${CONTACT_VERB}(?:\s+${ME})?(?=\s+(?:again|anymore|any\s+more|ever)\b|\s*[.!,;]|\s*$)`, "im"),
+  new RegExp(
+    String.raw`\b${NEG}\s+(?:ever\s+)?${CONTACT_VERB}(?:\s+${ME})?(?=\s+(?:again|anymore|any\s+more|ever)\b|\s*[.!,;]|\s*$)`,
+    "im",
+  ),
   new RegExp(
     String.raw`\b${NEG}\s+(?:ever\s+)?(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to)\s+${ME}\b(?!\s+(?:until|till|before|after|about|regarding|with\s+questions))`,
     "i",
@@ -149,7 +152,10 @@ const REVIEW_PHRASES: { re: RegExp; reason: string }[] = [
   { re: /\bnot\s+(?:at\s+all\s+|really\s+)?interested\b/i, reason: "says they're not interested" },
   { re: /\bno\s+(?:thanks|thank\s+you|thx)\b/i, reason: "says no thanks" },
   { re: /\bwrong\s+(?:person|e-?mail|address|contact|guy|gal)\b/i, reason: "says this is the wrong person" },
-  { re: /\b(?:no\s+longer|not)\s+(?:work(?:ing)?\s+(?:here|there|at)|with\s+(?:the|this)\s+(?:company|brokerage|firm))\b/i, reason: "says they no longer work there" },
+  {
+    re: /\b(?:no\s+longer|not)\s+(?:work(?:ing)?\s+(?:here|there|at)|with\s+(?:the|this)\s+(?:company|brokerage|firm))\b/i,
+    reason: "says they no longer work there",
+  },
   { re: /\bhow\s+did\s+you\s+get\s+(?:my|this|our)\b/i, reason: "asks how we got their address" },
   { re: /\b(?:spam|spammer|spamming|unsolicited)\b|\breport(?:ed|ing)?\s+(?:you|this|it)\b/i, reason: "calls the email spam" },
   { re: /\b(?:retired|passed\s+away|deceased)\b/i, reason: "says the person has retired or died" },
@@ -279,11 +285,17 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
 
   for (const { re, reason } of REVIEW_PHRASES) {
     const match = re.exec(matchText);
-    if (match) return { optOut: false, trigger: null, review: `${reason}: “${sentenceAround(newText, match.index, match[0].length)}”`, newText };
+    if (match)
+      return { optOut: false, trigger: null, review: `${reason}: “${sentenceAround(newText, match.index, match[0].length)}”`, newText };
   }
 
   if (isMainlyForeign(matchText)) {
-    return { optOut: false, trigger: null, review: `is written in another language — check whether it asks to stop: “${sentenceAround(newText, 0, 0)}”`, newText };
+    return {
+      optOut: false,
+      trigger: null,
+      review: `is written in another language — check whether it asks to stop: “${sentenceAround(newText, 0, 0)}”`,
+      newText,
+    };
   }
 
   return { optOut: false, trigger: null, review: null, newText };

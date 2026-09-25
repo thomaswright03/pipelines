@@ -75,7 +75,11 @@ describe("a roster whose format changed", () => {
       ok: false,
       error: "ADRE's roster format changed — the import can't read it, so nothing was changed. Ask your developer to update the import.",
     });
-    expect(logged).toHaveBeenCalledWith("action.loadAdreRoster", expect.any(AdreFormatError), expect.objectContaining({ columnsReceived: expect.stringContaining("LicenseStatus") }));
+    expect(logged).toHaveBeenCalledWith(
+      "action.loadAdreRoster",
+      expect.any(AdreFormatError),
+      expect.objectContaining({ columnsReceived: expect.stringContaining("LicenseStatus") }),
+    );
     expect(await prisma.adreLicensee.count()).toBe(0);
     logged.mockRestore();
   });
@@ -86,7 +90,10 @@ describe("a roster whose format changed", () => {
     expect(() => parseAdreRoster(noneInCounty, "Maricopa")).toThrow(AdreEmptyRosterError);
     stubFetch({ [ADRE_URL]: { body: noneInCounty, contentType: "text/csv" } });
 
-    expect(await loadAdreRosterAction()).toMatchObject({ ok: false, error: expect.stringMatching(/^ADRE's roster downloaded but lists no active Maricopa County/) });
+    expect(await loadAdreRosterAction()).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^ADRE's roster downloaded but lists no active Maricopa County/),
+    });
     expect(await prisma.adreRoster.count()).toBe(0);
     vi.restoreAllMocks();
   });
@@ -128,11 +135,7 @@ describe("ADRE import", () => {
     expect(four.checked).toBe(0);
 
     const outcomes = await prisma.adreLicensee.findMany({ orderBy: { position: "asc" }, select: { outcome: true } });
-    expect(outcomes.map((o) => o.outcome)).toEqual([
-      "no_email",
-      "created",
-      ...Array(10).fill("no_email"),
-    ]);
+    expect(outcomes.map((o) => o.outcome)).toEqual(["no_email", "created", ...Array(10).fill("no_email")]);
     expect(fetches.calls.some((u) => u.includes("azre.gov"))).toBe(false);
     expect(await prisma.agentLead.findFirstOrThrow()).toMatchObject({
       name: "First2 Last2",

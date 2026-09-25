@@ -3,7 +3,13 @@
 // business or person with a similar name would get the lead's one pitch.
 import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { createLeadsFromCandidates, describeDiscovery, findEmailForLead, isSameLead, type DiscoveryCandidate } from "@/lib/outreach/discovery";
+import {
+  createLeadsFromCandidates,
+  describeDiscovery,
+  findEmailForLead,
+  isSameLead,
+  type DiscoveryCandidate,
+} from "@/lib/outreach/discovery";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { previewBulkSend } from "@/lib/outreach/send";
 import { siteEvidence } from "@/lib/outreach/site-evidence";
@@ -39,10 +45,14 @@ describe("siteEvidence", () => {
   it("accepts the city with the lead's name in the page title, unless the site lists other locations", () => {
     const joes = { ...facts, name: "Joe's Pizza", phone: null, address: null };
     const titled = "<html><head><title>Joe&#39;s Pizza | Phoenix, AZ</title></head><body>Proudly serving Phoenix</body></html>";
-    expect(siteEvidence("https://www.joespizza.com", [titled], joes)).toMatch(/titled with the lead's name and mentions the lead's city \(Phoenix\)/);
+    expect(siteEvidence("https://www.joespizza.com", [titled], joes)).toMatch(
+      /titled with the lead's name and mentions the lead's city \(Phoenix\)/,
+    );
     expect(siteEvidence("https://www.joespizza.com", [titled.replace("Proudly", "Find a location near you · Proudly")], joes)).toBeNull();
     // "Pizza" alone says what the business is, not which one.
-    expect(siteEvidence("https://www.pizza.com", ["<title>Pizza Phoenix</title>Phoenix"], { ...joes, name: "Pizza Restaurant" })).toBeNull();
+    expect(
+      siteEvidence("https://www.pizza.com", ["<title>Pizza Phoenix</title>Phoenix"], { ...joes, name: "Pizza Restaurant" }),
+    ).toBeNull();
     // The title has to name this lead, not just any business.
     expect(siteEvidence("https://www.joespizza.com", ["<title>Tony's Pizza</title>Phoenix"], joes)).toBeNull();
   });
@@ -110,7 +120,11 @@ describe("discovery only saves addresses from sites that are the lead's", () => 
     const lead = await makeColdLead({ name: "Joe's Pizza", email: null, website: "https://joes.example.test" });
     stubFetch({ "https://joes.example.test": page(`orders@joes.test`) });
     const outcome = await findEmailForLead("cold-outreach", (await getPipeline("cold-outreach").findLead(prisma, lead.id))!);
-    expect(outcome).toMatchObject({ kind: "found", email: "orders@joes.test", evidence: "Found on joes.example.test, the website saved on this lead." });
+    expect(outcome).toMatchObject({
+      kind: "found",
+      email: "orders@joes.test",
+      evidence: "Found on joes.example.test, the website saved on this lead.",
+    });
   });
 });
 
@@ -121,10 +135,30 @@ describe("duplicate detection uses more than the name", () => {
     stubFetch({
       "https://www.johnsmith.com": page(`John Smith Realty — Mesa and Phoenix — (480) 555-0001, (602) 555-0002 — john@johnsmith.test`),
     });
-    expect(isSameLead({ name: "John Smith", phone: "(480) 555-0001", address: null, city: "Mesa" }, { name: "john  smith", phone: "+14805550001", address: null, city: "Phoenix" })).toBe(true);
-    expect(isSameLead({ name: "John Smith", phone: "(480) 555-0001", address: null, city: "Mesa" }, { name: "John Smith", phone: "(602) 555-0002", address: null, city: "Mesa" })).toBe(false);
-    expect(isSameLead({ name: "John Smith", phone: null, address: null, city: "Mesa" }, { name: "John Smith", phone: null, address: null, city: "Phoenix" })).toBe(false);
-    expect(isSameLead({ name: "John Smith", phone: null, address: null, city: null }, { name: "John Smith", phone: null, address: null, city: "Mesa" })).toBe(true);
+    expect(
+      isSameLead(
+        { name: "John Smith", phone: "(480) 555-0001", address: null, city: "Mesa" },
+        { name: "john  smith", phone: "+14805550001", address: null, city: "Phoenix" },
+      ),
+    ).toBe(true);
+    expect(
+      isSameLead(
+        { name: "John Smith", phone: "(480) 555-0001", address: null, city: "Mesa" },
+        { name: "John Smith", phone: "(602) 555-0002", address: null, city: "Mesa" },
+      ),
+    ).toBe(false);
+    expect(
+      isSameLead(
+        { name: "John Smith", phone: null, address: null, city: "Mesa" },
+        { name: "John Smith", phone: null, address: null, city: "Phoenix" },
+      ),
+    ).toBe(false);
+    expect(
+      isSameLead(
+        { name: "John Smith", phone: null, address: null, city: null },
+        { name: "John Smith", phone: null, address: null, city: "Mesa" },
+      ),
+    ).toBe(true);
 
     await prisma.agentLead.create({ data: { name: "John Smith", email: "js@other.test", phone: "(602) 555-0002", city: "Phoenix" } });
     const again = await createLeadsFromCandidates("dataleadsell", [smith("+16025550002", "Phoenix")], { ...ctx, county: "Maricopa" });

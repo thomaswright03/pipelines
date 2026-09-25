@@ -58,8 +58,7 @@ function EmailLockedNote({ email }: { email: string }) {
 
 export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: Required<ColdOutreachLeadInput> }) {
   const router = useRouter();
-  const submit =
-    mode.kind === "edit" ? (values: ColdOutreachLeadInput) => updateLeadAction(mode.leadId, values) : createLeadAction;
+  const submit = mode.kind === "edit" ? (values: ColdOutreachLeadInput) => updateLeadAction(mode.leadId, values) : createLeadAction;
   const schema = mode.kind === "edit" ? coldOutreachLeadEditSchema(initial.notes) : coldOutreachLeadSchema;
   const form = useLeadForm(schema, initial, submit, (id) => {
     router.push(`/vault-pipeline/${id}`);

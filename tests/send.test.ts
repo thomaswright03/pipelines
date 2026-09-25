@@ -254,7 +254,11 @@ describe("SMTP failures", () => {
   it("each bulk call sends at most one email, so Stop leaves at most one more", async () => {
     mail = captureMail();
     const leads = await Promise.all([1, 2, 3].map(() => makeColdLead()));
-    const chunk = await sendBulkChunk("cold-outreach", leads.map((l) => l.id), { delayMs: 0 });
+    const chunk = await sendBulkChunk(
+      "cold-outreach",
+      leads.map((l) => l.id),
+      { delayMs: 0 },
+    );
     expect(chunk).toMatchObject({ sent: 1, processedIds: [leads[0]!.id] });
     expect(mail.messages).toHaveLength(1);
   });

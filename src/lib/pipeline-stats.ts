@@ -85,7 +85,10 @@ type SendLogTable = {
   findMany(args: { where: Where; select: { sentAt: true } }): Promise<{ sentAt: Date }[]>;
 };
 
-const STATS_SOURCES: Record<PipelineId, { leads: () => LeadTable; sendLogs: () => SendLogTable; location: "state" | "county"; locationLimit?: number }> = {
+const STATS_SOURCES: Record<
+  PipelineId,
+  { leads: () => LeadTable; sendLogs: () => SendLogTable; location: "state" | "county"; locationLimit?: number }
+> = {
   "cold-outreach": {
     leads: () => prisma.lead as unknown as LeadTable,
     sendLogs: () => prisma.leadEmailSendLog as unknown as SendLogTable,
@@ -194,7 +197,11 @@ async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()):
       TREND_DAYS,
       now,
     ),
-    emailsPerDay: bucketByDay(recentSends.map((r) => r.sentAt), TREND_DAYS, now),
+    emailsPerDay: bucketByDay(
+      recentSends.map((r) => r.sentAt),
+      TREND_DAYS,
+      now,
+    ),
   };
 }
 

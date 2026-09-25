@@ -86,8 +86,8 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
         title: `Mark the email to ${lead.name} bounced?`,
         body: (
           <p>
-            The latest email to {lead.name} ({lead.pipelineLabel}, now {lead.status}) is marked bounced, exactly as with “Mark
-            bounced” on the lead page. A lead still being worked moves to Lost.
+            The latest email to {lead.name} ({lead.pipelineLabel}, now {lead.status}) is marked bounced, exactly as with “Mark bounced” on
+            the lead page. A lead still being worked moves to Lost.
           </p>
         ),
         confirmLabel: "Mark bounced",
@@ -100,13 +100,10 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
       title: `Add this reply to ${lead.name}?`,
       body: (
         <p>
-          It is recorded as {lead.name}&apos;s reply ({lead.pipelineLabel}, now {lead.status}), exactly as if it came from their
-          own address.
+          It is recorded as {lead.name}&apos;s reply ({lead.pipelineLabel}, now {lead.status}), exactly as if it came from their own
+          address.
           {reply.optedOut && (
-            <>
-              {" "}
-              It reads as an opt-out, so {lead.email ? <strong>{lead.email}</strong> : "their address"} goes on the do-not-email list.
-            </>
+            <> It reads as an opt-out, so {lead.email ? <strong>{lead.email}</strong> : "their address"} goes on the do-not-email list.</>
           )}
         </p>
       ),
@@ -134,20 +131,15 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
       </div>
       {reply.bounce && (
         <p className="notice-warning">
-          Bounce notice — one of our emails couldn&apos;t be delivered, but the notice doesn&apos;t say which address in a way
-          the app could match{reply.kindReason ? ` (${reply.kindReason})` : ""}. Find the lead it was sent to and mark it
-          bounced.
+          Bounce notice — one of our emails couldn&apos;t be delivered, but the notice doesn&apos;t say which address in a way the app could
+          match{reply.kindReason ? ` (${reply.kindReason})` : ""}. Find the lead it was sent to and mark it bounced.
         </p>
       )}
       {reply.subject && <p className="text-sm font-medium">{reply.subject}</p>}
       <p className="whitespace-pre-wrap break-words text-sm">
         {reply.text ?? <span className="muted">(The text of replies from before this list existed wasn&apos;t kept.)</span>}
       </p>
-      {reply.optedOut && (
-        <p className="notice-warning">
-          Read as an opt-out: {reply.fromEmail} is already on the do-not-email list.
-        </p>
-      )}
+      {reply.optedOut && <p className="notice-warning">Read as an opt-out: {reply.fromEmail} is already on the do-not-email list.</p>}
       <form onSubmit={search} className="flex flex-wrap items-end gap-2">
         <label className="field-label min-w-0 flex-1">
           {reply.bounce ? "Find the lead whose email bounced" : "Find the lead it belongs to"}

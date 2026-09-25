@@ -53,7 +53,13 @@ describe("email policy", () => {
 
   it("only accepts the agent's own address on a brokerage site", () => {
     const filter = addressFilterFor("John Doe", "brokerage");
-    for (const e of ["frontdesk@homesmart.test", "john.smith@homesmart.test", "johnson@homesmart.test", "john@homesmart.test", "doe.family@homesmart.test"]) {
+    for (const e of [
+      "frontdesk@homesmart.test",
+      "john.smith@homesmart.test",
+      "johnson@homesmart.test",
+      "john@homesmart.test",
+      "doe.family@homesmart.test",
+    ]) {
       expect(filter(e), e).toBe(false);
     }
     for (const e of ["john.doe@homesmart.test", "jdoe@homesmart.test", "johndoe@homesmart.test"]) {
@@ -109,7 +115,16 @@ describe("phones, states and money", () => {
     expect(Object.keys(errors).sort()).toEqual(["email", "estimatedValue", "name", "phone", "state"]);
     expect(errors.phone).toMatch(/10-digit/);
 
-    const agent = agentLeadSchema.safeParse({ name: "A", brokerage: "", email: "", phone: "", city: "Tucson", county: "Pima", website: "", notes: "" });
+    const agent = agentLeadSchema.safeParse({
+      name: "A",
+      brokerage: "",
+      email: "",
+      phone: "",
+      city: "Tucson",
+      county: "Pima",
+      website: "",
+      notes: "",
+    });
     expect(agent.success).toBe(false);
     expect(fieldErrorsOf<Record<string, string>>(agent.error!).county).toMatch(/Maricopa, Salt Lake or Utah/);
   });
@@ -205,7 +220,10 @@ describe("send error classification", () => {
 
 describe("where mail goes", () => {
   it("only claims nobody receives mail for the outbox or an SMTP catcher on this machine", () => {
-    expect(describeMailDestination({ EMAIL_TRANSPORT: "outbox" })).toMatchObject({ delivers: false, badge: "Test mode — emails are saved, not delivered" });
+    expect(describeMailDestination({ EMAIL_TRANSPORT: "outbox" })).toMatchObject({
+      delivers: false,
+      badge: "Test mode — emails are saved, not delivered",
+    });
     expect(describeMailDestination({ EMAIL_TRANSPORT: "smtp", SMTP_HOST: "127.0.0.1", SMTP_PORT: "1025" })).toMatchObject({
       delivers: false,
       badge: "Mail captured locally (127.0.0.1:1025)",

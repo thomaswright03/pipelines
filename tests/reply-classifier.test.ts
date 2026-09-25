@@ -15,12 +15,21 @@ const agentPitch = buildAgentOutreachEmail("Jane Doe", "Maricopa").body;
 
 describe("classifyReply — not opt-outs", () => {
   const cases: [string, string][] = [
-    ["interested reply above Gmail-quoted pitch", `Yes! Very interested, can you call me tomorrow?\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas Wright <thomas@wright-ai-solutions.com> wrote:\n${quoted(coldPitch)}`],
-    ["interested reply with the header wrapped onto two lines", `Sounds good, send details.\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas Wright <thomas@wright-ai-solutions.com>\nwrote:\n${quoted(agentPitch)}`],
+    [
+      "interested reply above Gmail-quoted pitch",
+      `Yes! Very interested, can you call me tomorrow?\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas Wright <thomas@wright-ai-solutions.com> wrote:\n${quoted(coldPitch)}`,
+    ],
+    [
+      "interested reply with the header wrapped onto two lines",
+      `Sounds good, send details.\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas Wright <thomas@wright-ai-solutions.com>\nwrote:\n${quoted(agentPitch)}`,
+    ],
     ["the finding's example payload", "Yes, interested!\n\nOn Thu … wrote:\n> Reply STOP and we won't email you again."],
     ["'stop by' as an ordinary phrase", "Sure, stop by the office Tuesday."],
     ["'can't stop' as an ordinary phrase", "Can't stop thinking about it — what does it cost?"],
-    ["Outlook-style quoted header block", `Tell me more.\n\nFrom: Thomas Wright <thomas@wright-ai-solutions.com>\nSent: Thursday, September 25, 2026 8:33 AM\nTo: Acme\nSubject: I probably shouldn't have sent this\n\n${coldPitch}`],
+    [
+      "Outlook-style quoted header block",
+      `Tell me more.\n\nFrom: Thomas Wright <thomas@wright-ai-solutions.com>\nSent: Thursday, September 25, 2026 8:33 AM\nTo: Acme\nSubject: I probably shouldn't have sent this\n\n${coldPitch}`,
+    ],
     ["quote without markers or header, footer still present", `Interested, what's the price?\n\n${agentPitch}`],
     ["a 'no thanks' is a no, not an opt-out request", "No thanks, not interested right now."],
     ["'don't stop emailing me' is the opposite of an opt-out", "Please don't stop emailing me, this is great!"],
@@ -47,19 +56,31 @@ describe("classifyReply — genuine opt-outs", () => {
   const cases: [string, string, string][] = [
     ["bare STOP", "STOP", "STOP"],
     ["STOP with punctuation and a signature", "Stop.\n\nSent from my iPhone", "Stop."],
-    ["please stop, above the quoted pitch", `Please stop\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas wrote:\n${quoted(coldPitch)}`, "Please stop"],
+    [
+      "please stop, above the quoted pitch",
+      `Please stop\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas wrote:\n${quoted(coldPitch)}`,
+      "Please stop",
+    ],
     ["unsubscribe sentence", "Please unsubscribe me from this list.", "Please unsubscribe me from this list."],
     ["remove me", "Not interested. Remove me from your list.", "Not interested. Remove me from your list."],
     ["take me off", "take me off your mailing list", "take me off your mailing list"],
     ["stop emailing", "Stop emailing me.", "Stop emailing me."],
     ["don't contact again", "Don't contact me again.", "Don't contact me again."],
-    ["a negation earlier in the sentence doesn't hide a real request", "I'm not interested, stop emailing me.", "I'm not interested, stop emailing me."],
+    [
+      "a negation earlier in the sentence doesn't hide a real request",
+      "I'm not interested, stop emailing me.",
+      "I'm not interested, stop emailing me.",
+    ],
     ["a negated phrase followed by a real one", "Don't stop by. Please stop emailing me.", "Don't stop by. Please stop emailing me."],
     ["please stop emailing me", "Please stop emailing me", "Please stop emailing me"],
     // Plain requests not to be contacted, with or without "again".
     ["don't email me", "Don't email me.", "Don't email me."],
     ["do not contact me", "Do not contact me.", "Do not contact me."],
-    ["not interested plus don't reach out again", "I'm not interested. Please don't reach out again.", "I'm not interested. Please don't reach out again."],
+    [
+      "not interested plus don't reach out again",
+      "I'm not interested. Please don't reach out again.",
+      "I'm not interested. Please don't reach out again.",
+    ],
     ["quit emailing me", "Quit emailing me", "Quit emailing me"],
     ["cease contacting", "Cease contacting this office.", "Cease contacting this office."],
     ["please remove from list", "please remove from list", "please remove from list"],
@@ -80,7 +101,11 @@ describe("classifyReply — genuine opt-outs", () => {
     ["I don't want such emails", "Thanks but I don't want such emails.", "Thanks but I don't want such emails."],
     ["we don't want to receive your emails", "we don't want to receive your emails", "we don't want to receive your emails"],
     ["we do not wish to receive these messages", "We do not wish to receive these messages.", "We do not wish to receive these messages."],
-    ["no longer want to get this kind of email", "I no longer want to get this kind of email.", "I no longer want to get this kind of email."],
+    [
+      "no longer want to get this kind of email",
+      "I no longer want to get this kind of email.",
+      "I no longer want to get this kind of email.",
+    ],
     ["don't want to hear from you", "Don't want to hear from you again.", "Don't want to hear from you again."],
     // Spanish and French.
     ["Spanish: no me envíe más correos", "Por favor no me envíe más correos", "Por favor no me envíe más correos"],

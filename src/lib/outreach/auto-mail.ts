@@ -92,7 +92,8 @@ export function detectAutoReply(input: AutoMailInput): string | null {
 
 // --- Bounces (delivery-status notifications) -------------------------------
 
-const BOUNCE_SENDER_RE = /^(?:mailer-daemon|postmaster|mail-daemon|mailerdaemon|bounces?|mail\s*delivery\s*(?:subsystem|system)?)(?:[@+]|$)/i;
+const BOUNCE_SENDER_RE =
+  /^(?:mailer-daemon|postmaster|mail-daemon|mailerdaemon|bounces?|mail\s*delivery\s*(?:subsystem|system)?)(?:[@+]|$)/i;
 const BOUNCE_SUBJECT_RE =
   /\b(?:undeliver(?:able|ed)|undelivered\s+mail|delivery\s+(?:status\s+notification\s*\((?:failure|delay)\)|has\s+failed|failure|failed|incomplete)|returned\s+(?:mail|to\s+sender)|mail\s+delivery\s+(?:failed|failure|subsystem)|could\s+not\s+be\s+delivered|failure\s+notice|message\s+not\s+delivered|non[\s-]?delivery)\b/i;
 const BOUNCE_BODY_RE =
@@ -156,7 +157,10 @@ export function detectBounce(input: AutoMailInput, ownDomains: string[] = []): B
 
   const failedRecipient =
     (xFailed ? xFailed.split(",")[0]!.trim().replace(/^<|>$/g, "").toLowerCase() : null) ??
-    failedRecipientFrom(text, ownDomains.map((d) => d.toLowerCase()));
+    failedRecipientFrom(
+      text,
+      ownDomains.map((d) => d.toLowerCase()),
+    );
   const diagnosticLine = /^\s*Diagnostic-Code:\s*(.+)$/im.exec(text)?.[1] ?? smtp?.[0] ?? null;
   const reason = fromDaemon
     ? `delivery-failure notice from ${address}`

@@ -20,11 +20,7 @@ import { enteredByHandEvidence } from "@/lib/outreach/evidence";
 export type AddressProblem = { message: string; link: { href: string; label: string } | null };
 
 /** Why `email` can't be used for this (new or existing) lead, or null when it can. */
-export async function checkAddressForLead(
-  pipelineId: PipelineId,
-  email: string,
-  leadId?: string,
-): Promise<AddressProblem | null> {
+export async function checkAddressForLead(pipelineId: PipelineId, email: string, leadId?: string): Promise<AddressProblem | null> {
   const conflict = await findAddressConflict(pipelineId, email, leadId);
   if (conflict) {
     return {
@@ -45,9 +41,7 @@ export async function wasPitched(pipelineId: PipelineId, leadId: string, lastEma
   return (await prisma.outreachRecipient.count({ where: { pipeline: pipelineId, leadId } })) > 0;
 }
 
-export type EditOutcome =
-  | { ok: true }
-  | { ok: false; error: string; field?: "email"; link?: { href: string; label: string } | null };
+export type EditOutcome = { ok: true } | { ok: false; error: string; field?: "email"; link?: { href: string; label: string } | null };
 
 /**
  * Saves edited contact details. `details` holds the pipeline's own columns

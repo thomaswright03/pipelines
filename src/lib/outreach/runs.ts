@@ -17,11 +17,7 @@ export type RecordedRun = RunOutcome & { runId: string };
  * "failed" run with the cause recorded (and logged with the run id); the
  * row is finalised either way.
  */
-export async function recordRun(
-  pipeline: string,
-  kind: string,
-  fn: (runId: string) => Promise<RunOutcome>,
-): Promise<RecordedRun> {
+export async function recordRun(pipeline: string, kind: string, fn: (runId: string) => Promise<RunOutcome>): Promise<RecordedRun> {
   const run = await prisma.pipelineRun.create({ data: { pipeline, kind, status: "running" } });
   let outcome: RunOutcome;
   try {

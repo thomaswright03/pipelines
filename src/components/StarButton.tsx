@@ -48,10 +48,7 @@ export default function StarButton({
         {shown ? "★" : "☆"}
       </button>
       {error && (
-        <div
-          role="alert"
-          className="notice-error fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-start gap-3 shadow-lg"
-        >
+        <div role="alert" className="notice-error fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-start gap-3 shadow-lg">
           <p className="flex-1 text-sm">{error}</p>
           <button type="button" onClick={() => setError(null)} className="btn-ghost -my-1 shrink-0">
             Dismiss

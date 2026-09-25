@@ -115,19 +115,20 @@ export function describeConnectionTestError(err: unknown): string {
   if (e.code === "EAUTH") {
     return "The email service turned down our login. Tell your developer the ZeptoMail SMTP password needs replacing.";
   }
-  if (e.syscall === "connect" || e.syscall === "getaddrinfo" || e.code === "ETIMEDOUT" || e.code === "ECONNECTION" || e.code === "ESOCKET") {
+  if (
+    e.syscall === "connect" ||
+    e.syscall === "getaddrinfo" ||
+    e.code === "ETIMEDOUT" ||
+    e.code === "ECONNECTION" ||
+    e.code === "ESOCKET"
+  ) {
     return "Couldn't reach the email service. Try again in a few minutes; if it keeps failing, tell your developer.";
   }
   if (e.code === "ETLS") return "The email service's secure connection failed. Tell your developer.";
   return "The email service answered with an error. Try again later; if it keeps failing, tell your developer.";
 }
 
-export async function sendOutreachEmail(
-  from: string,
-  to: string,
-  subject: string,
-  body: string,
-): Promise<{ providerMessageId: string }> {
+export async function sendOutreachEmail(from: string, to: string, subject: string, body: string): Promise<{ providerMessageId: string }> {
   const info = await getTransport().sendMail({ from, to, subject, text: body });
   // messageId is the locally generated Message-ID header. ZeptoMail's SMTP
   // relay doesn't hand back a tracking id of its own, so this is only a
@@ -165,7 +166,10 @@ const NOT_SENT_CODES = new Set(["EAUTH", "EENVELOPE", "EDNS", "ETLS", "ECONFIG",
 export function classifySendError(err: unknown): SendFailure {
   if (err instanceof MailConfigError) {
     // The technical detail (which setting is missing) is in the server log.
-    return { delivery: "not_sent", message: "Email sending isn't set up yet — nothing was sent. Ask your developer to finish the email setup." };
+    return {
+      delivery: "not_sent",
+      message: "Email sending isn't set up yet — nothing was sent. Ask your developer to finish the email setup.",
+    };
   }
   const e = (err ?? {}) as SmtpishError;
   const code = e.code ?? "";

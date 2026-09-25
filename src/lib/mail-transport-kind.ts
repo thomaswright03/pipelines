@@ -21,7 +21,10 @@ export type MailDestination = {
 };
 
 function isLoopback(host: string): boolean {
-  const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  const h = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
   return h === "localhost" || h === "::1" || /^127\.\d+\.\d+\.\d+$/.test(h);
 }
 
@@ -49,7 +52,8 @@ export function describeMailDestination(env: Env = process.env): MailDestination
       kind,
       delivers: false,
       badge: "Mail not set up",
-      description: "The app is set to send through a mail server, but no server address is set, so every send will fail. Tell your developer the mail server address is missing.",
+      description:
+        "The app is set to send through a mail server, but no server address is set, so every send will fail. Tell your developer the mail server address is missing.",
     };
   }
   const where = `${host}:${env.SMTP_PORT?.trim() || "1025"}`;

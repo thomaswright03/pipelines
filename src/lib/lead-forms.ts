@@ -21,11 +21,7 @@ export const LIMITS = {
   estimatedValue: 10_000_000,
 } as const;
 
-const optionalText = (label: string, max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max, `${label} can be at most ${max} characters`);
+const optionalText = (label: string, max: number) => z.string().trim().max(max, `${label} can be at most ${max} characters`);
 
 const optionalEmail = z
   .string()
@@ -49,11 +45,7 @@ const optionalWebsite = z
   .max(LIMITS.website, `Website can be at most ${LIMITS.website} characters`)
   .refine((v) => !v || /^https?:\/\/[^\s.]+\.[^\s]+$/i.test(v) || /^[^\s.]+\.[^\s]+$/.test(v), "Enter a website like example.com");
 
-const name = z
-  .string()
-  .trim()
-  .min(1, "Name is required")
-  .max(LIMITS.name, `Name can be at most ${LIMITS.name} characters`);
+const name = z.string().trim().min(1, "Name is required").max(LIMITS.name, `Name can be at most ${LIMITS.name} characters`);
 
 export const coldOutreachLeadSchema = z.object({
   name,
@@ -82,7 +74,8 @@ export function estimatedValueProblem(value: string): string | null {
   if (/^-\s*\$?\s*\d/.test(v) || /^\$\s*-/.test(v)) return "Estimated value can't be negative — enter 0 or more, like 2500";
   if (/^\$?\s*\d[\d,]*\.\d{3,}$/.test(v)) return "Estimated value can have at most two decimal places (cents), like 2500.50";
   if (!/^\$?\s*\d[\d,]*(\.\d{1,2})?$/.test(v)) return "Estimated value must be a dollar amount, like 2500 or $2,500.50";
-  if (parseMoneyToCents(v) > LIMITS.estimatedValue * 100) return `Estimated value can be at most $${LIMITS.estimatedValue.toLocaleString("en-US")}`;
+  if (parseMoneyToCents(v) > LIMITS.estimatedValue * 100)
+    return `Estimated value can be at most $${LIMITS.estimatedValue.toLocaleString("en-US")}`;
   return null;
 }
 

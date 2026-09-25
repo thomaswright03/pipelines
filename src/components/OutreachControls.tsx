@@ -103,7 +103,10 @@ export default function OutreachControls({
           {blocked > 0 && (
             <>
               {" "}
-              <Link href={`${PIPELINE_BASE_PATH[pipeline]}?status=new`} className="text-indigo-700 underline underline-offset-2 dark:text-indigo-300">
+              <Link
+                href={`${PIPELINE_BASE_PATH[pipeline]}?status=new`}
+                className="text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
+              >
                 {plural(blocked, `New ${noun.one}`, `New ${noun.many}`)} with an address {blocked === 1 ? "is" : "are"} held back
               </Link>{" "}
               <span className="muted">(already pitched, opted out, or the address needs checking — see the flagged rows).</span>
@@ -116,7 +119,11 @@ export default function OutreachControls({
       <ActionMessage feedback={feedbackEpoch === epoch ? feedback : null} />
 
       {showSearch &&
-        (isAgents ? <AgentSearchForm epoch={epoch} startControl={startControl} /> : <BusinessSearchForm epoch={epoch} startControl={startControl} />)}
+        (isAgents ? (
+          <AgentSearchForm epoch={epoch} startControl={startControl} />
+        ) : (
+          <BusinessSearchForm epoch={epoch} startControl={startControl} />
+        ))}
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <FindEmailsButton pipeline={pipeline} disabled={isPending} epoch={epoch} startControl={startControl} />
@@ -124,9 +131,9 @@ export default function OutreachControls({
 
       <HowThisWorks summary="How finding and sending work">
         <p>
-          Only {isAgents ? "agents" : "businesses"} an email was found for are saved. Yelp{isAgents ? " and ADRE don't" : " doesn't"} give
-          a website, so each search guesses one from the name and keeps it only if the site shows the{" "}
-          {isAgents ? "agent" : "business"}&apos;s phone number, street address or city — expect fewer new {noun.many} than results.
+          Only {isAgents ? "agents" : "businesses"} an email was found for are saved. Yelp{isAgents ? " and ADRE don't" : " doesn't"} give a
+          website, so each search guesses one from the name and keeps it only if the site shows the {isAgents ? "agent" : "business"}&apos;s
+          phone number, street address or city — expect fewer new {noun.many} than results.
           {isAgents ? " An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox." : ""}
         </p>
         <p>Replies to your emails are logged automatically; record anything else from the lead page.</p>
@@ -178,7 +185,13 @@ function BusinessSearchForm({ epoch, startControl }: { epoch: number; startContr
         </label>
         <label className="field-label w-44">
           State
-          <select name="state" value={values.state} onChange={(e) => setValues({ ...values, state: e.target.value })} className="input" required>
+          <select
+            name="state"
+            value={values.state}
+            onChange={(e) => setValues({ ...values, state: e.target.value })}
+            className="input"
+            required
+          >
             <option value="">Pick a state</option>
             {US_STATE_OPTIONS.map((s) => (
               <option key={s.code} value={s.code}>
@@ -222,7 +235,11 @@ function AgentSearchForm({ epoch, startControl }: { epoch: number; startControl:
   const cities = citiesInCounty(county);
 
   return (
-    <form action={action} onSubmit={() => setSubmittedEpoch(startControl())} className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+    <form
+      action={action}
+      onSubmit={() => setSubmittedEpoch(startControl())}
+      className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800"
+    >
       <div className="flex flex-wrap items-end gap-2">
         <label className="field-label w-44">
           County

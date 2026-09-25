@@ -18,9 +18,10 @@ describe("extractEmails", () => {
   });
 
   it("finds addresses in mailto links and in text, lower-cased and de-duplicated", () => {
-    expect(
-      extractEmails(`<a href="mailto:Sales@Shop.test">x</a> or SALES@shop.test, or jane.doe+web@shop.test.`),
-    ).toEqual(["sales@shop.test", "jane.doe+web@shop.test"]);
+    expect(extractEmails(`<a href="mailto:Sales@Shop.test">x</a> or SALES@shop.test, or jane.doe+web@shop.test.`)).toEqual([
+      "sales@shop.test",
+      "jane.doe+web@shop.test",
+    ]);
   });
 
   it("ignores placeholders, template domains and image file names", () => {

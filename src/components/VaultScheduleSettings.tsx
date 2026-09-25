@@ -132,8 +132,8 @@ export default function VaultScheduleSettings({
       </div>
       <div id="schedule-yield" className="flex flex-col gap-1 text-sm">
         <p className="muted">
-          Not every business has a findable email address — usually only about 1 in 5 do — and each run stops looking after
-          about 25 seconds, so expect far fewer emails than businesses checked.
+          Not every business has a findable email address — usually only about 1 in 5 do — and each run stops looking after about 25
+          seconds, so expect far fewer emails than businesses checked.
         </p>
         {lastCounted?.numbers ? (
           <p>

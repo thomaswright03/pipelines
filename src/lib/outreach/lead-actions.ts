@@ -58,7 +58,11 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
     if (!moved) return changedMeanwhile(lead.name);
   } else {
     // A deliberate move is the operator's review of any pending reply.
-    const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], { status: to, replyNeedsReview: false, replyReviewReason: null });
+    const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], {
+      status: to,
+      replyNeedsReview: false,
+      replyReviewReason: null,
+    });
     if (!moved) return changedMeanwhile(lead.name);
   }
   return ok(`Moved ${lead.name} from ${statusLabel(lead.status)} to ${statusLabel(to)}.`);
@@ -203,11 +207,11 @@ export async function markOptedOut(pipelineId: PipelineId, leadId: string): Prom
     return false;
   });
   if (!moved) {
-    return ok(`Added ${email} to the do-not-email list. ${lead.name}'s status changed a moment ago, so it was left as it is — reload the page to see it.`);
+    return ok(
+      `Added ${email} to the do-not-email list. ${lead.name}'s status changed a moment ago, so it was left as it is — reload the page to see it.`,
+    );
   }
-  return ok(
-    `Added ${email} to the do-not-email list${keepStatus ? "" : ` and moved ${lead.name} to ${statusLabel(newStatus)}`}.`,
-  );
+  return ok(`Added ${email} to the do-not-email list${keepStatus ? "" : ` and moved ${lead.name} to ${statusLabel(newStatus)}`}.`);
 }
 
 /**
@@ -224,8 +228,7 @@ export async function removeSuppression(pipelineId: PipelineId, leadId: string):
   const suppression = await getSuppression(email);
   if (!suppression) return refuse(`${email} isn't on the do-not-email list.`);
 
-  const restore =
-    suppression.source === "inbound_reply" && lead.repliedAt !== null && ["lost", "not_interested"].includes(lead.status);
+  const restore = suppression.source === "inbound_reply" && lead.repliedAt !== null && ["lost", "not_interested"].includes(lead.status);
   await prisma.$transaction(async (tx) => {
     await unsuppressEmail(email, tx);
     for (const pipeline of ALL_PIPELINES) {
@@ -299,12 +302,7 @@ export async function setOurReply(pipelineId: PipelineId, leadId: string, replie
   return ok(replied ? `Recorded that you replied to ${lead.name}.` : `Cleared "we replied" for ${lead.name}.`);
 }
 
-export async function confirmColdCall(
-  pipelineId: PipelineId,
-  leadId: string,
-  outcome: string,
-  notes: string,
-): Promise<ActionResult> {
+export async function confirmColdCall(pipelineId: PipelineId, leadId: string, outcome: string, notes: string): Promise<ActionResult> {
   if (!(COLD_CALL_OUTCOMES as readonly string[]).includes(outcome)) return refuse("Pick a call outcome first.");
   const lead = await loadLead(pipelineId, leadId);
   if (!lead) return NOT_FOUND;
@@ -336,12 +334,7 @@ export async function confirmColdCall(
 const MAX_ACTIVITY_CHARS = 2_000;
 
 /** Logs a call, email, meeting or note in the lead's history. */
-export async function addLeadActivity(
-  pipelineId: PipelineId,
-  leadId: string,
-  type: string,
-  notes: string,
-): Promise<ActionResult> {
+export async function addLeadActivity(pipelineId: PipelineId, leadId: string, type: string, notes: string): Promise<ActionResult> {
   const trimmed = String(notes ?? "").trim();
   if (!trimmed) return refuse("Write what happened first.");
   if (trimmed.length > MAX_ACTIVITY_CHARS) return refuse("Keep a history entry under 2,000 characters.");

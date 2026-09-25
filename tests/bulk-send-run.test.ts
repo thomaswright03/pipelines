@@ -96,10 +96,15 @@ describe("bulkSendSummary", () => {
     expect(bulkSendSummary({ ...base, sent: 3 }, null, preview)).toEqual({ summary: "Sent 3 of 3.", tone: "success" });
   });
   it("some sent, then stopped, is a warning; nothing sent is an error", () => {
-    expect(bulkSendSummary({ ...base, sent: 1 }, STOPPED_BY_USER, preview)).toMatchObject({ tone: "warning", summary: `Sent 1 of 3. ${STOPPED_BY_USER}` });
+    expect(bulkSendSummary({ ...base, sent: 1 }, STOPPED_BY_USER, preview)).toMatchObject({
+      tone: "warning",
+      summary: `Sent 1 of 3. ${STOPPED_BY_USER}`,
+    });
     expect(bulkSendSummary({ ...base, failed: 3 }, STOPPED_SERVICE_DOWN, preview).tone).toBe("error");
   });
   it("mentions the next batch when more leads are waiting", () => {
-    expect(bulkSendSummary({ ...base, sent: 3 }, null, { ...preview, totalEligible: 5 }).summary).toBe("Sent 3 of 3. 2 more New leads can go in the next batch.");
+    expect(bulkSendSummary({ ...base, sent: 3 }, null, { ...preview, totalEligible: 5 }).summary).toBe(
+      "Sent 3 of 3. 2 more New leads can go in the next batch.",
+    );
   });
 });

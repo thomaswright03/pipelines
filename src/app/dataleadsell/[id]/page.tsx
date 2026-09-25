@@ -57,7 +57,10 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
               <DetailField label="Last emailed" value={formatDateTime(lead.lastEmailedAt)} />
               <DetailField label="Replied" value={formatDateTime(lead.repliedAt)} />
               <DetailField label="We replied back" value={formatDateTime(lead.ourReplyAt)} />
-              <DetailField label="Call outcome" value={lead.callOutcome ? (CALL_OUTCOME_LABEL[lead.callOutcome] ?? lead.callOutcome) : "—"} />
+              <DetailField
+                label="Call outcome"
+                value={lead.callOutcome ? (CALL_OUTCOME_LABEL[lead.callOutcome] ?? lead.callOutcome) : "—"}
+              />
             </dl>
             {lead.notes && (
               <div className="mt-3 border-t border-zinc-200 pt-3 text-sm dark:border-zinc-800">

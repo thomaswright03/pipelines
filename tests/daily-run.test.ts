@@ -95,7 +95,9 @@ describe("a daily run whose Yelp search fails", () => {
       createdAt: new Date(Date.now() - 86_400_000),
     });
 
-    const res = await dailyGET(new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }));
+    const res = await dailyGET(
+      new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }),
+    );
     const json = await res.json();
 
     expect(mail.messages).toHaveLength(1);
@@ -164,7 +166,9 @@ describe("the daily run's status", () => {
     await prisma.outreachRecipient.create({ data: { pipeline: "dataleadsell", email: "dup@x.test", state: "sent", sentAt: new Date() } });
     await makeColdLead({ email: "dup@x.test", source: "Yelp search (daily automated run)" });
 
-    const res = await dailyGET(new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }));
+    const res = await dailyGET(
+      new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }),
+    );
     const json = await res.json();
 
     expect(res.status).toBe(200);

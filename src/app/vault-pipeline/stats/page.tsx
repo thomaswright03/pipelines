@@ -23,10 +23,7 @@ export default async function VaultStatsPage() {
         <StatCard label="Starred" value={s.starred} />
       </div>
 
-      <EmailPerformance
-        s={s}
-        conversion={{ label: "Appointment or better", value: s.positiveOutcomes }}
-      />
+      <EmailPerformance s={s} conversion={{ label: "Appointment or better", value: s.positiveOutcomes }} />
 
       <StatSection title="Daily automation">
         <StatCard label="Leads from daily runs" value={s.automatedLeads} sublabel={`of ${s.total.toLocaleString("en-US")} in total`} />

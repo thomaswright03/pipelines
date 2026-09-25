@@ -8,7 +8,12 @@ export function DetailField({ label, value, href }: { label: string; value: stri
       <dt className="text-xs muted">{label}</dt>
       <dd className="break-words">
         {href && value !== "—" ? (
-          <a href={href} className="text-indigo-700 underline-offset-2 hover:underline dark:text-indigo-300" rel="noopener noreferrer" target={href.startsWith("http") ? "_blank" : undefined}>
+          <a
+            href={href}
+            className="text-indigo-700 underline-offset-2 hover:underline dark:text-indigo-300"
+            rel="noopener noreferrer"
+            target={href.startsWith("http") ? "_blank" : undefined}
+          >
             {value}
           </a>
         ) : (

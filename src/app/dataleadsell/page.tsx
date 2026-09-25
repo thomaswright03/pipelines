@@ -54,15 +54,14 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
       <div>
         <h1 className="accent-text text-2xl font-bold tracking-tight">dataleadsell.com</h1>
         <p className="mt-1 text-sm muted">
-          Finds real estate agents and emails each one a Probate Property Leads pitch from{" "}
-          <EmailCode email={DATALEADSELL_SENDER_EMAIL} />.
+          Finds real estate agents and emails each one a Probate Property Leads pitch from <EmailCode email={DATALEADSELL_SENDER_EMAIL} />.
         </p>
         <div className="mt-1">
           <HowThisWorks>
             <p>
-              Agents come from Yelp in Maricopa, Salt Lake and Utah counties, plus Arizona&apos;s ADRE license roster for Maricopa.
-              An email address is looked for on each agent&apos;s website, and every address gets one pitch at most. Agents who
-              don&apos;t reply within a week move to the call deck.
+              Agents come from Yelp in Maricopa, Salt Lake and Utah counties, plus Arizona&apos;s ADRE license roster for Maricopa. An email
+              address is looked for on each agent&apos;s website, and every address gets one pitch at most. Agents who don&apos;t reply
+              within a week move to the call deck.
             </p>
           </HowThisWorks>
         </div>

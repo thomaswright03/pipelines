@@ -25,7 +25,9 @@ const limit = Math.min(Math.max(Number.parseInt(process.argv[2] ?? "200", 10) ||
 function anonymise(text) {
   if (!text) return text ?? "";
   return text
-    .replace(/[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, (m) => (/^(mailer-daemon|postmaster)@/i.test(m) ? m.replace(/@.*/, "@mx.example") : "person@example.test"))
+    .replace(/[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, (m) =>
+      /^(mailer-daemon|postmaster)@/i.test(m) ? m.replace(/@.*/, "@mx.example") : "person@example.test",
+    )
     .replace(/\bhttps?:\/\/\S+/gi, "https://example.test")
     .replace(/\bwww\.[a-z0-9.-]+\.[a-z]{2,}\S*/gi, "www.example.test")
     .replace(/(?:\+?1[\s.-]*)?\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}\b/g, "(555) 555-0100")
@@ -45,7 +47,13 @@ try {
   const cases = rows.map((r) => ({
     subject: anonymise(r.subject),
     text: anonymise(r.text),
-    suggested: { optOut: r.optedOut, review: r.reviewReason !== null, kind: r.kind, bounceAddressFound: r.hasRecipient, rulesVersion: r.rulesVersion },
+    suggested: {
+      optOut: r.optedOut,
+      review: r.reviewReason !== null,
+      kind: r.kind,
+      bounceAddressFound: r.hasRecipient,
+      rulesVersion: r.rulesVersion,
+    },
   }));
   process.stdout.write(`${JSON.stringify(cases, null, 2)}\n`);
   console.error(`Exported ${cases.length} cases. Check each label and the anonymisation before adding any to tests/corpus/.`);

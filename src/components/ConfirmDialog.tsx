@@ -36,10 +36,7 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
     (pending.danger ? cancelRef : confirmRef).current?.focus();
   }, [pending]);
 
-  const confirm = useCallback(
-    (options: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ ...options, resolve })),
-    [],
-  );
+  const confirm = useCallback((options: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ ...options, resolve })), []);
 
   function close(confirmed: boolean) {
     pending?.resolve(confirmed);
@@ -65,12 +62,7 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
         <button ref={cancelRef} type="button" onClick={() => close(false)} className="btn-secondary">
           Cancel
         </button>
-        <button
-          ref={confirmRef}
-          type="button"
-          onClick={() => close(true)}
-          className={pending.danger ? "btn-danger-solid" : "btn-primary"}
-        >
+        <button ref={confirmRef} type="button" onClick={() => close(true)} className={pending.danger ? "btn-danger-solid" : "btn-primary"}>
           {pending.confirmLabel}
         </button>
       </div>

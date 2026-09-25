@@ -50,7 +50,13 @@ export default function PipelineCard({
       {editing ? (
         <form action={save} className="flex flex-col gap-2">
           <EditField label="Pipeline name" name="name" maxLength={80} value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-          <EditField label="Company" name="company" maxLength={160} value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+          <EditField
+            label="Company"
+            name="company"
+            maxLength={160}
+            value={form.company}
+            onChange={(v) => setForm({ ...form, company: v })}
+          />
           <EditField
             label="Product description"
             name="productDescription"

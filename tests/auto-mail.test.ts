@@ -45,7 +45,14 @@ describe("detectAutoReply", () => {
   });
 
   it("reads out-of-office subjects and wording", () => {
-    for (const subject of ["Automatic reply: hello", "Auto-Reply: Quick question", "Out of Office: hi", "RE: Out of the office", "Autoreply", "Abwesenheitsnotiz: Hallo"]) {
+    for (const subject of [
+      "Automatic reply: hello",
+      "Auto-Reply: Quick question",
+      "Out of Office: hi",
+      "RE: Out of the office",
+      "Autoreply",
+      "Abwesenheitsnotiz: Hallo",
+    ]) {
       expect(detectAutoReply({ subject, text: "" }), subject).not.toBeNull();
     }
     for (const text of [
@@ -95,7 +102,10 @@ const POSTFIX_BOUNCE = {
 
 describe("detectBounce", () => {
   it("reads Postfix, Gmail, Exchange and bare DSN notices, and the failed address", () => {
-    expect(detectBounce(POSTFIX_BOUNCE)).toMatchObject({ failedRecipient: "dave@davedeli.example", diagnostic: expect.stringMatching(/5\.1\.1/) });
+    expect(detectBounce(POSTFIX_BOUNCE)).toMatchObject({
+      failedRecipient: "dave@davedeli.example",
+      diagnostic: expect.stringMatching(/5\.1\.1/),
+    });
     expect(
       detectBounce({
         from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
@@ -124,14 +134,24 @@ describe("detectBounce", () => {
 
   it("never takes our own sender address for the failed recipient", () => {
     const bounce = detectBounce(
-      { from: "mailer-daemon@mx.example", subject: "failure notice", text: "From: thomas@wright-ai-solutions.com\nTo: pat@shop.example\n550 5.1.1 no such user" },
+      {
+        from: "mailer-daemon@mx.example",
+        subject: "failure notice",
+        text: "From: thomas@wright-ai-solutions.com\nTo: pat@shop.example\n550 5.1.1 no such user",
+      },
       ["wright-ai-solutions.com"],
     );
     expect(bounce?.failedRecipient).toBe("pat@shop.example");
   });
 
   it("doesn't treat a person mentioning a delivery problem as a bounce", () => {
-    expect(detectBounce({ from: "pat@shop.example", subject: "Re: hello", text: "Your email to my partner could not be delivered, try bob@shop.example" })).toBeNull();
+    expect(
+      detectBounce({
+        from: "pat@shop.example",
+        subject: "Re: hello",
+        text: "Your email to my partner could not be delivered, try bob@shop.example",
+      }),
+    ).toBeNull();
     expect(detectBounce({ from: "pat@shop.example", subject: "Re: hello", text: "Interested!" })).toBeNull();
   });
 });
@@ -162,7 +182,12 @@ describe("an automatic reply", () => {
   });
 
   it("leaves the lead to move to the call deck after a week of silence", async () => {
-    const lead = await makeAgentLead({ email: "away@realty.example", phone: "+14805550100", status: "contacted", lastEmailedAt: new Date(Date.now() - 8 * DAY_MS) });
+    const lead = await makeAgentLead({
+      email: "away@realty.example",
+      phone: "+14805550100",
+      status: "contacted",
+      lastEmailedAt: new Date(Date.now() - 8 * DAY_MS),
+    });
     await inbound({ from: "away@realty.example", subject: "Out of Office", text: "Away until Oct 5." });
     await routeStaleContacts();
     expect((await prisma.agentLead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("cold_call_list");
@@ -179,7 +204,14 @@ describe("an automatic reply", () => {
 
   it("still honours an opt-out, even from an autoresponder", async () => {
     const lead = await makeColdLead({ email: "bot@shop.example", status: "contacted", lastEmailedAt: new Date() });
-    const json = await (await inbound({ from: lead.email!, subject: "Automatic reply", text: "Please remove me from your list.", headers: { "Auto-Submitted": "auto-replied" } })).json();
+    const json = await (
+      await inbound({
+        from: lead.email!,
+        subject: "Automatic reply",
+        text: "Please remove me from your list.",
+        headers: { "Auto-Submitted": "auto-replied" },
+      })
+    ).json();
     expect(json).toMatchObject({ optedOut: true, kind: "reply" });
     expect(await prisma.suppressedEmail.count({ where: { email: lead.email! } })).toBe(1);
   });
@@ -212,13 +244,20 @@ describe("a bounce notice", () => {
     mail = captureMail();
     const lead = await makeAgentLead({ email: "agent@realty.example" });
     await sendFirstTouch("dataleadsell", lead.id);
-    await inbound({ from: "mailer-daemon@mx.example", subject: "Delivery failure", text: "Your message could not be delivered.\n550 5.1.1 user unknown" });
+    await inbound({
+      from: "mailer-daemon@mx.example",
+      subject: "Delivery failure",
+      text: "Your message could not be delivered.\n550 5.1.1 user unknown",
+    });
 
     const [listed] = await listUnmatchedReplies();
     expect(listed).toMatchObject({ kind: "bounce", failedRecipient: null });
 
     const never = await makeAgentLead({ email: "never@realty.example" });
-    expect(await attachReplyToLead(listed!.id, "dataleadsell", never.id)).toMatchObject({ ok: false, error: expect.stringMatching(/never emailed/) });
+    expect(await attachReplyToLead(listed!.id, "dataleadsell", never.id)).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/never emailed/),
+    });
 
     expect(await attachReplyToLead(listed!.id, "dataleadsell", lead.id)).toEqual({
       ok: true,

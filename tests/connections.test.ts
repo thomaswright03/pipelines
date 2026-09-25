@@ -50,18 +50,29 @@ describe("Settings → Connections", () => {
     mail = captureMail();
     mail.fail(smtpError("Invalid login: 535 Authentication Failed", { code: "EAUTH", responseCode: 535 }));
     const mailResult = await testConnectionAction("mail");
-    expect(mailResult).toMatchObject({ ok: false, error: expect.stringMatching(/^Email service: The email service turned down our login/) });
+    expect(mailResult).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^Email service: The email service turned down our login/),
+    });
     expect(mail.messages).toHaveLength(0);
     expect((await statusOf()).mail).toMatchObject({ tone: "error", summary: expect.stringMatching(/connection test .* failed/) });
 
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 401, contentType: "application/json", body: JSON.stringify({ error: { code: "TOKEN_INVALID" } }) }) });
-    expect(await testConnectionAction("yelp")).toMatchObject({ ok: false, error: expect.stringMatching(/^Yelp: Yelp rejected our access key/) });
+    stubFetch({
+      [YELP_PREFIX]: () => ({ status: 401, contentType: "application/json", body: JSON.stringify({ error: { code: "TOKEN_INVALID" } }) }),
+    });
+    expect(await testConnectionAction("yelp")).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^Yelp: Yelp rejected our access key/),
+    });
     expect((await statusOf()).yelp).toMatchObject({ tone: "error", summary: expect.stringMatching(/rejected our access key/) });
   });
 
   it("Test connection: success turns each service green with the time, without sending anything", async () => {
     mail = captureMail();
-    expect(await testConnectionAction("mail")).toMatchObject({ ok: true, message: expect.stringMatching(/logged in at .* No email was sent/) });
+    expect(await testConnectionAction("mail")).toMatchObject({
+      ok: true,
+      message: expect.stringMatching(/logged in at .* No email was sent/),
+    });
     expect(mail.messages).toHaveLength(0);
     const { calls } = stubFetch({ [YELP_PREFIX]: () => yelpResponse([{ name: "One Shop" }]) });
     expect(await testConnectionAction("yelp")).toMatchObject({ ok: true });
@@ -78,12 +89,22 @@ describe("Settings → Connections", () => {
       data: { pipeline: "cold-outreach", email: "a@x.test", state: "sent", sentAt: new Date(Date.now() - 3 * DAY_MS) },
     });
     await prisma.pipelineRun.create({
-      data: { pipeline: "cold-outreach", kind: "daily", status: "failed", summary: "The run stopped with an error.", finishedAt: new Date() },
+      data: {
+        pipeline: "cold-outreach",
+        kind: "daily",
+        status: "failed",
+        summary: "The run stopped with an error.",
+        finishedAt: new Date(),
+      },
     });
 
     const s = await statusOf();
 
-    expect(s.replies).toMatchObject({ tone: "warn", summary: expect.stringMatching(/no reply of any kind .* has arrived in the last 7 days/), next: expect.stringMatching(/tell your developer/i) });
+    expect(s.replies).toMatchObject({
+      tone: "warn",
+      summary: expect.stringMatching(/no reply of any kind .* has arrived in the last 7 days/),
+      next: expect.stringMatching(/tell your developer/i),
+    });
     expect(s["daily-run"]).toMatchObject({ tone: "error", summary: expect.stringMatching(/failed — The run stopped with an error/) });
     expect(s["stale-contacts"]).toMatchObject({ tone: "warn", summary: expect.stringMatching(/^Has never run/) });
     expect(s.yelp.badge).toBe("Not confirmed yet");
@@ -102,7 +123,10 @@ describe("Settings → Connections", () => {
     );
     stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
     await testConnectionAction("yelp");
-    for (const [pipeline, kind] of [["cold-outreach", "daily"], ["all", "stale-contacts"]]) {
+    for (const [pipeline, kind] of [
+      ["cold-outreach", "daily"],
+      ["all", "stale-contacts"],
+    ]) {
       await prisma.pipelineRun.create({ data: { pipeline, kind, status: "succeeded", summary: "Done.", finishedAt: new Date() } });
     }
 
@@ -119,7 +143,10 @@ describe("Settings → Connections", () => {
     const lead = await makeColdLead();
     expect(await sendFirstTouch("cold-outreach", lead.id)).toMatchObject({ ok: false, reason: "send_failed" });
 
-    expect((await statusOf()).mail).toMatchObject({ tone: "error", summary: expect.stringMatching(/The last send failed .*rejected our login/) });
+    expect((await statusOf()).mail).toMatchObject({
+      tone: "error",
+      summary: expect.stringMatching(/The last send failed .*rejected our login/),
+    });
 
     expect(await sendFirstTouch("cold-outreach", lead.id)).toMatchObject({ ok: true });
     await setOutboundPaused(true);
@@ -144,7 +171,13 @@ describe("Settings → Connections", () => {
 
   it("warns when a job hasn't run for over a day", async () => {
     await prisma.pipelineRun.create({
-      data: { pipeline: "all", kind: "stale-contacts", status: "succeeded", startedAt: new Date(Date.now() - 2 * DAY_MS), finishedAt: new Date() },
+      data: {
+        pipeline: "all",
+        kind: "stale-contacts",
+        status: "succeeded",
+        startedAt: new Date(Date.now() - 2 * DAY_MS),
+        finishedAt: new Date(),
+      },
     });
     expect((await statusOf())["stale-contacts"]).toMatchObject({ tone: "warn", summary: expect.stringMatching(/over a day ago/) });
   });

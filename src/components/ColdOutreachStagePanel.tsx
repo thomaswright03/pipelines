@@ -2,11 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  markLeadLostAction,
-  markResponseAsNonDeliveryAction,
-  scheduleAppointmentAction,
-} from "@/lib/actions/vault-pipeline";
+import { markLeadLostAction, markResponseAsNonDeliveryAction, scheduleAppointmentAction } from "@/lib/actions/vault-pipeline";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { APP_TIME_ZONE_LABEL } from "@/lib/time";
 import { APPOINTMENT_FROM } from "@/lib/lead-status";
@@ -20,7 +16,6 @@ const LOST_REASONS = [
   { value: "no_need", label: "No need" },
   { value: "unable_to_contact", label: "Unable to contact" },
 ] as const;
-
 
 // Cold Outreach–only stage actions: appointments, Lost with a reason, the
 // "that reply was really a bounce" correction.
@@ -141,7 +136,6 @@ export default function ColdOutreachStagePanel({
           That reply was a bounce
         </button>
       )}
-
 
       <ActionMessage feedback={feedback} />
     </section>

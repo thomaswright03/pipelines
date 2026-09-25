@@ -210,7 +210,10 @@ describe("unmatched-reply actions", () => {
     expect(await attachReplyAction(reply.id, "cold-outreach", lead.id)).toMatchObject({ ok: true });
     expect(await dismissReplyAction(other.id)).toEqual({ ok: true, message: "Dismissed the reply." });
     expect(await dismissReplyAction(other.id)).toMatchObject({ ok: false });
-    expect(await attachReplyAction(reply.id, "nope", lead.id)).toMatchObject({ ok: false, error: expect.stringMatching(/Couldn't attach/) });
+    expect(await attachReplyAction(reply.id, "nope", lead.id)).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/Couldn't attach/),
+    });
 
     dbFails("inboundReply", "updateMany");
     expect(await dismissReplyAction(other.id)).toEqual({ ok: false, error: "Couldn't dismiss the reply — try again in a moment." });
@@ -239,8 +242,13 @@ describe("Cold Outreach lead actions", () => {
     expect((await updateLeadAction(lead.id, { ...COLD_FORM, name: "" })).fieldErrors?.name).toBe("Name is required");
     const moved = await updateLeadAction(lead.id, { ...COLD_FORM, name: "Pitched", email: "b@pitched.test" });
     expect(moved.fieldErrors?.email).toMatch(/already emailed/);
-    expect(await updateLeadAction(lead.id, { ...COLD_FORM, name: "Pitched Co", email: "a@pitched.test" })).toEqual({ ok: true, leadId: lead.id });
-    expect(await updateLeadAction("missing", { ...COLD_FORM, name: "X" })).toEqual({ error: "This lead no longer exists — it may have been deleted." });
+    expect(await updateLeadAction(lead.id, { ...COLD_FORM, name: "Pitched Co", email: "a@pitched.test" })).toEqual({
+      ok: true,
+      leadId: lead.id,
+    });
+    expect(await updateLeadAction("missing", { ...COLD_FORM, name: "X" })).toEqual({
+      error: "This lead no longer exists — it may have been deleted.",
+    });
   });
 
   it("reports an unexpected failure while saving", async () => {
@@ -320,8 +328,12 @@ describe("dataleadsell actions", () => {
     const created = await createAgentAction({ ...AGENT_FORM, name: "Jane Doe", county: "Maricopa", email: "jane@doe.test" });
     expect(created).toMatchObject({ ok: true });
     expect(await prisma.agentLead.findUniqueOrThrow({ where: { id: created.leadId! } })).toMatchObject({ state: "AZ" });
-    expect((await createAgentAction({ ...AGENT_FORM, name: "Other", email: "jane@doe.test" })).fieldErrors?.email).toMatch(/already belongs/);
-    expect(await updateAgentAction(created.leadId!, { ...AGENT_FORM, name: "Jane Q Doe", county: "Salt Lake" })).toMatchObject({ ok: true });
+    expect((await createAgentAction({ ...AGENT_FORM, name: "Other", email: "jane@doe.test" })).fieldErrors?.email).toMatch(
+      /already belongs/,
+    );
+    expect(await updateAgentAction(created.leadId!, { ...AGENT_FORM, name: "Jane Q Doe", county: "Salt Lake" })).toMatchObject({
+      ok: true,
+    });
     expect(await prisma.agentLead.findUniqueOrThrow({ where: { id: created.leadId! } })).toMatchObject({ state: "UT", email: null });
   });
 
@@ -335,7 +347,9 @@ describe("dataleadsell actions", () => {
       error: "Yelp found no real estate agents in Mesa, AZ.",
     });
     stubFetch({ [YELP_PREFIX]: () => yelpResponse([{ name: "Sam Seller - HomeSmart" }]) });
-    expect((await searchAgentsAction({}, form({ county: "Maricopa", city: "Mesa" }))).message).toMatch(/^Found 1 agents in Mesa, Maricopa County/);
+    expect((await searchAgentsAction({}, form({ county: "Maricopa", city: "Mesa" }))).message).toMatch(
+      /^Found 1 agents in Mesa, Maricopa County/,
+    );
   });
 
   it("'Run pipeline' for agents reports Yelp outages", async () => {
@@ -348,7 +362,10 @@ describe("dataleadsell actions", () => {
   it("explains an ADRE roster download failure and processes chunks", async () => {
     vi.spyOn(log, "logError").mockImplementation(() => {});
     stubFetch({});
-    expect(await loadAdreRosterAction()).toMatchObject({ ok: false, error: expect.stringMatching(/^Couldn't download ADRE's license roster/) });
+    expect(await loadAdreRosterAction()).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^Couldn't download ADRE's license roster/),
+    });
     expect(await processAdreChunkAction()).toMatchObject({ ok: true, result: { checked: 0 } });
     dbFails("adreLicensee", "findMany");
     expect(await processAdreChunkAction()).toMatchObject({ ok: false, error: expect.stringMatching(/Progress so far is saved/) });

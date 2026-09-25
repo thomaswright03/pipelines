@@ -117,9 +117,7 @@ export async function guessWebsiteForBusiness(
 ): Promise<WebsiteGuessResult> {
   // Only agent listings follow the "Person - Brokerage" convention; a
   // business called "Joe's Pizza - Downtown" isn't a person at "Downtown".
-  const { person, brokerage: splitBrokerage } = options.splitPersonName
-    ? splitPersonAndBrokerage(name)
-    : { person: name, brokerage: null };
+  const { person, brokerage: splitBrokerage } = options.splitPersonName ? splitPersonAndBrokerage(name) : { person: name, brokerage: null };
   const brokerageName = (options.brokerage || splitBrokerage)?.trim() || null;
 
   const nameCandidates: { name: string; basedOn: WebsiteGuess["basedOn"] }[] = brokerageName

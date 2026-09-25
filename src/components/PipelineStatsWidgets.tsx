@@ -125,21 +125,33 @@ export function EmailPerformance({
   return (
     <StatSection title="Email performance">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Emails sent (all time)" value={s.emailsSentTotal} sublabel={`to ${s.leadsEmailed.toLocaleString("en-US")} distinct leads`} />
+        <StatCard
+          label="Emails sent (all time)"
+          value={s.emailsSentTotal}
+          sublabel={`to ${s.leadsEmailed.toLocaleString("en-US")} distinct leads`}
+        />
         <StatCard label="Sent today" value={s.emailsSentToday} />
         <StatCard label="Sent, last 7 days" value={s.emailsSentLast7Days} />
         <StatCard label="Sent, last 30 days" value={s.emailsSentLast30Days} />
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <StatCard label="Replied" value={s.replied} sublabel={shareOf(s.replied, s.leadsEmailed, "emailed leads replied")} />
-        <StatCard label="Opted out" value={s.optedOut} sublabel={shareOf(s.optedOut, s.leadsEmailed, "emailed leads asked not to be emailed")} />
+        <StatCard
+          label="Opted out"
+          value={s.optedOut}
+          sublabel={shareOf(s.optedOut, s.leadsEmailed, "emailed leads asked not to be emailed")}
+        />
         <StatCard
           label="Automatic replies"
           value={s.autoReplied}
           sublabel={shareOf(s.autoReplied, s.leadsEmailed, "emailed leads sent an out-of-office or autoresponder")}
         />
         <StatCard label="Bounced" value={s.bounced} sublabel={shareOf(s.bounced, s.emailsSentTotal, "emails sent bounced")} />
-        <StatCard label="We replied back" value={s.weReplied} sublabel={shareOf(s.weReplied, s.replied, "leads who replied got an answer")} />
+        <StatCard
+          label="We replied back"
+          value={s.weReplied}
+          sublabel={shareOf(s.weReplied, s.replied, "leads who replied got an answer")}
+        />
         <StatCard
           label={conversion.label}
           value={conversion.value}
@@ -147,15 +159,23 @@ export function EmailPerformance({
         />
       </div>
       <p className="text-sm muted">
-        “Replied” counts replies a person wrote, whenever they arrive (even after the lead moved to the call deck); opt-outs
-        and automatic replies are counted separately and never as replies. “Leads worked so far” means every lead
-        that is no longer New. “Today” and the daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
+        “Replied” counts replies a person wrote, whenever they arrive (even after the lead moved to the call deck); opt-outs and automatic
+        replies are counted separately and never as replies. “Leads worked so far” means every lead that is no longer New. “Today” and the
+        daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
       </p>
     </StatSection>
   );
 }
 
-export function StatusBreakdown({ counts, statuses, emptyLabel }: { counts: Record<string, number>; statuses: readonly string[]; emptyLabel: string }) {
+export function StatusBreakdown({
+  counts,
+  statuses,
+  emptyLabel,
+}: {
+  counts: Record<string, number>;
+  statuses: readonly string[];
+  emptyLabel: string;
+}) {
   const items = statuses.map((status) => ({ label: statusLabel(status), count: counts[status] ?? 0 })).filter((i) => i.count > 0);
   return <BreakdownList items={items} emptyLabel={emptyLabel} />;
 }

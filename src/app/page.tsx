@@ -7,9 +7,7 @@ export const metadata: Metadata = { title: { absolute: "Dashboard · Pipelines" 
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  const cards = await Promise.all(
-    PIPELINES.map(async (pipeline) => ({ pipeline, meta: await getPipelineMeta(pipeline.id) })),
-  );
+  const cards = await Promise.all(PIPELINES.map(async (pipeline) => ({ pipeline, meta: await getPipelineMeta(pipeline.id) })));
 
   return (
     <div className="flex flex-col gap-6">

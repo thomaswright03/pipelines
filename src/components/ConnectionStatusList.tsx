@@ -36,7 +36,9 @@ export default function ConnectionStatusList({ items }: { items: ConnectionStatu
             </div>
             <p className="break-words text-sm">{item.summary}</p>
             {item.next && <p className="text-sm muted">Next step: {item.next}</p>}
-            {item.testable && (item.key === "mail" || item.key === "yelp") && <TestConnectionButton service={item.key} label={item.label} />}
+            {item.testable && (item.key === "mail" || item.key === "yelp") && (
+              <TestConnectionButton service={item.key} label={item.label} />
+            )}
           </li>
         );
       })}

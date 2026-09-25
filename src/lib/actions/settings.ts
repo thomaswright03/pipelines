@@ -101,7 +101,10 @@ export async function testConnectionAction(service: "mail" | "yelp"): Promise<Ac
     } catch (err) {
       if (!(err instanceof YelpError)) logError("action.testConnection.yelp", err);
       revalidatePath("/settings");
-      return { ok: false, error: `Yelp: ${err instanceof YelpError ? err.message : "the test search failed. Try again later; if it keeps failing, tell your developer."}` };
+      return {
+        ok: false,
+        error: `Yelp: ${err instanceof YelpError ? err.message : "the test search failed. Try again later; if it keeps failing, tell your developer."}`,
+      };
     }
   }
   return { ok: false, error: "Unknown service." };

@@ -185,8 +185,6 @@ export async function scanWebsite(website: string, signal?: AbortSignal): Promis
   const counts = new Map<string, number>();
   for (const email of candidates) counts.set(email, (counts.get(email) ?? 0) + 1);
 
-  const emails = [...counts.entries()]
-    .sort((a, b) => b[1] + scoreEmail(b[0]) - (a[1] + scoreEmail(a[0])))
-    .map(([email]) => email);
+  const emails = [...counts.entries()].sort((a, b) => b[1] + scoreEmail(b[0]) - (a[1] + scoreEmail(a[0]))).map(([email]) => email);
   return { emails, pages, unreachable: home.failure === "unreachable" && pages.length === 0 };
 }

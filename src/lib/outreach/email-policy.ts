@@ -161,10 +161,7 @@ export function hostNamesPerson(hostname: string, personName: string): boolean {
  * `siteBasis` "brokerage" means the site belongs to the lead's brokerage,
  * not to the lead.
  */
-export function addressFilterFor(
-  personName: string,
-  siteBasis: "brokerage" | "name" | "given",
-): (email: string) => boolean {
+export function addressFilterFor(personName: string, siteBasis: "brokerage" | "name" | "given"): (email: string) => boolean {
   if (siteBasis !== "brokerage") return () => true;
   return (email) => !isRoleAddress(email) && addressMatchesPerson(email, personName);
 }

@@ -33,11 +33,6 @@ export async function pickNextAgentCity(
   return { ...picked, poolReset };
 }
 
-export async function markAgentCityUsed(
-  prisma: PrismaClient,
-  city: string,
-  county: string,
-  state: string,
-): Promise<void> {
+export async function markAgentCityUsed(prisma: PrismaClient, city: string, county: string, state: string): Promise<void> {
   await prisma.scrapedAgentCity.create({ data: { city, county, state } });
 }

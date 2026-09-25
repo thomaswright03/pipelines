@@ -22,9 +22,7 @@ export default function GlobalError({ retry }: { error: Error & { digest?: strin
         }}
       >
         <p style={{ fontSize: "1.125rem", fontWeight: 600 }}>Something went wrong.</p>
-        <p style={{ maxWidth: "24rem", fontSize: "0.875rem", color: "#71717a" }}>
-          That&apos;s on us, not you. Try again.
-        </p>
+        <p style={{ maxWidth: "24rem", fontSize: "0.875rem", color: "#71717a" }}>That&apos;s on us, not you. Try again.</p>
         <button
           onClick={() => retry()}
           style={{

@@ -53,7 +53,9 @@ describe("Cold Outreach, end to end", () => {
           { name: "Charlie Nails", phone: "+14805550113" },
         ]),
       "https://www.alphaplumbing.com": page(`Alpha Plumbing, Mesa AZ — call (480) 555-0111 — hello@alphaplumbing.test`),
-      "https://www.bravodental.com": page(`Bravo Dental <a href="tel:+14805550112">480.555.0112</a> <a href="mailto:frontdesk@bravodental.test">email</a>`),
+      "https://www.bravodental.com": page(
+        `Bravo Dental <a href="tel:+14805550112">480.555.0112</a> <a href="mailto:frontdesk@bravodental.test">email</a>`,
+      ),
     });
 
     const search = await searchLeadsAction({}, form({ city: "Mesa", state: "Arizona", businessType: "" }));

@@ -68,8 +68,7 @@
 body {
   background:
     radial-gradient(1200px 500px at 10% -10%, var(--accent-soft), transparent),
-    radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent),
-    var(--background);
+    radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent), var(--background);
   background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;

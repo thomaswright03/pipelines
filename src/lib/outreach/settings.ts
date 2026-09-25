@@ -59,7 +59,12 @@ export type ServiceCheck = { at: Date; error: string | null };
  * Settings → Connections: `error` null means it answered. Best-effort:
  * never throws.
  */
-export async function recordServiceCheck(service: "mail" | "yelp", error: string | null, at: Date = new Date(), db: Db = prisma): Promise<void> {
+export async function recordServiceCheck(
+  service: "mail" | "yelp",
+  error: string | null,
+  at: Date = new Date(),
+  db: Db = prisma,
+): Promise<void> {
   const data =
     service === "mail"
       ? { mailTestedAt: at, mailTestError: error?.slice(0, 500) ?? null }

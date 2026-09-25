@@ -110,7 +110,10 @@ export default function FindEmailsButton({
             aria-valuenow={pct}
             aria-label="Email lookup progress"
           >
-            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${pct}%` }} />
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
+              style={{ width: `${pct}%` }}
+            />
           </div>
         </div>
       ) : (

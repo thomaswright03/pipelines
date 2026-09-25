@@ -42,11 +42,12 @@ const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 /** Scores one split, prints it with its misses, and checks it against its floor. */
 function evaluate(name: string, split: "dev" | "held-out", results: Case[], floor: Floor, words: { fp: string; fn: string }) {
   const s = score(results);
-  const misses = results
-    .filter((r) => r.actual !== r.expected)
-    .map((r) => `  miss: ${r.expected ? words.fn : words.fp}: ${r.label}`);
+  const misses = results.filter((r) => r.actual !== r.expected).map((r) => `  miss: ${r.expected ? words.fn : words.fp}: ${r.label}`);
   console.log(
-    [`${name} [${split}]: precision ${pct(s.precision)}, recall ${pct(s.recall)} (tp ${s.tp}, fp ${s.fp}, fn ${s.fn}, tn ${s.tn})`, ...misses].join("\n"),
+    [
+      `${name} [${split}]: precision ${pct(s.precision)}, recall ${pct(s.recall)} (tp ${s.tp}, fp ${s.fp}, fn ${s.fn}, tn ${s.tn})`,
+      ...misses,
+    ].join("\n"),
   );
   expect(s.precision, `${name} [${split}] precision`).toBeGreaterThanOrEqual(floor.precision);
   expect(s.recall, `${name} [${split}] recall`).toBeGreaterThanOrEqual(floor.recall);
@@ -74,7 +75,11 @@ describe("heuristics on the labelled evaluation sets", () => {
   // reply rate); a false flag only asks the operator to glance at it.
   it(`reply "needs a look" flag (${REVIEW_DEV.length} dev, ${REVIEW_HELD_OUT.length} held-out)`, () => {
     const run = (cases: typeof REVIEW_DEV) =>
-      cases.map((c) => ({ expected: c.review, actual: classifyReply({ subject: "Re: hello", text: c.text }).review !== null, label: firstLine(c.text) }));
+      cases.map((c) => ({
+        expected: c.review,
+        actual: classifyReply({ subject: "Re: hello", text: c.text }).review !== null,
+        label: firstLine(c.text),
+      }));
     const words = { fp: "flagged a positive reply", fn: "missed a brush-off" };
     evaluate("Needs-a-look replies", "dev", run(REVIEW_DEV), { precision: 0.95, recall: 0.95 }, words);
     evaluate("Needs-a-look replies", "held-out", run(REVIEW_HELD_OUT), { precision: 0.85, recall: 0.85 }, words);
@@ -112,7 +117,11 @@ describe("heuristics on the labelled evaluation sets", () => {
   // uses up their one pitch), so precision matters most.
   it(`brokerage-site address filter (${ADDRESS_CORPUS.length} dev, ${ADDRESS_HELD_OUT.length} held-out)`, () => {
     const run = (cases: typeof ADDRESS_CORPUS) =>
-      cases.map((c) => ({ expected: c.belongs, actual: addressFilterFor(c.agent, "brokerage")(c.email), label: `${c.agent} <${c.email}>` }));
+      cases.map((c) => ({
+        expected: c.belongs,
+        actual: addressFilterFor(c.agent, "brokerage")(c.email),
+        label: `${c.agent} <${c.email}>`,
+      }));
     const words = { fp: "accepted someone else's", fn: "rejected own address" };
     evaluate("Brokerage addresses", "dev", run(ADDRESS_CORPUS), { precision: 0.95, recall: 0.9 }, words);
     evaluate("Brokerage addresses", "held-out", run(ADDRESS_HELD_OUT), { precision: 0.95, recall: 0.9 }, words);
@@ -122,7 +131,11 @@ describe("heuristics on the labelled evaluation sets", () => {
   // stranger, so precision matters most; a miss only means no email.
   it(`guessed-site evidence (${SITE_DEV.length} dev, ${SITE_HELD_OUT.length} held-out)`, () => {
     const run = (cases: typeof SITE_DEV) =>
-      cases.map((c) => ({ expected: c.belongs, actual: siteEvidence(c.website, [c.html], c.facts) !== null, label: `${c.facts.name} on ${c.website}: ${JSON.stringify(c.html.slice(0, 80))}` }));
+      cases.map((c) => ({
+        expected: c.belongs,
+        actual: siteEvidence(c.website, [c.html], c.facts) !== null,
+        label: `${c.facts.name} on ${c.website}: ${JSON.stringify(c.html.slice(0, 80))}`,
+      }));
     const words = { fp: "accepted a site that isn't the lead's", fn: "rejected the lead's own site" };
     evaluate("Guessed sites", "dev", run(SITE_DEV), { precision: 1, recall: 1 }, words);
     evaluate("Guessed sites", "held-out", run(SITE_HELD_OUT), { precision: 1, recall: 0.9 }, words);

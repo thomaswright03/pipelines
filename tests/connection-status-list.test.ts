@@ -13,7 +13,14 @@ const { default: ConnectionStatusList } = await import("@/components/ConnectionS
 
 const items: ConnectionStatus[] = [
   { key: "mail", label: "Sending email", tone: "ok", summary: "Last email sent today.", next: null, testable: true },
-  { key: "replies", label: "Receiving replies", tone: "warn", badge: "Not confirmed yet", summary: "No reply has arrived yet.", next: "Mark replies by hand." },
+  {
+    key: "replies",
+    label: "Receiving replies",
+    tone: "warn",
+    badge: "Not confirmed yet",
+    summary: "No reply has arrived yet.",
+    next: "Mark replies by hand.",
+  },
   { key: "daily-run", label: "Daily Cold Outreach run", tone: "error", summary: "Last run failed.", next: "Open the Cold Outreach page." },
   { key: "yelp", label: "Yelp search", tone: "warn", summary: "No search has run yet.", next: "Press Test connection.", testable: true },
 ];

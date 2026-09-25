@@ -7,8 +7,5 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const ok = await databaseReachable();
-  return Response.json(
-    { database: ok ? "ok" : "unreachable" },
-    { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },
-  );
+  return Response.json({ database: ok ? "ok" : "unreachable" }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

@@ -239,7 +239,9 @@ async function recordBounceOnLead(
       : `Marked the email bounced — status kept (${statusLabel(outcome.to)}).`;
   await pipeline.addActivity(tx, lead.id, {
     type: "email",
-    notes: [`Bounce notice received ${formatDateTime(now)} (${bounce.reason})`, bounce.diagnostic, `→ ${effect}`].filter(Boolean).join("\n"),
+    notes: [`Bounce notice received ${formatDateTime(now)} (${bounce.reason})`, bounce.diagnostic, `→ ${effect}`]
+      .filter(Boolean)
+      .join("\n"),
     date: now,
   });
   return true;
@@ -387,7 +389,13 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
         if (!(await pipeline.hasBeenEmailed(tx, lead.id))) {
           return { ok: false as const, error: `${lead.name} was never emailed, so this bounce can't be theirs.` };
         }
-        await recordBounceOnLead(tx, pipeline, lead, { reason: reply.kindReason ?? "delivery-failure notice", diagnostic: null }, reply.receivedAt);
+        await recordBounceOnLead(
+          tx,
+          pipeline,
+          lead,
+          { reason: reply.kindReason ?? "delivery-failure notice", diagnostic: null },
+          reply.receivedAt,
+        );
         await tx.inboundReply.update({
           where: { id: reply.id },
           data: { matched: [key], resolvedAt: new Date(), resolution: `bounced:${key}` },
@@ -451,8 +459,7 @@ async function recordOnLead(
   reply: { optOut: boolean; review: string | null; fromEmail: string; note: string; now: Date },
 ): Promise<boolean> {
   // Contacted always means "was emailed" (only a send puts a lead there).
-  const pitched =
-    initial.status === "contacted" || initial.lastEmailedAt !== null || (await pipeline.hasBeenEmailed(tx, initial.id));
+  const pitched = initial.status === "contacted" || initial.lastEmailedAt !== null || (await pipeline.hasBeenEmailed(tx, initial.id));
   let lead: OutreachLead | null = initial;
 
   // Conditional on the status just read, so a concurrent change (a manual

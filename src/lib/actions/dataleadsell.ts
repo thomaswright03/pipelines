@@ -121,9 +121,7 @@ export async function updateAgentAction(leadId: string, input: AgentLeadInput): 
 
 const searchSchema = z
   .object({
-    county: z
-      .string()
-      .refine((v) => SOLD_COUNTIES.some((c) => c.county === v), "Pick one of the counties dataleadsell sells"),
+    county: z.string().refine((v) => SOLD_COUNTIES.some((c) => c.county === v), "Pick one of the counties dataleadsell sells"),
     city: z.string().trim().min(1, "Pick a city"),
   })
   .refine((v) => citiesInCounty(v.county).includes(v.city), { message: "Pick a city in that county", path: ["city"] });

@@ -7,14 +7,7 @@ import { COLD_CALL_OUTCOMES, COLD_CALL_OUTCOME_LABEL, type ColdCallOutcome } fro
 import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { getTimezoneForState, formatLocalTime } from "@/lib/us-timezones";
 import type { CallDeckCard } from "@/lib/call-deck";
-import {
-  firstUnhandled,
-  readSavedDeck,
-  recordCall,
-  sessionDeckStorage,
-  writeSavedDeck,
-  type LoggedCall,
-} from "@/lib/call-deck-session";
+import { firstUnhandled, readSavedDeck, recordCall, sessionDeckStorage, writeSavedDeck, type LoggedCall } from "@/lib/call-deck-session";
 
 const CLOCK_TICK_MS = 30_000;
 
@@ -194,7 +187,9 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
           </div>
           <div className="flex flex-col gap-0.5">
             <dt className="muted">Latest history{current.lastNote ? ` (${current.lastNote.date})` : ""}</dt>
-            <dd className="break-words">{current.lastNote ? current.lastNote.text : <span className="muted">Nothing recorded yet.</span>}</dd>
+            <dd className="break-words">
+              {current.lastNote ? current.lastNote.text : <span className="muted">Nothing recorded yet.</span>}
+            </dd>
           </div>
         </dl>
 
@@ -261,7 +256,9 @@ function Summary({ log, basePath, onStartOver }: { log: Logged[]; basePath: stri
     <div className="card mx-auto flex w-full max-w-md flex-col gap-4 p-6 sm:p-8">
       <div className="text-center">
         <h2 className="text-xl font-bold">Deck finished</h2>
-        <p className="mt-1 text-sm muted">You worked through {log.length} card{log.length === 1 ? "" : "s"}.</p>
+        <p className="mt-1 text-sm muted">
+          You worked through {log.length} card{log.length === 1 ? "" : "s"}.
+        </p>
       </div>
       <dl className="grid grid-cols-2 gap-2 text-sm">
         {rows.map((r) => (

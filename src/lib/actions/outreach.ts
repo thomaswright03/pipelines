@@ -9,13 +9,7 @@ import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
 import { parsePipelineId, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { getPipeline } from "@/lib/outreach/pipelines";
-import {
-  previewBulkSend,
-  sendBulkChunk,
-  sendFirstTouch,
-  type BulkChunkResult,
-  type BulkPreview,
-} from "@/lib/outreach/send";
+import { previewBulkSend, sendBulkChunk, sendFirstTouch, type BulkChunkResult, type BulkPreview } from "@/lib/outreach/send";
 import { findEmailForLead, findEmailsChunk, type BulkFindResult } from "@/lib/outreach/discovery";
 import {
   addLeadActivity,
@@ -147,12 +141,7 @@ export async function setOurReplyAction(pipeline: string, leadId: string, replie
   return guarded("setOurReply", pipeline, leadId, (p) => setOurReply(p, leadId, Boolean(replied)));
 }
 
-export async function confirmColdCallAction(
-  pipeline: string,
-  leadId: string,
-  outcome: string,
-  notes: string,
-): Promise<ActionResult> {
+export async function confirmColdCallAction(pipeline: string, leadId: string, outcome: string, notes: string): Promise<ActionResult> {
   return guarded("confirmColdCall", pipeline, leadId, (p) => confirmColdCall(p, leadId, outcome, String(notes ?? "")));
 }
 
@@ -171,11 +160,7 @@ export async function previewBulkSendAction(pipeline: string): Promise<BulkPrevi
 
 export type BulkChunkActionResult = { ok: true; result: BulkChunkResult } | { ok: false; error: string };
 
-export async function sendBulkChunkAction(
-  pipeline: string,
-  leadIds: string[],
-  consecutiveFailures = 0,
-): Promise<BulkChunkActionResult> {
+export async function sendBulkChunkAction(pipeline: string, leadIds: string[], consecutiveFailures = 0): Promise<BulkChunkActionResult> {
   let p: PipelineId;
   try {
     p = parsePipelineId(pipeline);

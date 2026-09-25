@@ -77,10 +77,19 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
       ? ` ${totals.unreachable} website${totals.unreachable === 1 ? "" : "s"} couldn't be reached; those licensees will be checked again in an hour.`
       : "";
     const summary = `Checked ${totals.checked} licensee${totals.checked === 1 ? "" : "s"} and added ${totals.created} new agent${totals.created === 1 ? "" : "s"} this run; ${current.remaining.toLocaleString("en-US")} left.${retry}`;
-    setFeedback(error ? { ok: false, text: `${error} ${summary}` } : { ok: true, text: current.remaining === 0
-            ? current.retryLater > 0
-              ? `Everything due has been checked. ${summary}`
-              : `Done — the whole roster has been checked. ${summary}` : `Stopped. ${summary}` });
+    setFeedback(
+      error
+        ? { ok: false, text: `${error} ${summary}` }
+        : {
+            ok: true,
+            text:
+              current.remaining === 0
+                ? current.retryLater > 0
+                  ? `Everything due has been checked. ${summary}`
+                  : `Done — the whole roster has been checked. ${summary}`
+                : `Stopped. ${summary}`,
+          },
+    );
     router.refresh();
   }
 

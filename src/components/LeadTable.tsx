@@ -155,9 +155,7 @@ export default function LeadTable({
                     {row.email ?? "No email"}
                     {row.location !== "—" ? ` · ${row.location}` : ""}
                   </div>
-                  <div className="text-xs muted">
-                    {row.lastEmailedAt ? `Emailed ${formatDate(row.lastEmailedAt)}` : "Not emailed yet"}
-                  </div>
+                  <div className="text-xs muted">{row.lastEmailedAt ? `Emailed ${formatDate(row.lastEmailedAt)}` : "Not emailed yet"}</div>
                 </div>
               </li>
             ))}
@@ -176,13 +174,7 @@ export default function LeadTable({
                   <th className="w-[32%] px-3 py-3 lg:w-[24%]">Contact</th>
                   <th className="w-36 px-2 py-3">Status</th>
                   <SortHeader label="Emailed" sortKey="emailed" basePath={basePath} params={params} className="w-32" />
-                  <SortHeader
-                    label="Added"
-                    sortKey="created"
-                    basePath={basePath}
-                    params={params}
-                    className="hidden w-32 lg:table-cell"
-                  />
+                  <SortHeader label="Added" sortKey="created" basePath={basePath} params={params} className="hidden w-32 lg:table-cell" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">

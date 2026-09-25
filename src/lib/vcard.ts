@@ -7,12 +7,15 @@ export function escapeVCardValue(value: string): string {
 
 export function buildVCard(name: string, phone: string): string {
   const n = escapeVCardValue(name);
-  return ["BEGIN:VCARD", "VERSION:3.0", `N:${n};;;;`, `FN:${n}`, `TEL;TYPE=WORK:${escapeVCardValue(phone)}`, "END:VCARD", ""].join(
-    "\r\n",
-  );
+  return ["BEGIN:VCARD", "VERSION:3.0", `N:${n};;;;`, `FN:${n}`, `TEL;TYPE=WORK:${escapeVCardValue(phone)}`, "END:VCARD", ""].join("\r\n");
 }
 
 /** A filename-safe version of a lead's name. */
 export function vcardFileName(name: string): string {
-  return name.replace(/[^\w\s-]/g, "").trim().slice(0, 80) || "contact";
+  return (
+    name
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .slice(0, 80) || "contact"
+  );
 }

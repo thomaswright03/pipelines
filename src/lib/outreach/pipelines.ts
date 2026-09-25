@@ -129,7 +129,12 @@ export type PipelineAdapter = {
    * the edit was based on (a send moves New → Contacted, so an address can't
    * be changed under a send in flight). Returns whether it applied.
    */
-  updateIfUnchanged(db: Db, id: string, expected: { status: string; email: string | null }, data: Record<string, unknown>): Promise<boolean>;
+  updateIfUnchanged(
+    db: Db,
+    id: string,
+    expected: { status: string; email: string | null },
+    data: Record<string, unknown>,
+  ): Promise<boolean>;
   /**
    * Adds an entry to the lead's history (replies, calls, notes the operator
    * logs) — kept apart from the lead's Notes field, so automatically

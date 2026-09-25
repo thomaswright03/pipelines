@@ -148,7 +148,8 @@ function PreviewBody({ preview }: { preview: BulkPreview }) {
   }
   const skippedParts = [
     preview.skipped.alreadyPitched && `${plural(preview.skipped.alreadyPitched, "lead")} whose address was already pitched`,
-    preview.skipped.duplicateInBatch && `${plural(preview.skipped.duplicateInBatch, "lead")} sharing an address with another lead in this batch`,
+    preview.skipped.duplicateInBatch &&
+      `${plural(preview.skipped.duplicateInBatch, "lead")} sharing an address with another lead in this batch`,
     preview.skipped.suppressed && `${plural(preview.skipped.suppressed, "lead")} on the do-not-email list`,
   ].filter(Boolean);
   if (preview.willSend === 0) {
@@ -165,13 +166,13 @@ function PreviewBody({ preview }: { preview: BulkPreview }) {
     <>
       <p>
         This sends the first outreach email to <strong>{plural(preview.willSend, "lead")}</strong> at{" "}
-        <strong>{plural(preview.distinctAddresses, "distinct address", "distinct addresses")}</strong>, about one per second.
-        Each lead moves to Contacted as it&apos;s emailed.
+        <strong>{plural(preview.distinctAddresses, "distinct address", "distinct addresses")}</strong>, about one per second. Each lead
+        moves to Contacted as it&apos;s emailed.
       </p>
       {preview.totalEligible > preview.leadIds.length && (
         <p className="muted">
-          {plural(preview.totalEligible, "New lead")} have an email; one batch covers at most {preview.batchLimit}. Run it
-          again afterwards for the rest.
+          {plural(preview.totalEligible, "New lead")} have an email; one batch covers at most {preview.batchLimit}. Run it again afterwards
+          for the rest.
         </p>
       )}
       {skippedParts.length > 0 && <p className="muted">Skipped: {skippedParts.join("; ")}.</p>}

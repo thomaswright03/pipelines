@@ -96,8 +96,8 @@ export default function LeadActions({
           <p>Removes {lead.name} and their notes from the list. This can&apos;t be undone.</p>
           {lead.email && (
             <p className="mt-2">
-              The send history is kept: if <strong>{lead.email}</strong> was already emailed, it still counts as pitched and
-              won&apos;t be emailed again.
+              The send history is kept: if <strong>{lead.email}</strong> was already emailed, it still counts as pitched and won&apos;t be
+              emailed again.
             </p>
           )}
         </>
@@ -145,8 +145,8 @@ export default function LeadActions({
       title: `Email ${lead.name}?`,
       body: (
         <p>
-          Sends the first outreach email to <strong>{lead.email}</strong> and moves the lead to Contacted. Each address is
-          only ever pitched once.
+          Sends the first outreach email to <strong>{lead.email}</strong> and moves the lead to Contacted. Each address is only ever pitched
+          once.
         </p>
       ),
       confirmLabel: "Send email",
@@ -170,9 +170,7 @@ export default function LeadActions({
       body: (
         <p>
           Records the latest send as bounced
-          {BOUNCE_ENDS_OUTREACH.includes(lead.status)
-            ? " and moves the lead to Lost."
-            : `. The lead stays ${statusLabel(lead.status)}.`}
+          {BOUNCE_ENDS_OUTREACH.includes(lead.status) ? " and moves the lead to Lost." : `. The lead stays ${statusLabel(lead.status)}.`}
         </p>
       ),
       confirmLabel: "Mark bounced",
@@ -186,8 +184,8 @@ export default function LeadActions({
       title: `Remove ${lead.email} from the do-not-email list?`,
       body: (
         <p>
-          Only do this if they did <strong>not</strong> ask to stop — for example, an interested reply that was misread.
-          Both pipelines may email this address again.
+          Only do this if they did <strong>not</strong> ask to stop — for example, an interested reply that was misread. Both pipelines may
+          email this address again.
         </p>
       ),
       confirmLabel: "Remove from list",
@@ -210,8 +208,8 @@ export default function LeadActions({
           <div className="notice-warning flex flex-col gap-2">
             <p>
               <strong>Reply needs a look.</strong>{" "}
-              {lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`} Read it in the
-              history on this page, then mark them opted out, move the lead (for example to Responded), or keep it as it is.
+              {lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`} Read it in the history on this
+              page, then mark them opted out, move the lead (for example to Responded), or keep it as it is.
             </p>
             <button
               type="button"
@@ -291,7 +289,12 @@ export default function LeadActions({
         )}
 
         {!lead.email && (
-          <button type="button" disabled={isPending} onClick={() => run(() => findLeadEmailAction(pipeline, lead.id))} className="btn-secondary">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => run(() => findLeadEmailAction(pipeline, lead.id))}
+            className="btn-secondary"
+          >
             {isPending ? "Working…" : "Find email"}
           </button>
         )}
@@ -306,12 +309,19 @@ export default function LeadActions({
         )}
         {lead.email && !canSend && !suppression && !lead.sendBlockedReason && lead.status !== "new" && (
           <p className="text-sm muted">
-            {lead.emailed ? "Already pitched — each lead gets one outreach email." : `The first pitch only goes to New leads; this one is ${statusLabel(lead.status)}.`}
+            {lead.emailed
+              ? "Already pitched — each lead gets one outreach email."
+              : `The first pitch only goes to New leads; this one is ${statusLabel(lead.status)}.`}
           </p>
         )}
 
         {canMarkReplied(lead.status) && (lead.status === "contacted" || lead.emailed) && (
-          <button type="button" disabled={isPending} onClick={() => run(() => markRepliedAction(pipeline, lead.id))} className="btn-secondary">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => run(() => markRepliedAction(pipeline, lead.id))}
+            className="btn-secondary"
+          >
             Mark replied
           </button>
         )}

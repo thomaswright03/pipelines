@@ -104,16 +104,9 @@ async function lookupEmail(
 export type AddressConflict = { message: string; href: string | null; leadName: string | null };
 
 /** Who else already uses this address (another lead here, or an earlier pitch), with a link to them. */
-export async function findAddressConflict(
-  pipelineId: PipelineId,
-  email: string,
-  excludeLeadId?: string,
-): Promise<AddressConflict | null> {
+export async function findAddressConflict(pipelineId: PipelineId, email: string, excludeLeadId?: string): Promise<AddressConflict | null> {
   const pipeline = getPipeline(pipelineId);
-  const [others, settings] = await Promise.all([
-    pipeline.findLeadsByEmail(prisma, email, excludeLeadId),
-    getAppSettings(),
-  ]);
+  const [others, settings] = await Promise.all([pipeline.findLeadsByEmail(prisma, email, excludeLeadId), getAppSettings()]);
   if (others.length > 0) {
     const other = others[0]!;
     return { message: `${email} already belongs to ${other.name}`, href: `${pipeline.basePath}/${other.id}`, leadName: other.name };
@@ -130,11 +123,7 @@ export async function findAddressConflict(
 }
 
 /** Who else already uses this address, in words (see findAddressConflict). */
-async function describeAddressConflict(
-  pipelineId: PipelineId,
-  email: string,
-  excludeLeadId?: string,
-): Promise<string | null> {
+async function describeAddressConflict(pipelineId: PipelineId, email: string, excludeLeadId?: string): Promise<string | null> {
   return (await findAddressConflict(pipelineId, email, excludeLeadId))?.message ?? null;
 }
 
@@ -183,7 +172,11 @@ function normalizeName(name: string): string {
 }
 
 function normalizeText(value: string | null | undefined): string | null {
-  const v = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const v = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   return v || null;
 }
 
@@ -232,7 +225,10 @@ export async function createLeadsFromCandidates(
   };
 
   const named = candidates.filter((c) => c.name.trim());
-  const known: NamedLead[] = await pipeline.findSameNamed(prisma, named.map((c) => c.name));
+  const known: NamedLead[] = await pipeline.findSameNamed(
+    prisma,
+    named.map((c) => c.name),
+  );
   const emailsThisRun = new Set<string>();
 
   for (const candidate of named) {
@@ -309,12 +305,7 @@ export async function createLeadsFromCandidates(
 }
 
 /** One line for the operator about what a discovery run did. */
-export function describeDiscovery(
-  pipelineId: PipelineId,
-  where: string,
-  scraped: number,
-  result: DiscoveryResult,
-): string {
+export function describeDiscovery(pipelineId: PipelineId, where: string, scraped: number, result: DiscoveryResult): string {
   const isAgents = pipelineId === "dataleadsell";
   const skipped: string[] = [];
   if (result.skipped.existingName) skipped.push(`${result.skipped.existingName} already in the list`);

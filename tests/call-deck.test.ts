@@ -17,8 +17,12 @@ describe("call deck cards", () => {
       status: "cold_call_list",
       lastEmailedAt: new Date("2026-09-10T18:00:00Z"),
     });
-    await prisma.leadActivity.create({ data: { leadId: lead.id, type: "note", notes: "Older note", date: new Date("2026-09-11T18:00:00Z") } });
-    await prisma.leadActivity.create({ data: { leadId: lead.id, type: "note", notes: "Asked to call after 3pm", date: new Date("2026-09-12T18:00:00Z") } });
+    await prisma.leadActivity.create({
+      data: { leadId: lead.id, type: "note", notes: "Older note", date: new Date("2026-09-11T18:00:00Z") },
+    });
+    await prisma.leadActivity.create({
+      data: { leadId: lead.id, type: "note", notes: "Asked to call after 3pm", date: new Date("2026-09-12T18:00:00Z") },
+    });
     await makeColdLead({ name: "Never Mailed", status: "cold_call_list", email: null });
 
     const deck = await loadCallDeck("cold-outreach");
