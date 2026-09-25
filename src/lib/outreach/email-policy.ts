@@ -64,19 +64,87 @@ function nameTokens(personName: string): string[] {
     .filter((t) => t.length >= 2 && !["jr", "sr", "ii", "iii", "iv"].includes(t));
 }
 
+/** "Mary-Kate Q. Smith-Jones Jr." → ["mary-kate", "q", "smith-jones"]. */
+function nameWords(personName: string): string[] {
+  return personName
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z\s-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.replace(/-/g, "") && !["jr", "sr", "ii", "iii", "iv"].includes(w.replace(/-/g, "")));
+}
+
 /**
- * Whether the address's local part is plausibly this person's: it contains
- * their first or last name (3+ letters), or first initial + last name.
+ * The forms of a surname an address may use: "doe"; for a hyphenated
+ * surname "smith-jones" also "smithjones", "smith" and "jones".
+ */
+function surnameForms(personName: string): string[] {
+  const words = nameWords(personName);
+  const parts = (words[words.length - 1] ?? "").split("-").filter((p) => p.length >= 2);
+  const forms = new Set(parts);
+  if (parts.length > 1) forms.add(parts.join(""));
+  return [...forms];
+}
+
+/**
+ * Whether the address's local part identifies this specific person: their
+ * surname as a whole token together with their first name or first
+ * initial — john.doe, john_doe, doe.john, j.doe, jdoe, johndoe, doej,
+ * jdoe2. Matching is on whole tokens, never substrings, so for "John Doe"
+ * john.smith@, johnson@, john@ and doe.family@ are all rejected: on a
+ * brokerage's site those are colleagues or shared inboxes, and each address
+ * only ever gets one pitch.
  */
 export function addressMatchesPerson(email: string, personName: string): boolean {
-  const local = (email.split("@")[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  const local = (email.split("@")[0] ?? "").toLowerCase().replace(/\+.*$/, "");
   const tokens = nameTokens(personName);
-  if (tokens.length === 0 || !local) return false;
+  if (tokens.length < 2 || !local) return false;
   const first = tokens[0]!;
-  const last = tokens[tokens.length - 1]!;
-  if (last.length >= 3 && local.includes(last)) return true;
-  if (first.length >= 3 && local.includes(first)) return true;
-  return tokens.length > 1 && local.startsWith(first[0]! + last);
+  const initial = first[0]!;
+  const middleInitials = nameWords(personName)
+    .slice(1, -1)
+    .map((w) => w[0]!);
+  const surnames = surnameForms(personName);
+  if (surnames.length === 0) return false;
+
+  // Split on separators and digits: "john.doe2" → ["john", "doe"].
+  const segments = local.split(/[^a-z]+/).filter(Boolean);
+  const isGiven = (s: string) => s === first || s === initial;
+
+  // Separate tokens: one is the surname, another the first name or initial.
+  const surnameAt = segments.findIndex((s) => surnames.includes(s));
+  if (surnameAt !== -1 && segments.some((s, j) => j !== surnameAt && isGiven(s))) return true;
+
+  // Run-together forms within one token: johndoe, jdoe, doej, doejohn, jqdoe.
+  const joined = new Set<string>();
+  for (const last of surnames) {
+    for (const given of [first, initial]) {
+      joined.add(given + last);
+      joined.add(last + given);
+      for (const m of middleInitials) joined.add(given + m + last);
+    }
+  }
+  return segments.some((s) => joined.has(s));
+}
+
+/**
+ * Whether a website's domain carries this person's own name, so the site
+ * is theirs rather than their brokerage's: first name or initial run
+ * together with the surname (janedoe.com, jdoerealty.com), or the surname
+ * as a whole hyphen/dot-separated label (doe-homes.com). A surname merely
+ * appearing inside another word (fleetrealty.com for "Ann Lee") doesn't
+ * count.
+ */
+export function hostNamesPerson(hostname: string, personName: string): boolean {
+  const host = hostname.toLowerCase().replace(/^www\./, "");
+  const tokens = nameTokens(personName);
+  if (tokens.length < 2) return false;
+  const first = tokens[0]!;
+  const surnames = surnameForms(personName);
+  const squashed = host.replace(/[^a-z]/g, "");
+  if (surnames.some((last) => squashed.includes(first + last) || squashed.startsWith(first[0]! + last))) return true;
+  const labels = host.split(/[^a-z]+/).filter(Boolean);
+  return labels.some((label) => surnames.includes(label));
 }
 
 /**

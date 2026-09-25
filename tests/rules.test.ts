@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressFilterFor, addressMatchesPerson, isRoleAddress } from "@/lib/outreach/email-policy";
+import { addressFilterFor, addressMatchesPerson, hostNamesPerson, isRoleAddress } from "@/lib/outreach/email-policy";
 import { digitsOnly, formatPhone, normalizePhone } from "@/lib/phone";
 import { normalizeState } from "@/lib/us-states";
 import { dayKey, formatDateTime, parseZonedInputValue, startOfZoneDay, toZonedInputValue } from "@/lib/time";
@@ -20,17 +20,49 @@ describe("email policy", () => {
     expect(isRoleAddress("jane.doe@kw.test")).toBe(false);
   });
 
-  it("matches an address to the person it belongs to", () => {
+  it("accepts only an address that identifies this specific person", () => {
+    for (const e of ["john.doe@", "jdoe@", "johndoe@", "doej@", "john_doe@", "doe.john@", "j.doe@", "jdoe2@", "john-doe@", "jdoe+web@"]) {
+      expect(addressMatchesPerson(`${e}homesmart.test`, "John Doe"), e).toBe(true);
+    }
+    expect(addressMatchesPerson("jqdoe@kw.test", "John Q Doe")).toBe(true);
     expect(addressMatchesPerson("jdoe@kw.test", "Jane Q Doe")).toBe(true);
-    expect(addressMatchesPerson("jane@kw.test", "Jane Doe")).toBe(true);
+  });
+
+  it("rejects a colleague's address that merely contains part of the name", () => {
+    // Substrings and a bare first or last name aren't enough on a brokerage's site.
+    for (const e of ["john.smith@", "johnson@", "john@", "doe.family@", "doe@", "janedoe@", "doeteam@", "jdoesmith@"]) {
+      expect(addressMatchesPerson(`${e}homesmart.test`, "John Doe"), e).toBe(false);
+    }
+    expect(addressMatchesPerson("fleetsales@homesmart.test", "Ann Lee")).toBe(false);
     expect(addressMatchesPerson("bob.smith@kw.test", "Jane Doe")).toBe(false);
+    expect(addressMatchesPerson("madonna@kw.test", "Madonna")).toBe(false);
+  });
+
+  it("handles hyphenated surnames and suffixes", () => {
+    expect(addressMatchesPerson("maria.garcia-lopez@kw.test", "Maria Garcia-Lopez")).toBe(true);
+    expect(addressMatchesPerson("mgarcialopez@kw.test", "Maria Garcia-Lopez")).toBe(true);
+    expect(addressMatchesPerson("rob.king@kw.test", "Rob King Jr.")).toBe(true);
   });
 
   it("only accepts the agent's own address on a brokerage site", () => {
-    const filter = addressFilterFor("Jane Doe", "brokerage");
-    expect(filter("frontdesk@kellerwilliams.test")).toBe(false);
-    expect(filter("jane.doe@kellerwilliams.test")).toBe(true);
+    const filter = addressFilterFor("John Doe", "brokerage");
+    for (const e of ["frontdesk@homesmart.test", "john.smith@homesmart.test", "johnson@homesmart.test", "john@homesmart.test", "doe.family@homesmart.test"]) {
+      expect(filter(e), e).toBe(false);
+    }
+    for (const e of ["john.doe@homesmart.test", "jdoe@homesmart.test", "johndoe@homesmart.test"]) {
+      expect(filter(e), e).toBe(true);
+    }
+    expect(addressFilterFor("Ann Lee", "brokerage")("fleetsales@homesmart.test")).toBe(false);
     expect(addressFilterFor("Jane Doe", "name")("info@janedoehomes.test")).toBe(true);
+  });
+
+  it("treats a domain as the agent's own only when it carries their name", () => {
+    expect(hostNamesPerson("www.janedoehomes.com", "Jane Doe")).toBe(true);
+    expect(hostNamesPerson("jdoerealty.com", "Jane Doe")).toBe(true);
+    expect(hostNamesPerson("doe-homes.com", "Jane Doe")).toBe(true);
+    expect(hostNamesPerson("www.fleetrealty.com", "Ann Lee")).toBe(false);
+    expect(hostNamesPerson("www.homesmart.com", "Jane Doe")).toBe(false);
+    expect(hostNamesPerson("www.doerun.com", "Jane Doe")).toBe(false);
   });
 });
 
