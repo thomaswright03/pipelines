@@ -307,5 +307,5 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
     opt-out, and opt-outs are enforced before every send in both pipelines.
   - Whether sourcing addresses this way has a sound lawful basis has not been reviewed. That is flagged
     for the owner.
-- `LEAD_GEN_PIPELINE_SPEC.md` is the historical spec the Cold Outreach pipeline was first built from. It
+- `docs/archive/LEAD_GEN_PIPELINE_SPEC.md` is the historical spec the Cold Outreach pipeline was first built from. It
   does not describe the current system.
