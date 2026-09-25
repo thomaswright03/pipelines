@@ -75,8 +75,23 @@ function formatPercent(value: number | null): string {
   return `${Math.round(value * 100)}%`;
 }
 
+const n = (value: number) => value.toLocaleString("en-US");
+
+/** "6 of 21 leads that got past New (29%)" — every rate names what it's a share of. */
+export function shareOf(numerator: number, denominator: number, what: string): string {
+  if (denominator === 0) return `none yet — no ${what}`;
+  return `${n(numerator)} of ${n(denominator)} ${what} (${formatPercent(numerator / denominator)})`;
+}
+
 /** The numbers both pipelines share, with how each rate is worked out. */
-export function EmailPerformance({ s, conversion }: { s: BaseStats; conversion: { label: string; value: number; rate: number | null } }) {
+export function EmailPerformance({
+  s,
+  conversion,
+}: {
+  s: BaseStats;
+  /** `label` is the outcome counted, e.g. "Appointment or better"; its share is of leads past New. */
+  conversion: { label: string; value: number };
+}) {
   return (
     <StatSection title="Email performance">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -84,14 +99,18 @@ export function EmailPerformance({ s, conversion }: { s: BaseStats; conversion: 
         <StatCard label="Sent today" value={s.emailsSentToday} />
         <StatCard label="Sent, last 7 days" value={s.emailsSentLast7Days} />
         <StatCard label="Sent, last 30 days" value={s.emailsSentLast30Days} />
-        <StatCard label="Replied" value={s.replied} sublabel={`${formatPercent(s.replyRate)} reply rate`} />
-        <StatCard label="Bounced" value={s.bounced} sublabel={`${formatPercent(s.bounceRate)} of sends`} />
-        <StatCard label="We replied back" value={s.weReplied} />
-        <StatCard label={conversion.label} value={conversion.value} sublabel={`${formatPercent(conversion.rate)} of leads past New`} />
+        <StatCard label="Replied" value={s.replied} sublabel={shareOf(s.replied, s.leadsEmailed, "emailed leads replied")} />
+        <StatCard label="Bounced" value={s.bounced} sublabel={shareOf(s.bounced, s.emailsSentTotal, "emails sent bounced")} />
+        <StatCard label="We replied back" value={s.weReplied} sublabel={shareOf(s.weReplied, s.replied, "leads who replied got an answer")} />
+        <StatCard
+          label={conversion.label}
+          value={conversion.value}
+          sublabel={shareOf(conversion.value, s.pastNew, "leads that got past New")}
+        />
       </div>
       <p className="text-xs muted">
-        Reply rate = emailed leads that replied ÷ distinct leads emailed. Bounce rate = bounced sends ÷ all sends. “Today” and the
-        daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
+        A reply counts whenever it arrives, even after the lead moved to the call deck. “Past New” means any status other than
+        New. “Today” and the daily bars use calendar days in {APP_TIME_ZONE_LABEL}.
       </p>
     </StatSection>
   );

@@ -65,8 +65,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 }
 
 /**
- * Header pills that are always visible: outbound email paused, and (off
- * Vercel) that mail is being captured locally rather than delivered.
+ * Header pills that are always visible: outbound email paused, and (when
+ * not using the live mail service) that emails are saved, not delivered.
  */
 async function OutboundStatus() {
   // Read per request, never baked into a prerendered page.
@@ -81,11 +81,8 @@ async function OutboundStatus() {
   return (
     <>
       {transport !== "zeptomail" && (
-        <span
-          className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200"
-          title={transport === "outbox" ? "Emails are written to the local .outbox folder, not delivered." : "Emails go to the SMTP server in SMTP_HOST (a local mail catcher)."}
-        >
-          Mail captured locally ({transport})
+        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">
+          Test mode — emails are saved, not delivered
         </span>
       )}
       {paused && (

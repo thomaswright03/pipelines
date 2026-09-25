@@ -133,7 +133,7 @@ export default function PipelineCard({
             </Link>
           ) : (
             <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-              View on Vercel ↗
+              Open dashboard ↗
             </a>
           )}
         </div>

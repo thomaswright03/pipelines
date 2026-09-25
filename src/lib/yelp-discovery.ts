@@ -41,7 +41,7 @@ export class YelpError extends Error {
 export async function findBusinessesViaYelp(term: string, location: string): Promise<YelpCandidate[]> {
   const apiKey = process.env.YELP_API_KEY;
   if (!apiKey) {
-    throw new YelpError("Yelp isn't set up on this deployment (YELP_API_KEY is missing), so the search can't run.");
+    throw new YelpError("Yelp isn't set up yet, so the search can't run — ask your developer to add the Yelp access key.");
   }
 
   const url = new URL(YELP_SEARCH_URL);
@@ -90,7 +90,7 @@ function describeYelpFailure(status: number, code: string | undefined): string {
     return "Yelp didn't recognise that location — check the city and state.";
   }
   if (status === 401 || status === 403 || code === "TOKEN_INVALID") {
-    return "Yelp rejected our API key — it needs to be checked in Vercel's environment settings.";
+    return "Yelp rejected our access key — ask your developer to check it.";
   }
   if (status === 429 || code === "ACCESS_LIMIT_REACHED" || code === "TOO_MANY_REQUESTS_PER_SECOND") {
     return "Yelp's daily search limit is used up — try again tomorrow.";

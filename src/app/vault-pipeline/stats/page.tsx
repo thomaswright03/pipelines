@@ -23,7 +23,7 @@ export default async function VaultStatsPage() {
 
       <EmailPerformance
         s={s}
-        conversion={{ label: "Appointment or better", value: s.positiveOutcomes, rate: s.conversionRate }}
+        conversion={{ label: "Appointment or better", value: s.positiveOutcomes }}
       />
 
       <StatSection title="Daily automation">

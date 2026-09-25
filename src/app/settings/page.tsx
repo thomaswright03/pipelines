@@ -8,9 +8,9 @@ import { formatDate, formatDateTime } from "@/lib/time";
 export const dynamic = "force-dynamic";
 
 const TRANSPORT_DESCRIPTION = {
-  zeptomail: "ZeptoMail (real delivery to recipients).",
-  smtp: "The SMTP server in SMTP_HOST — meant for a local mail catcher such as Mailpit.",
-  outbox: "Written to .eml files in the local outbox folder. Nothing is delivered.",
+  zeptomail: "Live — emails are delivered to recipients.",
+  smtp: "Test mode — emails are saved, not delivered. Nobody receives them.",
+  outbox: "Test mode — emails are saved, not delivered. Nobody receives them.",
 } as const;
 
 export default async function SettingsPage() {
@@ -39,7 +39,7 @@ export default async function SettingsPage() {
           Where email goes
         </h2>
         <p className="text-sm">{TRANSPORT_DESCRIPTION[transport]}</p>
-        <p className="text-xs muted">Set by EMAIL_TRANSPORT (see the README); deployments on Vercel use ZeptoMail by default.</p>
+        <p className="text-xs muted">This is part of how the app is set up; ask your developer if it looks wrong.</p>
       </section>
 
       <section aria-labelledby="dne-heading" className="card flex flex-col gap-2 p-4">

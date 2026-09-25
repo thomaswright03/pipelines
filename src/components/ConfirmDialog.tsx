@@ -54,12 +54,13 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
       </h2>
       {pending.body && <div className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{pending.body}</div>}
       <div className="mt-5 flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={() => close(false)} className="btn-secondary">
+        {/* A destructive dialog opens with focus on Cancel, so Enter can't confirm it by accident. */}
+        <button type="button" autoFocus={pending.danger} onClick={() => close(false)} className="btn-secondary">
           Cancel
         </button>
         <button
           type="button"
-          autoFocus
+          autoFocus={!pending.danger}
           onClick={() => close(true)}
           className={pending.danger ? "btn-danger-solid" : "btn-primary"}
         >

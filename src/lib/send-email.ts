@@ -131,7 +131,8 @@ const NOT_SENT_CODES = new Set(["EAUTH", "EENVELOPE", "EDNS", "ETLS", "ECONFIG",
 /** Classifies a transport error for the operator and the send ledger. */
 export function classifySendError(err: unknown): SendFailure {
   if (err instanceof MailConfigError) {
-    return { delivery: "not_sent", message: `Email isn't set up on this deployment — nothing was sent. ${err.message}` };
+    // The technical detail (which setting is missing) is in the server log.
+    return { delivery: "not_sent", message: "Email sending isn't set up yet — nothing was sent. Ask your developer to finish the email setup." };
   }
   const e = (err ?? {}) as SmtpishError;
   const code = e.code ?? "";
@@ -149,7 +150,7 @@ export function classifySendError(err: unknown): SendFailure {
   if (code === "EAUTH") {
     return {
       delivery: "not_sent",
-      message: "The email service rejected our login — nothing was sent. The SMTP password needs checking.",
+      message: "The email service rejected our login — nothing was sent. Ask your developer to check the email password.",
     };
   }
   if (NOT_SENT_CODES.has(code) || (e.responseCode && e.responseCode >= 400)) {

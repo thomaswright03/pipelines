@@ -24,6 +24,7 @@ export type BaseStats = {
   replied: number; // emailed leads that replied
   replyRate: number | null; // replied ÷ distinct leads emailed
   weReplied: number;
+  pastNew: number; // leads no longer in "new" — the conversion rate's denominator
   bySource: Breakdown;
   byLocation: Breakdown;
   leadsPerDay: { day: string; count: number }[];
@@ -32,13 +33,11 @@ export type BaseStats = {
 
 export type VaultStats = BaseStats & {
   positiveOutcomes: number; // appointment_set + working_for + paying_client
-  conversionRate: number | null; // positiveOutcomes ÷ leads past "new"
   automatedLeads: number; // source = daily automated run
 };
 
 export type DataleadsellStats = BaseStats & {
   subscribed: number;
-  conversionRate: number | null; // subscribed ÷ leads past "new"
 };
 
 const TREND_DAYS = 14;
@@ -134,6 +133,7 @@ export async function getVaultStats(now: Date = new Date()): Promise<VaultStats>
     replied,
     replyRate: rate(replied, sends.leadsEmailed),
     weReplied,
+    pastNew,
     bySource: toBreakdown(sourceGroups.map((g) => ({ key: g.source, count: g._count }))),
     byLocation: toBreakdown(
       stateGroups.map((g) => ({ key: g.state, count: g._count })),
@@ -146,7 +146,6 @@ export async function getVaultStats(now: Date = new Date()): Promise<VaultStats>
     ),
     emailsPerDay: bucketByDay(sends.recent, TREND_DAYS, now),
     positiveOutcomes,
-    conversionRate: rate(positiveOutcomes, pastNew),
     automatedLeads,
   };
 }
@@ -204,6 +203,7 @@ export async function getDataleadsellStats(now: Date = new Date()): Promise<Data
     replied,
     replyRate: rate(replied, sends.leadsEmailed),
     weReplied,
+    pastNew,
     bySource: toBreakdown(sourceGroups.map((g) => ({ key: g.source, count: g._count }))),
     byLocation: toBreakdown(countyGroups.map((g) => ({ key: g.county, count: g._count }))),
     leadsPerDay: bucketByDay(
@@ -213,6 +213,5 @@ export async function getDataleadsellStats(now: Date = new Date()): Promise<Data
     ),
     emailsPerDay: bucketByDay(sends.recent, TREND_DAYS, now),
     subscribed,
-    conversionRate: rate(subscribed, pastNew),
   };
 }

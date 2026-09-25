@@ -21,7 +21,7 @@ export default async function DataleadsellStatsPage() {
         <StatCard label="Starred" value={s.starred} />
       </div>
 
-      <EmailPerformance s={s} conversion={{ label: "Subscribed", value: s.subscribed, rate: s.conversionRate }} />
+      <EmailPerformance s={s} conversion={{ label: "Subscribed", value: s.subscribed }} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatSection title="Agents added — last 14 days">
