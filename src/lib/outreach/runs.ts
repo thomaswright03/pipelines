@@ -1,7 +1,9 @@
 // Records automated (cron) runs in PipelineRun so every run — succeeded,
 // partial, failed or skipped — leaves a visible outcome with its reasons.
 import { prisma } from "@/lib/db";
-import { describeError, logError, logInfo } from "@/lib/log";
+import { logError, logInfo } from "@/lib/log";
+import { isDatabaseUnavailable } from "@/lib/db-health";
+import { YelpError } from "@/lib/yelp-discovery";
 
 export type RunStatus = "succeeded" | "partial" | "failed" | "skipped";
 /** What a daily discovery-and-send run actually did, as numbers. */
@@ -26,7 +28,7 @@ export async function recordRun(
     outcome = await fn(run.id);
   } catch (err) {
     logError(`run.${kind}`, err, { pipeline, runId: run.id });
-    outcome = { status: "failed", summary: "The run stopped with an error.", errors: [describeError(err)] };
+    outcome = { status: "failed", summary: "The run stopped with an error.", errors: [operatorMessage(err, run.id)] };
   }
   try {
     await prisma.pipelineRun.update({
@@ -44,6 +46,17 @@ export async function recordRun(
   }
   logInfo(`run.${kind}`, `${outcome.status}: ${outcome.summary}`, { pipeline, runId: run.id });
   return { ...outcome, runId: run.id };
+}
+
+/**
+ * Why a run stopped, for the run list and the cron response: an error
+ * already written for the operator as-is, otherwise a plain description
+ * (the technical detail is in the server log under the run id).
+ */
+function operatorMessage(err: unknown, runId: string): string {
+  if (err instanceof YelpError) return `${err.name}: ${err.message}`;
+  if (isDatabaseUnavailable(err)) return "The database couldn't be reached partway through the run.";
+  return `An internal error stopped the run (details in the server log under run ${runId}).`;
 }
 
 export async function recentRuns(pipeline: string, kind: string, take = 5) {

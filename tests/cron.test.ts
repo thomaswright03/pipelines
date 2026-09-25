@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { GET as dailyGET } from "@/app/api/cron/vault-daily/route";
@@ -128,4 +128,25 @@ describe("stale-contact routing", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } })).status).toBe("cold_call_list");
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: fresh.id } })).status).toBe("contacted");
   });
+});
+
+describe("a cron job when the database is down", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  for (const [name, handler] of [["stale-contacts", staleGET], ["daily run", dailyGET]] as const) {
+    it(`${name}: answers 503 with a code and a plain message, never the database error`, async () => {
+      const outage = Object.assign(new Error("Invalid `prisma.pipelineRun.create()` invocation: Can't reach database server at `db:5432`"), {
+        name: "PrismaClientKnownRequestError",
+        code: "P1001",
+      });
+      vi.spyOn(prisma.pipelineRun, "create").mockRejectedValueOnce(outage);
+
+      const res = await cron(handler);
+      const text = await res.text();
+
+      expect(res.status).toBe(503);
+      expect(JSON.parse(text)).toMatchObject({ ok: false, code: "db_unavailable", error: expect.stringMatching(/database can't be reached/) });
+      expect(text).not.toMatch(/prisma|P1001|invocation/i);
+    });
+  }
 });

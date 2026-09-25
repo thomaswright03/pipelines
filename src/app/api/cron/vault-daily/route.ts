@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { isAuthorizedBearer } from "@/lib/auth-header";
-import { describeError, logError } from "@/lib/log";
+import { logError } from "@/lib/log";
+import { isDatabaseUnavailable } from "@/lib/db-health";
 import { getPipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { recordRun } from "@/lib/outreach/runs";
 import { runDailyColdOutreach } from "@/lib/vault-daily-run";
@@ -28,7 +29,14 @@ export async function GET(request: NextRequest) {
     const failed = run.status === "failed";
     return Response.json({ ok: !failed, ...run }, { status: failed ? 500 : 200 });
   } catch (err) {
-    logError("api.cron.vault-daily", err);
-    return Response.json({ ok: false, error: "Daily run failed to start", cause: describeError(err) }, { status: 500 });
+    // The run couldn't even be recorded — most likely the database is
+    // unreachable. The detail goes to the log, never into the response.
+    const code = isDatabaseUnavailable(err) ? "db_unavailable" : "internal";
+    logError("api.cron.vault-daily", err, { code });
+    const error =
+      code === "db_unavailable"
+        ? "The daily run couldn't start: the database can't be reached. It will run again at its next scheduled time."
+        : "The daily run couldn't start because of an internal error. It will run again at its next scheduled time.";
+    return Response.json({ ok: false, code, error }, { status: code === "db_unavailable" ? 503 : 500 });
   }
 }
