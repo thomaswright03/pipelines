@@ -6,6 +6,7 @@ import { confirmColdCallAction } from "@/lib/actions/outreach";
 import { COLD_CALL_OUTCOMES, COLD_CALL_OUTCOME_LABEL, type ColdCallOutcome } from "@/lib/lead-status";
 import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { getTimezoneForState, formatLocalTime } from "@/lib/us-timezones";
+import type { CallDeckCard } from "@/lib/call-deck";
 
 const CLOCK_TICK_MS = 30_000;
 
@@ -25,14 +26,7 @@ function useNow(intervalMs: number): Date | null {
   return now;
 }
 
-export type ColdCallLead = {
-  id: string;
-  name: string;
-  subtitle: string | null;
-  phone: string | null;
-  city: string | null;
-  state: string | null;
-};
+export type ColdCallLead = CallDeckCard;
 
 const OUTCOME_STYLE: Record<ColdCallOutcome, string> = {
   no_answer: "border-zinc-600 bg-zinc-600 text-white",
@@ -41,7 +35,44 @@ const OUTCOME_STYLE: Record<ColdCallOutcome, string> = {
   interested: "border-emerald-600 bg-emerald-600 text-white",
 };
 
-type Logged = { lead: ColdCallLead; outcome: ColdCallOutcome | "skipped" };
+type Logged = { lead: Pick<ColdCallLead, "id" | "name">; outcome: ColdCallOutcome | "skipped" };
+
+// Where the caller is in the deck survives a refresh (per browser tab):
+// the cards already worked this session and what was recorded for each.
+// Browser storage can be missing or throw (private windows, blocked site
+// data), so the deck works without it — it just starts from the top.
+type SavedDeck = { handled: string[]; log: Logged[] };
+
+function storageKey(pipeline: PipelineId) {
+  return `call-deck:${pipeline}`;
+}
+
+function readSaved(pipeline: PipelineId): SavedDeck | null {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey(pipeline));
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as SavedDeck;
+    return Array.isArray(saved.handled) && Array.isArray(saved.log) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSaved(pipeline: PipelineId, saved: SavedDeck | null) {
+  try {
+    if (saved) window.sessionStorage.setItem(storageKey(pipeline), JSON.stringify(saved));
+    else window.sessionStorage.removeItem(storageKey(pipeline));
+  } catch {
+    // Not saved: a refresh starts the deck from the top.
+  }
+}
+
+/** The first card not yet worked this session. */
+function firstUnhandled(leads: ColdCallLead[], handled: string[]): number {
+  const done = new Set(handled);
+  const index = leads.findIndex((lead) => !done.has(lead.id));
+  return index === -1 ? leads.length : index;
+}
 
 // One card at a time. The deck is a snapshot taken when the page loaded, so
 // confirming a call (which may move the lead off the list) never shifts
@@ -59,12 +90,34 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
 
   const current = leads[index];
 
+  // Pick up where this tab left off (after the first render, since the
+  // server has no browser storage).
+  useEffect(() => {
+    const saved = readSaved(pipeline);
+    if (!saved) return;
+    const restore = setTimeout(() => {
+      setLog(saved.log);
+      setIndex(firstUnhandled(leads, saved.handled));
+    }, 0);
+    return () => clearTimeout(restore);
+  }, [pipeline, leads]);
+
   function next(entry: Logged) {
-    setLog((l) => [...l, entry]);
-    setIndex((i) => i + 1);
+    // The log holds every card worked this session (restored after a refresh).
+    const nextLog = [...log, { lead: { id: entry.lead.id, name: entry.lead.name }, outcome: entry.outcome }];
+    const handled = nextLog.map((e) => e.lead.id);
+    writeSaved(pipeline, { handled, log: nextLog });
+    setLog(nextLog);
+    setIndex(firstUnhandled(leads, handled));
     setOutcome(null);
     setNotes("");
     setError(null);
+  }
+
+  /** Forgets this session's progress and reloads, so the deck is the current call list. */
+  function startOver() {
+    writeSaved(pipeline, null);
+    window.location.reload();
   }
 
   async function confirm() {
@@ -95,7 +148,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
     );
   }
 
-  if (!current) return <Summary log={log} basePath={basePath} />;
+  if (!current) return <Summary log={log} basePath={basePath} onStartOver={startOver} />;
 
   const timezone = getTimezoneForState(current.state);
   const localTimeLabel = timezone && now ? formatLocalTime(now, timezone) : null;
@@ -119,15 +172,26 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
             style={{ width: `${(index / leads.length) * 100}%` }}
           />
         </div>
+        {log.length > 0 && (
+          <button type="button" onClick={startOver} className="btn-ghost text-xs">
+            Start over
+          </button>
+        )}
       </div>
 
       <div className="card w-full max-w-md p-6 shadow-lg shadow-indigo-500/5 sm:p-8">
-        <h2 className="break-words text-center text-2xl font-bold">
-          <Link href={`${basePath}/${current.id}`} className="hover:text-indigo-700 dark:hover:text-indigo-300">
-            {current.name}
-          </Link>
-        </h2>
-        {current.subtitle && <p className="mt-1 text-center text-sm muted">{current.subtitle}</p>}
+        <h2 className="break-words text-center text-2xl font-bold">{current.name}</h2>
+        {current.subtitle && <p className="mt-1 text-center text-sm font-medium text-zinc-700 dark:text-zinc-300">{current.subtitle}</p>}
+        <p className="mt-2 text-center">
+          <a
+            href={`${basePath}/${current.id}`}
+            target="_blank"
+            rel="noopener"
+            className="text-sm text-indigo-700 hover:underline dark:text-indigo-300"
+          >
+            Open lead page<span className="sr-only"> for {current.name}</span> (new tab) ↗
+          </a>
+        </p>
 
         <div className="mt-4 flex flex-col items-center gap-1.5">
           {current.phone ? (
@@ -140,14 +204,29 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
           ) : (
             <span className="text-sm muted">No phone on file</span>
           )}
-          {(current.city || current.state) && <span className="text-sm muted">{[current.city, current.state].filter(Boolean).join(", ")}</span>}
-          {localTimeLabel && <span className="text-xs muted">{localTimeLabel} there</span>}
+          {(current.city || current.state) && (
+            <span className="text-sm muted">
+              {[current.city, current.state].filter(Boolean).join(", ")}
+              {localTimeLabel && <> · {localTimeLabel} there</>}
+            </span>
+          )}
           {current.phone && (
             <a href={`/api/contact-card/${pipeline}/${current.id}`} className="btn-ghost mt-1 text-xs">
               Add to Contacts
             </a>
           )}
         </div>
+
+        <dl className="mt-4 flex flex-col gap-2 rounded-lg bg-zinc-50 px-3 py-2.5 text-sm dark:bg-zinc-800/60">
+          <div className="flex flex-wrap justify-between gap-x-3">
+            <dt className="muted">Pitch</dt>
+            <dd>{current.emailed}</dd>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <dt className="muted">Latest history{current.lastNote ? ` (${current.lastNote.date})` : ""}</dt>
+            <dd className="break-words">{current.lastNote ? current.lastNote.text : <span className="muted">Nothing recorded yet.</span>}</dd>
+          </div>
+        </dl>
 
         <fieldset className="mt-6">
           <legend className="sr-only">How did the call go?</legend>
@@ -199,7 +278,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
   );
 }
 
-function Summary({ log, basePath }: { log: Logged[]; basePath: string }) {
+function Summary({ log, basePath, onStartOver }: { log: Logged[]; basePath: string; onStartOver: () => void }) {
   const counts = new Map<string, number>();
   for (const entry of log) counts.set(entry.outcome, (counts.get(entry.outcome) ?? 0) + 1);
   const interested = log.filter((e) => e.outcome === "interested");
@@ -236,7 +315,10 @@ function Summary({ log, basePath }: { log: Logged[]; basePath: string }) {
           </ul>
         </div>
       )}
-      <p className="text-center text-sm muted">No-answers stay on the list for another try. Reload the page to start a fresh deck.</p>
+      <p className="text-center text-sm muted">No-answers stay on the list for another try.</p>
+      <button type="button" onClick={onStartOver} className="btn-secondary self-center">
+        Start a fresh deck
+      </button>
     </div>
   );
 }
