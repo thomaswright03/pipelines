@@ -216,3 +216,18 @@ describe("where mail goes", () => {
     expect(describeMailDestination({ VERCEL: "1" })).toMatchObject({ kind: "zeptomail", delivers: true, badge: null });
   });
 });
+
+describe("estimated value errors name the actual problem", () => {
+  const base = { name: "Acme" };
+  const errorFor = (estimatedValue: string) => {
+    const parsed = coldOutreachLeadSchema.safeParse({ ...base, estimatedValue });
+    return parsed.success ? null : (fieldErrorsOf(parsed.error).estimatedValue ?? null);
+  };
+  it("too many decimals", () => expect(errorFor("12.345")).toMatch(/at most two decimal places/));
+  it("negative", () => expect(errorFor("-5")).toMatch(/can't be negative/));
+  it("not a number", () => expect(errorFor("lots")).toMatch(/must be a dollar amount/));
+  it("fine", () => {
+    expect(errorFor("$2,500.50")).toBeNull();
+    expect(errorFor("")).toBeNull();
+  });
+});

@@ -68,13 +68,23 @@ export const coldOutreachLeadSchema = z.object({
   estimatedValue: z
     .string()
     .trim()
-    .refine((v) => !v || /^\$?\s*\d[\d,]*(\.\d{1,2})?$/.test(v), "Estimated value must be a dollar amount of 0 or more, like 2500")
-    .refine(
-      (v) => !v || parseMoneyToCents(v) <= LIMITS.estimatedValue * 100,
-      `Estimated value can be at most $${LIMITS.estimatedValue.toLocaleString("en-US")}`,
-    ),
+    .superRefine((v, ctx) => {
+      if (!v) return;
+      const problem = estimatedValueProblem(v);
+      if (problem) ctx.addIssue({ code: "custom", message: problem });
+    }),
   notes: optionalText("Notes", LIMITS.notes),
 });
+
+/** Why an estimated value isn't usable, naming the actual problem; null when it is fine. */
+export function estimatedValueProblem(value: string): string | null {
+  const v = value.trim();
+  if (/^-\s*\$?\s*\d/.test(v) || /^\$\s*-/.test(v)) return "Estimated value can't be negative — enter 0 or more, like 2500";
+  if (/^\$?\s*\d[\d,]*\.\d{3,}$/.test(v)) return "Estimated value can have at most two decimal places (cents), like 2500.50";
+  if (!/^\$?\s*\d[\d,]*(\.\d{1,2})?$/.test(v)) return "Estimated value must be a dollar amount, like 2500 or $2,500.50";
+  if (parseMoneyToCents(v) > LIMITS.estimatedValue * 100) return `Estimated value can be at most $${LIMITS.estimatedValue.toLocaleString("en-US")}`;
+  return null;
+}
 
 export const agentLeadSchema = z.object({
   name,
