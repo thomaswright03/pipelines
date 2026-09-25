@@ -17,7 +17,10 @@ Each pipeline has a lead list, a **call deck** for phone follow-up, and **Stats*
 replies from addresses that match no lead (and bounce notices that name no lead), so they can be attached
 to the right one. **Settings** (`/settings`) holds the switches that apply to both pipelines,
 **Connections** (whether sending, reply delivery, both cron jobs and Yelp are working, with the next step
-when one isn't) and the searchable do-not-email list.
+when one isn't, and a **Test connection** button for email and Yelp) and the searchable do-not-email list.
+**Operator guide** (`/help`, linked from Settings and every page's footer) is the one-page runbook for
+day-to-day operation: the emergency stop, the daily checks, marking replies by hand, held-back leads and
+reading Connections.
 
 Each call-deck card shows the lead's company or brokerage, city/state with the local time, when the pitch
 was emailed (or "Never emailed"), the latest history entry, and a link that opens the lead page in a new
@@ -27,7 +30,9 @@ current call list.
 The interface is English-only: the one operator and every recipient are in the US, so all strings are
 hard-coded in the components and there is no translation layer. This is the developer's recommendation and
 still needs the owner's sign-off (see "Owner-only setup"); Spanish/French would mean moving every string
-into a translation layer with full catalogues and a language switcher.
+into a translation layer with full catalogues and a language switcher. Replies are a separate matter:
+common Spanish and French opt-outs are honoured, and a reply mainly in another language that isn't
+understood is flagged **Reply needs a look** rather than counted as a positive reply.
 
 A third dashboard card, **AI Lead Responder**, links out to a separate Vercel project. It is not code in
 this repo.
@@ -77,13 +82,17 @@ the bulk send, and the daily cron.
 - **Opt-outs.** A reply that asks not to be contacted puts the address on the do-not-email list, and every
   send checks that list. That covers "STOP"/"Unsubscribe", "remove me (from your list)", "take me off",
   "don't/do not email|contact|message|reach out to me/us" (with or without "again"), "quit/cease
-  emailing", "delete my email address", "cease and desist", "leave me alone" and similar; negated
-  phrasings ("please don't stop sending these") don't count. The reply check reads only the new text of
+  emailing", "delete my email address", "cease and desist", "leave me alone", "I don't want these/your/any
+  emails", "we don't want to receive your emails", "no longer wish to receive these messages" and
+  similar, plus common Spanish ("no me envíe más correos", "denme de baja") and French ("désabonnez-moi",
+  "ne m'envoyez plus") phrasings; negated phrasings ("please don't stop sending these", "I don't want
+  these emails to stop") don't count. The reply check reads only the new text of
   the reply: quoted history and signatures are ignored, so an interested reply that quotes our "Reply
   STOP" footer is not an opt-out.
   - A reply that isn't an opt-out but reads like a "no" or a complaint ("not interested", "wrong person",
-    "how did you get my email", "spam") is not counted as a positive response: the lead keeps its status
-    and is flagged **Reply needs a look** with the reason, for the operator to decide.
+    "how did you get my email", "spam"), or is mainly in another language, is not counted as a positive
+    response: the lead keeps its status and is flagged **Reply needs a look** with the reason, for the
+    operator to decide.
   - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see "Reply
     tracking". An opt-out is still honoured even when it comes from an autoresponder.
   - The words that triggered an opt-out are stored and shown on the lead page.
@@ -163,6 +172,9 @@ missing.
 
 **When the database is down,** every page shows "Can't reach the database right now" with what that
 means (nothing loads or saves; no emails are sent) and a **Try again** button, instead of a generic error.
+A page request made while it's down gets HTTP **503** with that message (`src/proxy.ts`, which probes the
+database before rendering and reuses the answer for 5 s); the layout shows the same message in the page if
+the database drops mid-render.
 `GET /api/health` answers `{"database":"ok"}` (200) or `{"database":"unreachable"}` (503) and can be used
 by an uptime monitor.
 
@@ -173,6 +185,7 @@ npm test               # vitest run
 npm run test:watch
 npm run test:coverage  # the same, plus a coverage report for src/
 npm run build && npm run test:e2e   # browser smoke tests (Playwright; first time: npx playwright install chromium)
+npm run format         # Prettier; CI runs `npm run format:check`
 ```
 
 The suite runs against a real, disposable Postgres. It uses `TEST_DATABASE_URL` and defaults to
@@ -196,12 +209,18 @@ What's covered, by file:
 | `tests/inbound.test.ts`, `tests/reply-classifier.test.ts` | Reply and opt-out classification |
 | `tests/auto-mail.test.ts` | Automatic replies (headers, subjects, wording) change nothing but the history and still reach the call deck; bounce notices in Postfix/Gmail/Exchange/DSN form mark the send bounced; unmatched bounces; the Stats reply/opt-out/automatic figures in both pipelines |
 | `tests/call-deck.test.ts` | Call-deck cards (company, place, emailed date, latest history) and an order a saved call doesn't reshuffle |
-| `tests/connections.test.ts` | Settings → Connections: missing replies, failed and overdue runs, failed sends, missing secrets, all green |
+| `tests/connections.test.ts` | Settings → Connections: "Not confirmed yet" on a fresh install, "Working" only after a reply/send/search/test, the no-replies warning for old sends, Test connection passing and failing (no email sent), failed and overdue runs, missing secrets, no setting names in the copy |
+| `tests/connection-status-list.test.ts` | The Connections list as rendered: each tone's badge, "Not confirmed yet", next steps, where Test connection appears |
+| `tests/bulk-send-run.test.ts` | The bulk-send dialog's loop: progress, Stop, three-failures stop, paused stop, lost server, the closing summary |
+| `tests/call-deck-session.test.ts` | The call deck's saved place: restore, start over, corrupt data, no or throwing browser storage |
+| `tests/rules-version.test.ts` | The rules version: changes with a rule, stored on every inbound reply and every accepted address |
+| `tests/status-constraint.test.ts` | The database refuses unknown lead statuses (and its list matches the app's); unknown ones are labelled as such |
+| `tests/proxy.test.ts` | Page requests during a database outage get 503; the probe is reused for 5 s |
 | `tests/db-health.test.ts` | Database-outage detection and `/api/health` |
 | `tests/discovery.test.ts`, `tests/email-finder.test.ts` | Discovery and email lookup |
 | `tests/adre.test.ts` | Resumable ADRE import; a roster whose columns changed, or that lists nobody in the county, is reported instead of "succeeding" with zero |
-| `tests/cron.test.ts` | The cron routes |
-| `tests/daily-run.test.ts` | What "businesses to check per run" yields; leftovers emailed by the next run; the 60 s budget (fake clock); skipped leads don't fail a run |
+| `tests/cron.test.ts` | The cron routes, including a database outage answered with a code and no database error text |
+| `tests/daily-run.test.ts` | What "businesses to check per run" yields; leftovers emailed by the next run, including when Yelp fails (run "partial", city not used up); the 60 s budget (fake clock); skipped leads don't fail a run |
 | `tests/replies.test.ts` | Replies after the stale-contacts move, Lost-lead review flag, Mark replied, duplicate delivery, database outage and retry, stale-contacts race |
 | `tests/stats.test.ts` | Stats, including reply rate and Arizona days |
 | `tests/lead-actions.test.ts` | Stage rules, moves racing a reply, the Settings do-not-email list |
@@ -216,7 +235,10 @@ What's covered, by file:
 | `tests/heuristics-eval.test.ts` | Precision/recall of every heuristic (opt-outs, needs-a-look, automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
 
 **Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines or
-`src/lib/actions` below 85% (`vitest.config.ts`). Pages and components are exercised by the browser tests.
+`src/lib/actions` below 85% (`vitest.config.ts`). Pages and components are exercised by the browser tests;
+the logic inside the more involved client components (the bulk-send loop, the call deck's saved place) lives
+in `src/lib/` where it is unit-tested, and the Connections list is rendered in a unit test. The confirm
+dialog's focus and Escape handling need a real browser and are covered by the browser tests.
 
 ### Measuring the reply and address rules
 
@@ -239,7 +261,7 @@ and prints precision and recall, with every miss, for two splits:
   asked us to stop, those cases were moved to dev, the rules fixed, and fresh held-out cases written (see
   the header of `tests/corpus/replies.ts`).
 
-Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
+Every held-out split has at least 50 cases (opt-outs 102). Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
 even when every unit test passes. CI also writes the scores to the run summary.
 
 Every set is **synthetic**, written to resemble real mail, sites and staff directories. To measure
@@ -254,6 +276,14 @@ The script runs one `SELECT` in a read-only transaction and replaces email addre
 and long digit runs. It can't find people's or firms' names in free text: replace those by hand, read and
 correct each label, and add the cases to a **held-out** split. Never commit real addresses or names.
 
+**Rules version.** Every stored decision records which version of the rules made it:
+`InboundReply.rulesVersion` (the reply kind, opt-out and "needs a look" verdicts) and the leads'
+`emailRulesVersion` (the address and guessed-site rules that accepted a found address; empty for addresses
+entered or checked by hand). The version is a hash of the rules' patterns and word lists plus a revision
+number (`src/lib/outreach/rules-version.ts`): editing a pattern or list changes it automatically; bump the
+module's revision when only the logic around them changes. The export script includes it, so a change in
+accuracy can be traced to the rule change that caused it.
+
 In production, the **Replies** page shows how often the operator corrects the rules (last 90 days):
 opt-outs read from replies and how many were undone, opt-outs the rules missed (a reply later marked opted
 out by hand), replies flagged for a look (and how many said "wrong person"), and found addresses that
@@ -263,10 +293,11 @@ bounced. These are recorded in `OutreachCorrection`.
 4100. They cover adding a lead with an invalid email, a single send, a bulk send stopped midway (at most
 two emails after Stop), pause/resume, Enter confirming a send but cancelling a destructive action,
 editing a lead (including the link to the lead holding an address), deleting a lead, attaching an
-unmatched reply, stale messages clearing, per-page tab titles (including "Page not found"), reading a
+unmatched reply, stale messages clearing, per-page tab titles (including "Page not found"), the
+unsaved-changes prompt on the lead form, reading a
 Stats bar's date and count by keyboard focus, the lead list at 375–2560 px, the call-deck card's context
-and its place surviving a refresh, the single empty-list message, the sender address never splitting
-mid-word, and Settings → Connections. The server uses
+and its place surviving a refresh, the single empty-list message, the sender address never breaking
+inside itself (375–2560 px), and Settings → Connections including Test connection. The server uses
 `EMAIL_TRANSPORT=outbox` (mail is written to `test-results/e2e-outbox`, never delivered) and its own
 database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelines_e2e`), which
 `e2e/prepare-db.mjs` creates and migrates. It refuses non-local hosts.
@@ -274,7 +305,8 @@ database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelin
 ## CI
 
 `.github/workflows/ci.yml` runs on every push and pull request. It uses a throwaway `postgres:16` service
-container and runs `npm ci`, `npm run build` (including the type check), `npm run lint`, the test suite
+container and runs `npm ci`, `npm run build` (including the type check), `npm run lint`, the Prettier
+check (`npm run format:check`), the test suite
 with coverage floors (the summary appears on the run page), the heuristic precision/recall scores, and
 the browser smoke tests. CI has no secrets and
 reaches no external service other than downloading Chromium.
@@ -293,8 +325,14 @@ Vercel sends automatically when `CRON_SECRET` is set.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
 - **Run log.** Every run is recorded in `PipelineRun`, whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on the Cold Outreach page.
   - The page warns when the last run is more than 26 hours old.
-  - Both routes return JSON: `{ status, summary, errors }`. A failed run returns HTTP 500.
-  - Only real send failures (the email service refused or dropped the send) make a run **partial** or
+  - Both routes return JSON: `{ status, summary, errors }`. A failed run returns HTTP 500. If the run can't
+    even be recorded (database unreachable) they return 503 with `{ ok: false, code: "db_unavailable" |
+    "internal", error }`; the details are only in the server log.
+  - A Yelp failure (down, rate-limited, key rejected) doesn't stop the run: the error is recorded, the city
+    isn't used up, and the leads earlier runs found are still emailed. The run is **partial** if emails
+    still went out and **failed** only if nothing could be done. A failed or partial run shows its first
+    error in its row on the Cold Outreach page.
+  - Otherwise only real send failures (the email service refused or dropped the send) make a run **partial** or
     **failed**. Leads the send rules skipped (address already pitched, opted out) are listed as skipped
     and the run still **succeeded**.
   - A run still marked running two minutes after it started was cut off before it could record its
@@ -400,6 +438,18 @@ for Contacted, Cold call list and No phone number leads that were emailed), **Ma
 emailed, including after the stale-contacts move; a lead still being worked moves to Lost, a customer keeps
 its status) or **Mark opted out**.
 
+## Settings → Connections
+
+What each row checks, and which setting is behind a problem it reports. The screen itself is written for
+the operator and names no settings; this table is for the developer they're told to contact.
+
+| Row | "Working" only when | On-screen problem → what to fix |
+| --- | --- | --- |
+| Sending email | The latest send succeeded, or the latest **Test connection** (SMTP connect, STARTTLS and login; nothing is sent) passed | "turned down our login" → `ZEPTOMAIL_SMTP_PASSWORD`; "isn't set up on the server" → the password is missing; "still in test mode" → `EMAIL_TRANSPORT` isn't `zeptomail`; "no server address" → `SMTP_HOST` |
+| Receiving replies | An inbound message of any kind arrived in the last 7 days | "Reply forwarding isn't switched on" → `EMAIL_INBOUND_SECRET`; "Not confirmed yet" / "replies seem to have stopped" → the Cloudflare Email Worker and Vercel's Protection Bypass for Automation (see "Reply tracking") |
+| Daily run, stale contacts | The last run succeeded and was less than 26 hours ago | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab |
+| Yelp search | The latest Yelp request (a search, a daily run or **Test connection**, which asks for one business) answered | "Yelp isn't set up" → `YELP_API_KEY` missing; "rejected our access key" → the key is wrong or revoked |
+
 ## Deploying
 
 Production runs on Vercel, with Neon Postgres and ZeptoMail. Environment variables are set in the Vercel
@@ -454,7 +504,17 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 
 1. **Apply the migrations** in this release to production before deploying it — including
    `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
-   `20260928090000_inbound_kind` and `20260928100000_send_failure_status` (all additive). See "Deploying".
+   `20260928090000_inbound_kind`, `20260928100000_send_failure_status`, `20260929090000_rules_version`,
+   `20260929100000_connection_checks` (all additive) and `20260929110000_lead_status_check`. See "Deploying".
+   The status check is added `NOT VALID`, so it can't fail on existing rows. Afterwards, check for rows it
+   would reject and fix them (for example with the lead page's status control), then validate it:
+
+   ```sql
+   SELECT id, status FROM "Lead" WHERE status NOT IN ('new','contacted','responded','appointment_set','working_for','paying_client','cold_call_list','contactless_list','lost');
+   SELECT id, status FROM "AgentLead" WHERE status NOT IN ('new','contacted','responded','subscribed','not_interested','cold_call_list','contactless_list','lost');
+   ALTER TABLE "Lead" VALIDATE CONSTRAINT "Lead_status_check";
+   ALTER TABLE "AgentLead" VALIDATE CONSTRAINT "AgentLead_status_check";
+   ```
 2. **Make reply tracking reachable.**
    - In Vercel, open Project Settings → Deployment Protection and enable **Protection Bypass for
      Automation**.
@@ -468,21 +528,24 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
      `X-Autoreply`, `X-Autorespond`, `Precedence`, `X-Auto-Response-Suppress`, `X-Failed-Recipients`,
      `Content-Type`) and to forward delivery-failure notices too, so automatic replies and bounces are
      recognised reliably.
-   - Once replies arrive, **Settings → Connections** shows "Receiving replies: Working" with the time of the
-     last one.
+   - Until a reply arrives, **Settings → Connections** shows "Receiving replies: Not confirmed yet"; once one
+     arrives it shows "Working" with its time.
 3. **Set `EMAIL_TRANSPORT=zeptomail` explicitly** on the Production environment in Vercel. Off Vercel,
    the transport defaults to the local outbox. Setting the value explicitly means production doesn't
    depend on Vercel's system variables being exposed.
-4. **Require CI before merging.** In GitHub, add a branch protection rule on `main` that requires the
-   `CI / build-lint-test` check.
-5. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get the
+4. **Require CI before merging.** In GitHub → Settings → Branches (or Rules → Rulesets), protect `main` and
+   make the `CI / build-lint-test` check required, so a pull request with a failing test, lint, format or
+   build can't be merged. The repository can't show whether this is on; confirm it here once done.
+5. **Press Test connection** for email and Yelp in **Settings → Connections** after deploying, so each shows
+   "Working" from a real login/search rather than "Not confirmed yet".
+6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get the
    other pipeline's pitch. Leave it off (the default) or turn it on in Settings.
-6. **Lawful basis for the outreach.** This is a legal review, not a code change. See "Known limitations".
-7. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each
+7. **Lawful basis for the outreach.** This is a legal review, not a code change. See "Known limitations".
+8. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each
    pipeline's list to New and check the flagged rows (see "Deploying" → Unverified addresses).
-8. **Decide the interface language.** Confirm English-only is out of scope for this single-operator
+9. **Decide the interface language.** Confirm English-only is out of scope for this single-operator
    tool (and note it here), or commission Spanish/French.
-9. **Grow the evaluation sets with real, anonymised replies and agent addresses** (see "Measuring the
+10. **Grow the evaluation sets with real, anonymised replies and agent addresses** (see "Measuring the
    reply and address rules"). Only the owner can read the production replies.
 
 ## Known limitations
