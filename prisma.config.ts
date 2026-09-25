@@ -13,8 +13,8 @@ export default defineConfig({
   // directUrl field) — this is CLI-only (migrate/studio), so it's safe to
   // point it at Neon's unpooled connection, which migrate needs for
   // schema-change locks the pooler doesn't support. The running app never
-  // reads this; db.ts connects independently via the Neon driver adapter,
-  // using the pooled URL.
+  // reads this; src/lib/db.ts connects with PIPELINES_DATABASE_URL through
+  // a driver adapter (Neon's for *.neon.tech, pg otherwise).
   datasource: {
     url: env("PIPELINES_DIRECT_URL"),
   },
