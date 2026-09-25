@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
-import { parseAdreRoster } from "@/lib/az-adre";
+import * as log from "@/lib/log";
+import { AdreEmptyRosterError, AdreFormatError, parseAdreRoster } from "@/lib/az-adre";
+import { loadAdreRosterAction } from "@/lib/actions/dataleadsell";
 import { getAdreStatus, loadAdreRoster, processAdreChunk } from "@/lib/adre-import";
 import { page, stubFetch } from "./helpers";
 
@@ -48,6 +50,50 @@ describe("parseAdreRoster", () => {
     const licensees = parseAdreRoster(csv, "Maricopa");
     expect(licensees.map((l) => l.name)).toEqual(["First1 Last1", "First2 Last2"]);
     expect(licensees[0]).toMatchObject({ key: "adre:SA000001", brokerage: "Test Realty", city: "Mesa" });
+  });
+});
+
+describe("a roster whose format changed", () => {
+  const ADRE_URL = "https://services.azre.gov/PdbWeb/List/DownloadList/1";
+
+  it("is refused by the parser, naming the missing column", () => {
+    const renamed = roster(3).replace("LicStatus", "LicenseStatus");
+    expect(() => parseAdreRoster(renamed, "Maricopa")).toThrow(AdreFormatError);
+    try {
+      parseAdreRoster(renamed, "Maricopa");
+    } catch (err) {
+      expect((err as AdreFormatError).missing).toEqual(["LicStatus"]);
+      expect((err as AdreFormatError).columns).toContain("LicenseStatus");
+    }
+  });
+
+  it("is reported on the ADRE panel as a format change, with the columns received in the log", async () => {
+    const logged = vi.spyOn(log, "logError").mockImplementation(() => {});
+    stubFetch({ [ADRE_URL]: { body: roster(3).replace("LicStatus", "LicenseStatus"), contentType: "text/csv" } });
+
+    expect(await loadAdreRosterAction()).toEqual({
+      ok: false,
+      error: "ADRE's roster format changed — the import can't read it, so nothing was changed. Ask your developer to update the import.",
+    });
+    expect(logged).toHaveBeenCalledWith("action.loadAdreRoster", expect.any(AdreFormatError), expect.objectContaining({ columnsReceived: expect.stringContaining("LicenseStatus") }));
+    expect(await prisma.adreLicensee.count()).toBe(0);
+    logged.mockRestore();
+  });
+
+  it("with the right columns but nobody in the county is reported as suspicious, not as success", async () => {
+    vi.spyOn(log, "logError").mockImplementation(() => {});
+    const noneInCounty = [HEADER, row(1, { MailingCounty: "Pima" }), row(2, { LicStatus: "Expired" })].join("\n");
+    expect(() => parseAdreRoster(noneInCounty, "Maricopa")).toThrow(AdreEmptyRosterError);
+    stubFetch({ [ADRE_URL]: { body: noneInCounty, contentType: "text/csv" } });
+
+    expect(await loadAdreRosterAction()).toMatchObject({ ok: false, error: expect.stringMatching(/^ADRE's roster downloaded but lists no active Maricopa County/) });
+    expect(await prisma.adreRoster.count()).toBe(0);
+    vi.restoreAllMocks();
+  });
+
+  it("still imports a normal roster through the action", async () => {
+    stubFetch({ [ADRE_URL]: { body: roster(5), contentType: "text/csv" } });
+    expect(await loadAdreRosterAction()).toMatchObject({ ok: true, status: { total: 5 } });
   });
 });
 

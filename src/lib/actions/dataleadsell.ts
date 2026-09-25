@@ -23,6 +23,7 @@ import { createLeadsFromCandidates, describeDiscovery } from "@/lib/outreach/dis
 import { checkAddressForLead, editLead } from "@/lib/outreach/lead-edit";
 import { enteredByHandEvidence } from "@/lib/outreach/evidence";
 import { getAdreStatus, loadAdreRoster, processAdreChunk, type AdreChunkResult, type AdreStatus } from "@/lib/adre-import";
+import { AdreEmptyRosterError, AdreFormatError } from "@/lib/az-adre";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
 const BASE_PATH = "/dataleadsell";
@@ -191,6 +192,20 @@ export async function loadAdreRosterAction(): Promise<AdreStatusResult> {
     await loadAdreRoster();
     return { ok: true, status: await getAdreStatus() };
   } catch (err) {
+    if (err instanceof AdreFormatError) {
+      logError("action.loadAdreRoster", err, { missing: err.missing.join("|"), columnsReceived: err.columns.join("|") });
+      return {
+        ok: false,
+        error: "ADRE's roster format changed — the import can't read it, so nothing was changed. Ask your developer to update the import.",
+      };
+    }
+    if (err instanceof AdreEmptyRosterError) {
+      logError("action.loadAdreRoster", err, { rows: err.rows });
+      return {
+        ok: false,
+        error: `ADRE's roster downloaded but lists no active ${err.county} County real-estate licensees, which isn't right — nothing was changed. Try again later; if it keeps happening, ask your developer to check the import.`,
+      };
+    }
     logError("action.loadAdreRoster", err);
     return {
       ok: false,

@@ -73,10 +73,8 @@ export async function getAdreStatus(now: Date = new Date()): Promise<AdreStatus>
  */
 export async function loadAdreRoster(csvText?: string): Promise<{ total: number; added: number }> {
   const text = csvText ?? (await downloadAdreRoster());
+  // Throws before anything is saved if the file's format changed or it lists nobody.
   const licensees = parseAdreRoster(text, ADRE_COUNTY);
-  if (licensees.length === 0) {
-    throw new Error(`ADRE's roster had no active ${ADRE_COUNTY} County licensees — the file format may have changed.`);
-  }
 
   const maxPosition = (await prisma.adreLicensee.aggregate({ where: { county: ADRE_COUNTY }, _max: { position: true } }))._max
     .position;

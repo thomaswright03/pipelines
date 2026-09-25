@@ -54,12 +54,51 @@ function licenseeKey(row: AdreRow, name: string, licenseType: string, address: s
   return `adre-hash:${createHash("sha1").update(`${name}|${licenseType}|${address ?? ""}`).digest("hex")}`;
 }
 
+/** Columns the import can't work without: the filters and the name. */
+const ADRE_REQUIRED_COLUMNS = ["MailingCounty", "LicStatus", "LicCategory", "LicType", "FirstName", "LastName"] as const;
+
+/**
+ * The roster file isn't in the shape the import reads (ADRE renamed or
+ * dropped a column). `columns` is the header actually received, for the log.
+ */
+export class AdreFormatError extends Error {
+  constructor(
+    readonly missing: string[],
+    readonly columns: string[],
+  ) {
+    super(`ADRE's roster is missing column(s) ${missing.join(", ")}`);
+    this.name = "AdreFormatError";
+  }
+}
+
+/** The roster read fine but lists nobody for the county — suspicious, not a success. */
+export class AdreEmptyRosterError extends Error {
+  constructor(
+    readonly county: string,
+    readonly rows: number,
+  ) {
+    super(`ADRE's roster (${rows} rows) had no active ${county} County real-estate licensees`);
+    this.name = "AdreEmptyRosterError";
+  }
+}
+
 /**
  * Parses ADRE's roster CSV into the Active, "Real Estate" category Brokers
- * and Salespersons whose mailing county is `county`, in file order.
+ * and Salespersons whose mailing county is `county`, in file order. Throws
+ * AdreFormatError if a required column is missing, and AdreEmptyRosterError
+ * if nobody in the file qualifies.
  */
 export function parseAdreRoster(csvText: string, county: string): AzLicensee[] {
-  const rows = parse(csvText, { columns: true, skip_empty_lines: true, relax_column_count: true }) as AdreRow[];
+  const rows = parse(csvText, {
+    columns: (header: string[]) => {
+      const names = header.map((h) => h.trim());
+      const missing = ADRE_REQUIRED_COLUMNS.filter((c) => !names.includes(c));
+      if (missing.length > 0) throw new AdreFormatError(missing, names);
+      return names;
+    },
+    skip_empty_lines: true,
+    relax_column_count: true,
+  }) as AdreRow[];
 
   const licensees: AzLicensee[] = [];
   const seen = new Set<string>();
@@ -87,6 +126,7 @@ export function parseAdreRoster(csvText: string, county: string): AzLicensee[] {
       licenseType,
     });
   }
+  if (licensees.length === 0) throw new AdreEmptyRosterError(county, rows.length);
   return licensees;
 }
 
