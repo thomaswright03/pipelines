@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/vault-pipeline";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { APP_TIME_ZONE_LABEL } from "@/lib/time";
+import { APPOINTMENT_FROM } from "@/lib/lead-status";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -20,7 +21,6 @@ const LOST_REASONS = [
   { value: "unable_to_contact", label: "Unable to contact" },
 ] as const;
 
-const APPOINTMENT_FROM = ["contacted", "responded", "cold_call_list", "appointment_set"];
 
 // Cold Outreach–only stage actions: appointments, Lost with a reason, the
 // "that reply was really a bounce" correction.

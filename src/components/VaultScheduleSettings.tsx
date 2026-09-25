@@ -27,6 +27,10 @@ const RUN_STATUS: Record<string, { label: string; className: string }> = {
   failed: { label: "Failed", className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300" },
   skipped: { label: "Skipped", className: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
   running: { label: "Running", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" },
+  interrupted: {
+    label: "Interrupted",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  },
 };
 
 /**
@@ -142,7 +146,7 @@ export default function VaultScheduleSettings({
           <p className="muted">No daily run has searched yet, so there are no results to show.</p>
         )}
       </div>
-      <p className="text-xs muted">The daily run time is fixed; ask your developer to change it.</p>
+      <p className="text-sm muted">The daily run time is fixed; ask your developer to change it.</p>
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Recent runs</h3>
@@ -161,10 +165,14 @@ export default function VaultScheduleSettings({
                   {run.summary && <p className="break-words">{run.summary}</p>}
                   {run.errors.length > 0 && (
                     <details>
-                      <summary className="cursor-pointer text-xs font-medium text-red-800 dark:text-red-300">
-                        {run.errors.length} problem{run.errors.length === 1 ? "" : "s"}
+                      <summary
+                        className={`cursor-pointer text-sm font-medium ${
+                          run.status === "succeeded" ? "" : "text-red-800 dark:text-red-300"
+                        }`}
+                      >
+                        Details ({run.errors.length})
                       </summary>
-                      <ul className="mt-1 list-disc pl-5 text-xs muted">
+                      <ul className="mt-1 list-disc pl-5 text-sm muted">
                         {run.errors.map((e, i) => (
                           <li key={i} className="break-words">
                             {e}

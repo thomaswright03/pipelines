@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { previewBulkSendAction, sendBulkChunkAction } from "@/lib/actions/outreach";
 import type { BulkPreview } from "@/lib/outreach/send";
@@ -20,14 +20,21 @@ type Phase =
 /**
  * "Send outreach to new leads": shows exactly who would be emailed (count,
  * distinct addresses, what's skipped and why, a sample) and sends only
- * after an explicit "Send to N leads". The send runs in small server calls
- * so progress is visible and it can be stopped between calls.
+ * after an explicit "Send to N leads". The send runs as one server call per
+ * email, so progress is visible and Stop takes effect after the email in
+ * progress.
  */
 export default function BulkSendButton({ pipeline, disabled }: { pipeline: PipelineId; disabled?: boolean }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const stopRequested = useRef(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const sendRef = useRef<HTMLButtonElement>(null);
+
+  // Once the preview is shown, Enter sends (the button names exactly how many).
+  useEffect(() => {
+    if (phase.kind === "preview") sendRef.current?.focus();
+  }, [phase.kind]);
 
   async function open() {
     setPhase({ kind: "loading" });
@@ -51,6 +58,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
     let remaining = preview.leadIds;
     const progress: Progress = { sent: 0, skipped: 0, failed: 0, processed: 0, total: preview.leadIds.length, messages: [] };
     let stopReason: string | null = null;
+    let consecutiveFailures = 0;
     setPhase({ kind: "sending", preview, progress: { ...progress }, stopping: false });
 
     while (remaining.length > 0) {
@@ -60,7 +68,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
       }
       let chunk;
       try {
-        chunk = await sendBulkChunkAction(pipeline, remaining);
+        chunk = await sendBulkChunkAction(pipeline, remaining, consecutiveFailures);
       } catch {
         stopReason = "Lost contact with the server. Leads already emailed are marked Contacted; run the send again to continue.";
         break;
@@ -70,6 +78,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
         break;
       }
       const r = chunk.result;
+      consecutiveFailures = r.consecutiveFailures;
       progress.sent += r.sent;
       progress.skipped += r.skipped;
       progress.failed += r.failed;
@@ -149,7 +158,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
                 Cancel
               </button>
               {!phase.preview.paused && phase.preview.willSend > 0 && (
-                <button type="button" autoFocus onClick={() => send(phase.preview)} className="btn-primary">
+                <button ref={sendRef} type="button" onClick={() => send(phase.preview)} className="btn-primary">
                   Send to {plural(phase.preview.willSend, "lead")}
                 </button>
               )}
@@ -165,7 +174,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
               }}
               className="btn-danger"
             >
-              {phase.stopping ? "Stopping after this batch…" : "Stop sending"}
+              {phase.stopping ? "Stopping after this email…" : "Stop sending"}
             </button>
           )}
           {(phase.kind === "done" || phase.kind === "error" || phase.kind === "loading") && (
@@ -246,7 +255,7 @@ function ProgressBody({ progress, willSend, stopping }: { progress: Progress; wi
       >
         <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${pct}%` }} />
       </div>
-      <p className="text-xs muted">Keep this tab open until it finishes. Closing it stops the send after the current batch.</p>
+      <p className="text-sm muted">Keep this tab open until it finishes. Closing it stops the send after the current email.</p>
     </div>
   );
 }
@@ -256,7 +265,7 @@ function Messages({ messages }: { messages: string[] }) {
   return (
     <details>
       <summary className="cursor-pointer text-sm font-medium">Details ({messages.length})</summary>
-      <ul className="mt-1 max-h-48 list-disc overflow-y-auto pl-5 text-xs muted">
+      <ul className="mt-1 max-h-48 list-disc overflow-y-auto pl-5 text-sm muted">
         {messages.map((m, i) => (
           <li key={i} className="break-words">
             {m}

@@ -53,6 +53,20 @@ const OPT_OUT_PHRASES: RegExp[] = [
   /\bno\s+more\s+e-?mails?\b/i,
 ];
 
+// A phrase right after one of these is being negated, not requested:
+// "please don't stop emailing me", "I'm not asking to unsubscribe", "never
+// stop sending these". Only filler words may sit between the negation and
+// the phrase, so "I'm not interested, stop emailing me" still counts.
+const NEGATION_BEFORE_RE =
+  /\b(?:don'?t|dont|do\s+not|doesn'?t|does\s+not|never|not|no\s+need\s+to|won'?t|wouldn'?t|shouldn'?t)(?:\s+(?:please|ever|you|to|want|wanting|asking|ask|need|trying|going|mean|meaning|planning|plan))*\s*$/i;
+
+/** Whether the words just before `index` (within the same clause) negate what follows. */
+function isNegated(text: string, index: number): boolean {
+  const before = text.slice(Math.max(0, index - 60), index);
+  const clause = before.split(/[.!?;,\n]/).pop() ?? "";
+  return NEGATION_BEFORE_RE.test(clause);
+}
+
 // Our own footer, in case a client quotes it without ">" markers.
 const TEMPLATE_FOOTER_RE = /don'?t want to hear from us again\?\s*reply stop and we won'?t email you again\.?/gi;
 
@@ -116,8 +130,8 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   }
 
   for (const re of OPT_OUT_PHRASES) {
-    const match = re.exec(newText);
-    if (match) {
+    for (const match of newText.matchAll(new RegExp(re.source, "gi"))) {
+      if (isNegated(newText, match.index)) continue;
       return { optOut: true, trigger: sentenceAround(newText, match.index, match[0].length), newText };
     }
   }

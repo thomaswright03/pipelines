@@ -29,6 +29,8 @@ async function loadLead(pipelineId: PipelineId, leadId: string): Promise<Outreac
 }
 
 const NOT_FOUND = refuse("This lead no longer exists — it may have been removed.");
+const changedMeanwhile = (name: string) =>
+  refuse(`${name} changed status a moment ago (a reply or an automatic move) — reload the page to see it, then try again.`);
 
 export async function changeStatus(pipelineId: PipelineId, leadId: string, to: string): Promise<ActionResult> {
   if (!isStatusOf(pipelineId, to)) return refuse(`"${to}" isn't a status in this pipeline.`);
@@ -44,10 +46,17 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
     if (!(await pipeline.hasBeenEmailed(prisma, leadId))) {
       return refuse(`${lead.name} was never emailed, so they can't go back to Contacted.`);
     }
-    await pipeline.update(prisma, leadId, { status: to, repliedAt: null, ourReplyAt: null, replyNeedsReview: false });
+    const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], {
+      status: to,
+      repliedAt: null,
+      ourReplyAt: null,
+      replyNeedsReview: false,
+    });
+    if (!moved) return changedMeanwhile(lead.name);
   } else {
     // A deliberate move is the operator's review of any pending reply.
-    await pipeline.update(prisma, leadId, { status: to, replyNeedsReview: false });
+    const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], { status: to, replyNeedsReview: false });
+    if (!moved) return changedMeanwhile(lead.name);
   }
   return ok(`Moved ${lead.name} from ${statusLabel(lead.status)} to ${statusLabel(to)}.`);
 }
@@ -67,7 +76,7 @@ export async function markReplied(pipelineId: PipelineId, leadId: string): Promi
     status: "responded",
     replyNeedsReview: false,
   });
-  if (!moved) return refuse(`${lead.name} changed status a moment ago — reload the page and try again.`);
+  if (!moved) return changedMeanwhile(lead.name);
   return ok(`Marked ${lead.name} as replied — moved from ${statusLabel(lead.status)} to Responded.`);
 }
 
@@ -87,13 +96,15 @@ export async function markBounced(pipelineId: PipelineId, leadId: string): Promi
     return refuse(`${lead.name} hasn't been emailed, so there's nothing to mark as bounced.`);
   }
   const now = new Date();
-  await prisma.$transaction(async (tx) => {
-    await pipeline.markLatestSendBounced(tx, leadId, now);
-    await pipeline.update(tx, leadId, {
+  const moved = await prisma.$transaction(async (tx) => {
+    const applied = await pipeline.updateIfStatus(tx, leadId, [lead.status], {
       status: "lost",
       ...(pipelineId === "cold-outreach" ? { callOutcome: "unable_to_contact" } : {}),
     });
+    if (applied) await pipeline.markLatestSendBounced(tx, leadId, now);
+    return applied;
   });
+  if (!moved) return changedMeanwhile(lead.name);
   return ok(`Marked ${lead.name} as bounced — moved to Lost.`);
 }
 
@@ -105,13 +116,23 @@ export async function markOptedOut(pipelineId: PipelineId, leadId: string): Prom
 
   const keepStatus = CUSTOMER_STATUSES.includes(lead.status);
   const newStatus = pipelineId === "dataleadsell" ? "not_interested" : "lost";
-  await prisma.$transaction(async (tx) => {
+  const block = { sendBlockedReason: `${OPTED_OUT_BLOCK_PREFIX} — ${email} is on the suppression list.` };
+  const pipeline = getPipeline(pipelineId);
+  // The opt-out itself always applies; the status move only if nothing
+  // moved the lead since the page was loaded.
+  const moved = await prisma.$transaction(async (tx) => {
     await suppressEmail(email, { reason: "Marked opted out manually", source: "manual" }, tx);
-    await getPipeline(pipelineId).update(tx, leadId, {
-      sendBlockedReason: `${OPTED_OUT_BLOCK_PREFIX} — ${email} is on the suppression list.`,
-      ...(keepStatus ? {} : { status: newStatus }),
-    });
+    if (keepStatus) {
+      await pipeline.update(tx, leadId, block);
+      return true;
+    }
+    if (await pipeline.updateIfStatus(tx, leadId, [lead.status], { ...block, status: newStatus })) return true;
+    await pipeline.update(tx, leadId, block);
+    return false;
   });
+  if (!moved) {
+    return ok(`Added ${email} to the do-not-email list. ${lead.name}'s status changed a moment ago, so it was left as it is — reload the page to see it.`);
+  }
   return ok(
     `Added ${email} to the do-not-email list${keepStatus ? "" : ` and moved ${lead.name} to ${statusLabel(newStatus)}`}.`,
   );
@@ -138,9 +159,50 @@ export async function removeSuppression(pipelineId: PipelineId, leadId: string):
     for (const pipeline of ALL_PIPELINES) {
       await pipeline.clearSendBlockedByPrefix(tx, email, OPTED_OUT_BLOCK_PREFIX);
     }
-    if (restore) await getPipeline(pipelineId).update(tx, leadId, { status: "responded" });
+    if (restore) await getPipeline(pipelineId).updateIfStatus(tx, leadId, [lead.status], { status: "responded" });
   });
   return ok(`Removed ${email} from the do-not-email list${restore ? ` — ${lead.name} is back to Responded` : ""}.`);
+}
+
+/**
+ * Adds an address to the do-not-email list from Settings (someone asked by
+ * phone, a complaint…). Every lead with the address is flagged too.
+ */
+export async function addSuppression(rawEmail: string, note: string): Promise<ActionResult> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    return refuse("Enter a full email address, like name@business.com.");
+  }
+  if (await getSuppression(email)) return refuse(`${email} is already on the do-not-email list.`);
+  const reason = note.trim().slice(0, 300) || "Added by hand in Settings";
+  await prisma.$transaction(async (tx) => {
+    await suppressEmail(email, { reason, source: "manual", evidence: note.trim().slice(0, 300) || null }, tx);
+    for (const pipeline of ALL_PIPELINES) {
+      for (const lead of await pipeline.findLeadsByEmail(tx, email)) {
+        if (!lead.sendBlockedReason) {
+          await pipeline.update(tx, lead.id, { sendBlockedReason: `${OPTED_OUT_BLOCK_PREFIX} — ${email} is on the suppression list.` });
+        }
+      }
+    }
+  });
+  return ok(`Added ${email} to the do-not-email list. Neither pipeline will email it.`);
+}
+
+/**
+ * Removes an address from the do-not-email list from Settings — for an
+ * entry added by mistake. Leads keep their status (move them from the lead
+ * page if needed); their "opted out" flag is cleared.
+ */
+export async function removeSuppressionByEmail(rawEmail: string): Promise<ActionResult> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!(await getSuppression(email))) return refuse(`${email} isn't on the do-not-email list.`);
+  await prisma.$transaction(async (tx) => {
+    await unsuppressEmail(email, tx);
+    for (const pipeline of ALL_PIPELINES) {
+      await pipeline.clearSendBlockedByPrefix(tx, email, OPTED_OUT_BLOCK_PREFIX);
+    }
+  });
+  return ok(`Removed ${email} from the do-not-email list. Both pipelines may email it again.`);
 }
 
 export async function setStarred(pipelineId: PipelineId, leadId: string, starred: boolean): Promise<ActionResult> {
@@ -173,11 +235,12 @@ export async function confirmColdCall(
   const trimmed = notes.trim().slice(0, 2_000);
   const noteLine = trimmed ? `[Cold call ${formatDate(new Date())}]: ${trimmed}` : null;
   const result = coldCallResult(pipelineId, outcome as ColdCallOutcome);
-  await getPipeline(pipelineId).update(prisma, leadId, {
+  const saved = await getPipeline(pipelineId).updateIfStatus(prisma, leadId, ["cold_call_list"], {
     callOutcome: result.callOutcome,
     ...(result.status ? { status: result.status } : {}),
     ...(noteLine ? { notes: [lead.notes, noteLine].filter(Boolean).join("\n\n") } : {}),
   });
+  if (!saved) return changedMeanwhile(lead.name);
   return ok(
     result.status
       ? `Saved the call with ${lead.name} — moved to ${statusLabel(result.status)}.`

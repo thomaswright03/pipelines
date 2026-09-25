@@ -50,6 +50,18 @@ export async function recentRuns(pipeline: string, kind: string, take = 5) {
   return prisma.pipelineRun.findMany({ where: { pipeline, kind }, orderBy: { startedAt: "desc" }, take });
 }
 
+/**
+ * A run still "running" this long after it started was cut off by the
+ * platform's time limit (or the process died) before it could record its
+ * outcome — shown as interrupted, not as running forever.
+ */
+const RUN_INTERRUPTED_AFTER_MS = 2 * 60 * 1000;
+
+export function displayRunStatus(run: { status: string; startedAt: Date }, now: Date = new Date()): string {
+  if (run.status === "running" && now.getTime() - run.startedAt.getTime() > RUN_INTERRUPTED_AFTER_MS) return "interrupted";
+  return run.status;
+}
+
 /** A daily run that hasn't happened for this long is worth a warning. */
 const STALE_RUN_HOURS = 26;
 

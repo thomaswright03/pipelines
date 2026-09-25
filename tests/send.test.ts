@@ -150,8 +150,8 @@ describe("concurrency and crash safety", () => {
     const ids = leads.map((l) => l.id);
 
     const [a, b] = await Promise.all([
-      sendBulkChunk("cold-outreach", ids, { delayMs: 0 }),
-      sendBulkChunk("cold-outreach", ids, { delayMs: 0 }),
+      sendBulkChunk("cold-outreach", ids, { delayMs: 0, chunkSize: 10 }),
+      sendBulkChunk("cold-outreach", ids, { delayMs: 0, chunkSize: 10 }),
     ]);
 
     expect(a.sent + b.sent).toBe(4);
@@ -215,12 +215,33 @@ describe("SMTP failures", () => {
     expect(mail.messages).toHaveLength(0);
   });
 
-  it("a bulk send stops after three consecutive failures", async () => {
+  it("a bulk send stops after three consecutive failures, counted across its one-email calls", async () => {
     mail = captureMail();
     mail.fail(smtpError("Connection timeout", { code: "ETIMEDOUT" }));
     const leads = await Promise.all([1, 2, 3, 4, 5].map(() => makeColdLead()));
-    const chunk = await sendBulkChunk("cold-outreach", leads.map((l) => l.id), { delayMs: 0 });
-    expect(chunk).toMatchObject({ failed: 3, sent: 0, stop: "email_service_down" });
+    let remaining = leads.map((l) => l.id);
+    let consecutiveFailures = 0;
+    let failed = 0;
+    let stop: string | null = null;
+    let calls = 0;
+    while (remaining.length > 0 && !stop) {
+      const chunk = await sendBulkChunk("cold-outreach", remaining, { delayMs: 0, consecutiveFailures });
+      calls++;
+      expect(chunk.processedIds.length).toBeLessThanOrEqual(1);
+      consecutiveFailures = chunk.consecutiveFailures;
+      failed += chunk.failed;
+      stop = chunk.stop;
+      remaining = remaining.filter((id) => !chunk.processedIds.includes(id));
+    }
+    expect({ failed, calls, stop }).toEqual({ failed: 3, calls: 3, stop: "email_service_down" });
     expect(await prisma.lead.count({ where: { status: "new" } })).toBe(5);
+  });
+
+  it("each bulk call sends at most one email, so Stop leaves at most one more", async () => {
+    mail = captureMail();
+    const leads = await Promise.all([1, 2, 3].map(() => makeColdLead()));
+    const chunk = await sendBulkChunk("cold-outreach", leads.map((l) => l.id), { delayMs: 0 });
+    expect(chunk).toMatchObject({ sent: 1, processedIds: [leads[0]!.id] });
+    expect(mail.messages).toHaveLength(1);
   });
 });

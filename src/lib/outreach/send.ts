@@ -25,6 +25,10 @@ const ADDRESS_LOCK_NAMESPACE = 4242;
 
 export const DUPLICATE_BLOCK_PREFIX = "Duplicate address";
 export const OPTED_OUT_BLOCK_PREFIX = "Opted out";
+/** Set by the migration on addresses the old, unchecked website guess found. */
+export const UNVERIFIED_BLOCK_PREFIX = "Unverified address";
+/** Blocks that are about the lead's current address, so they end when the address changes. */
+export const ADDRESS_BLOCK_PREFIXES = [DUPLICATE_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX, UNVERIFIED_BLOCK_PREFIX];
 
 export type SendRefusal =
   | "paused"
@@ -209,8 +213,14 @@ async function flagIfPermanent(pipelineId: PipelineId, lead: OutreachLead, refus
 
 /** Most leads one confirmation can cover; the rest wait for the next batch. */
 const BULK_BATCH_LIMIT = 50;
-/** Most leads one server call processes (the client loops over chunks). */
-const BULK_CHUNK_SIZE = 10;
+/**
+ * Most leads one server call processes. The client loops, one call per
+ * email, and checks its Stop button between calls — so after Stop at most
+ * the one email already in progress still goes out.
+ */
+export const BULK_CHUNK_SIZE = 1;
+/** Failed sends in a row (across calls) after which the bulk send gives up. */
+const MAX_CONSECUTIVE_FAILURES = 3;
 const BULK_CHUNK_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEND_DELAY_MS = 1_000;
 
@@ -282,6 +292,8 @@ export type BulkChunkResult = {
   failed: number;
   messages: string[];
   stop: null | "paused" | "email_service_down";
+  /** Failed sends in a row at the end of this call; pass back into the next call. */
+  consecutiveFailures: number;
 };
 
 /**
@@ -292,14 +304,22 @@ export type BulkChunkResult = {
 export async function sendBulkChunk(
   pipelineId: PipelineId,
   leadIds: string[],
-  options: { delayMs?: number; timeBudgetMs?: number } = {},
+  options: { delayMs?: number; timeBudgetMs?: number; chunkSize?: number; consecutiveFailures?: number } = {},
 ): Promise<BulkChunkResult> {
   const delayMs = options.delayMs ?? DEFAULT_SEND_DELAY_MS;
   const deadline = Date.now() + (options.timeBudgetMs ?? BULK_CHUNK_TIME_BUDGET_MS);
-  const result: BulkChunkResult = { processedIds: [], sent: 0, skipped: 0, failed: 0, messages: [], stop: null };
-  let consecutiveFailures = 0;
+  const result: BulkChunkResult = {
+    processedIds: [],
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+    messages: [],
+    stop: null,
+    consecutiveFailures: 0,
+  };
+  let consecutiveFailures = Math.max(0, Math.floor(options.consecutiveFailures ?? 0));
 
-  for (const leadId of leadIds.slice(0, BULK_CHUNK_SIZE)) {
+  for (const leadId of leadIds.slice(0, options.chunkSize ?? BULK_CHUNK_SIZE)) {
     if (result.processedIds.length > 0 && Date.now() > deadline) break;
     const outcome = await sendFirstTouch(pipelineId, leadId);
 
@@ -318,7 +338,7 @@ export async function sendBulkChunk(
       result.failed++;
       consecutiveFailures++;
       result.messages.push(`${outcome.leadName ?? leadId}: ${outcome.message}`);
-      if (consecutiveFailures >= 3) {
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         result.stop = "email_service_down";
         break;
       }
@@ -329,5 +349,6 @@ export async function sendBulkChunk(
 
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
+  result.consecutiveFailures = consecutiveFailures;
   return result;
 }

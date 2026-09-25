@@ -23,6 +23,10 @@ describe("classifyReply — not opt-outs", () => {
     ["Outlook-style quoted header block", `Tell me more.\n\nFrom: Thomas Wright <thomas@wright-ai-solutions.com>\nSent: Thursday, September 25, 2026 8:33 AM\nTo: Acme\nSubject: I probably shouldn't have sent this\n\n${coldPitch}`],
     ["quote without markers or header, footer still present", `Interested, what's the price?\n\n${agentPitch}`],
     ["a 'no thanks' is a no, not an opt-out request", "No thanks, not interested right now."],
+    ["'don't stop emailing me' is the opposite of an opt-out", "Please don't stop emailing me, this is great!"],
+    ["'never stop sending these'", "Never stop sending these, they're gold."],
+    ["'not asking to unsubscribe'", "I'm not asking to unsubscribe — just send pricing."],
+    ["'do not want to opt out'", "I do not want to opt out, call me."],
   ];
   for (const [label, text] of cases) {
     it(label, () => {
@@ -41,6 +45,9 @@ describe("classifyReply — genuine opt-outs", () => {
     ["take me off", "take me off your mailing list", "take me off your mailing list"],
     ["stop emailing", "Stop emailing me.", "Stop emailing me."],
     ["don't contact again", "Don't contact me again.", "Don't contact me again."],
+    ["a negation earlier in the sentence doesn't hide a real request", "I'm not interested, stop emailing me.", "I'm not interested, stop emailing me."],
+    ["a negated phrase followed by a real one", "Don't stop by. Please stop emailing me.", "Don't stop by. Please stop emailing me."],
+    ["please stop emailing me", "Please stop emailing me", "Please stop emailing me"],
   ];
   for (const [label, text, trigger] of cases) {
     it(label, () => {

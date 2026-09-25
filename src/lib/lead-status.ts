@@ -41,7 +41,7 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   subscribed: "Subscribed",
   not_interested: "Not interested",
   cold_call_list: "Cold call list",
-  contactless_list: "Contactless list",
+  contactless_list: "No phone number",
   lost: "Lost",
 };
 
@@ -112,6 +112,10 @@ const DATALEADSELL_TRANSITIONS: Record<DataleadsellStatus, DataleadsellStatus[]>
   contactless_list: ["cold_call_list", "lost"],
   lost: ["responded", "cold_call_list"],
 };
+
+// Appointment set is reached through the appointment form (it needs a
+// date), not the status dropdown, from these statuses.
+export const APPOINTMENT_FROM: readonly string[] = ["contacted", "responded", "cold_call_list", "appointment_set"];
 
 export function allowedTransitions(pipeline: PipelineId, from: string): LeadStatus[] {
   if (pipeline === "dataleadsell") {

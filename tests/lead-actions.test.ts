@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import {
   confirmColdCallAction,
@@ -9,6 +9,8 @@ import {
 import { markLeadLostAction, scheduleAppointmentAction } from "@/lib/actions/vault-pipeline";
 import { updateVaultScheduleAction } from "@/lib/actions/pipeline-schedule";
 import { getPipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
+import { addSuppressionAction, removeSuppressionByEmailAction } from "@/lib/actions/settings";
+import { getPipeline } from "@/lib/outreach/pipelines";
 import { makeAgentLead, makeColdLead } from "./helpers";
 
 function scheduleForm(enabled: boolean, businessesPerRun: string) {
@@ -120,5 +122,47 @@ describe("daily automation settings", () => {
   it("saves enabled and businesses-per-run", async () => {
     expect(await updateVaultScheduleAction({}, scheduleForm(false, "12"))).toMatchObject({ saved: true });
     expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: false, businessesPerRun: 12 });
+  });
+});
+
+describe("manual moves never overwrite a change made meanwhile", () => {
+  it("refuses when the status changed between reading the lead and saving, and keeps the newer status", async () => {
+    const lead = await makeColdLead({ name: "Racy", status: "contacted", lastEmailedAt: new Date() });
+    const pipeline = getPipeline("cold-outreach");
+    const stale = (await pipeline.findLead(prisma, lead.id))!;
+    // A reply lands after the page loaded the lead, before the save.
+    await prisma.lead.update({ where: { id: lead.id }, data: { status: "responded", repliedAt: new Date() } });
+
+    for (const attempt of [
+      () => updateLeadStatusAction("cold-outreach", lead.id, "lost"),
+      () => markLeadLostAction(lead.id, "not_interested"),
+      () => scheduleAppointmentAction(lead.id, "2030-01-02T10:00"),
+    ]) {
+      const spy = vi.spyOn(pipeline, "findLead").mockResolvedValueOnce(stale);
+      const result = await attempt();
+      spy.mockRestore();
+      expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/changed status a moment ago/) });
+    }
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("responded");
+  });
+
+  it("Mark lost follows the stage machine", async () => {
+    const lead = await makeColdLead({ name: "Lossy", status: "lost" });
+    expect(await markLeadLostAction(lead.id, "no_need")).toEqual({ ok: false, error: "Lossy is already Lost." });
+  });
+});
+
+describe("do-not-email list in Settings", () => {
+  it("adds an address (flagging its leads), finds and removes it", async () => {
+    const lead = await makeColdLead({ email: "asked@phone.test" });
+
+    expect(await addSuppressionAction("Asked@Phone.test", "Asked by phone")).toMatchObject({ ok: true });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).sendBlockedReason).toMatch(/^Opted out/);
+    expect(await addSuppressionAction("asked@phone.test", "")).toMatchObject({ ok: false });
+    expect(await addSuppressionAction("not an address", "")).toMatchObject({ ok: false });
+
+    expect(await removeSuppressionByEmailAction("asked@phone.test")).toMatchObject({ ok: true });
+    expect(await prisma.suppressedEmail.count()).toBe(0);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).sendBlockedReason).toBeNull();
   });
 });
