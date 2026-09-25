@@ -22,6 +22,13 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/generated/**"],
       reporter: ["text-summary", "text", "json-summary"],
+      // The code that decides who is emailed, and the actions behind every
+      // button, must stay well covered; `npm run test:coverage` fails below
+      // these. (Pages and components are covered by the browser tests.)
+      thresholds: {
+        "src/lib/outreach/**": { lines: 90 },
+        "src/lib/actions/**": { lines: 85 },
+      },
     },
     hookTimeout: 60_000,
     env: {
