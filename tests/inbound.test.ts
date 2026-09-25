@@ -51,6 +51,26 @@ describe("/api/email-inbound", () => {
     expect(activity.notes).not.toContain("Reply STOP");
   });
 
+  it("treats 'I don't want these emails' as an opt-out, not a positive reply", async () => {
+    const cold = await makeColdLead({ email: "joe@joesplumbing.test", status: "contacted" });
+    const agent = await makeAgentLead({ email: "joe@joesplumbing.test", status: "contacted" });
+
+    const json = await (await inbound({ from: "joe@joesplumbing.test", text: "I don't want these emails" })).json();
+
+    expect(json).toMatchObject({ optedOut: true, review: null });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } })).status).toBe("lost");
+    expect((await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } })).status).toBe("not_interested");
+    expect(await prisma.suppressedEmail.findUnique({ where: { email: "joe@joesplumbing.test" } })).not.toBeNull();
+  });
+
+  it("flags a Spanish reply it doesn't understand for a look instead of moving the lead to Responded", async () => {
+    const cold = await makeColdLead({ email: "ana@panaderia.test", status: "contacted" });
+    const json = await (await inbound({ from: "ana@panaderia.test", text: "Hola, ¿de dónde sacó mi correo? Gracias." })).json();
+    expect(json.optedOut).toBe(false);
+    expect(json.review).toMatch(/another language/);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } })).status).not.toBe("responded");
+  });
+
   it("suppresses a genuine STOP, keeps the evidence, and blocks future sends", async () => {
     mail = captureMail();
     const lead = await makeColdLead({ email: "stop@example.test", status: "contacted" });

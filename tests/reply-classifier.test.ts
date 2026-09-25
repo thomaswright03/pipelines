@@ -32,6 +32,9 @@ describe("classifyReply — not opt-outs", () => {
     ["'don't remove me from your list'", "Don't remove me from your list, I want the updates."],
     ["'I'm not asking you to leave me alone'", "I'm not asking you to leave me alone — just send less often."],
     ["'don't contact me until March'", "Busy season — don't contact me until March, then yes."],
+    ["'I don't want these emails to stop'", "I don't want these emails to stop, they're useful."],
+    ["'we don't want these messages to end'", "We don't want these messages to end!"],
+    ["'don't want emails about' one county, only another", "I don't want emails about Pinal, only Maricopa."],
   ];
   for (const [label, text] of cases) {
     it(label, () => {
@@ -70,6 +73,23 @@ describe("classifyReply — genuine opt-outs", () => {
     ["stop it", "Stop it!", "Stop it!"],
     ["do not send further emails", "Do not send further emails.", "Do not send further emails."],
     ["don't send me anything else", "Don't send me anything else.", "Don't send me anything else."],
+    // "I don't want (these/this/any/your/such) emails" and "don't want to receive them".
+    ["I don't want these emails", "I don't want these emails", "I don't want these emails"],
+    ["with a phone's curly apostrophe", "I don\u2019t want these emails", "I don\u2019t want these emails"],
+    ["I don't want this email", "I don't want this email.", "I don't want this email."],
+    ["I don't want such emails", "Thanks but I don't want such emails.", "Thanks but I don't want such emails."],
+    ["we don't want to receive your emails", "we don't want to receive your emails", "we don't want to receive your emails"],
+    ["we do not wish to receive these messages", "We do not wish to receive these messages.", "We do not wish to receive these messages."],
+    ["no longer want to get this kind of email", "I no longer want to get this kind of email.", "I no longer want to get this kind of email."],
+    ["don't want to hear from you", "Don't want to hear from you again.", "Don't want to hear from you again."],
+    // Spanish and French.
+    ["Spanish: no me envíe más correos", "Por favor no me envíe más correos", "Por favor no me envíe más correos"],
+    ["Spanish: denme de baja", "Denme de baja de su lista.", "Denme de baja de su lista."],
+    ["Spanish: no quiero recibir más mensajes", "No quiero recibir más mensajes.", "No quiero recibir más mensajes."],
+    ["Spanish: bare BAJA", "BAJA", "BAJA"],
+    ["French: désabonnez-moi", "Désabonnez-moi", "Désabonnez-moi"],
+    ["French: ne m'envoyez plus", "Merci de ne m'envoyez plus de courriels.", "Merci de ne m'envoyez plus de courriels."],
+    ["French: je ne souhaite plus recevoir", "Je ne souhaite plus recevoir vos messages.", "Je ne souhaite plus recevoir vos messages."],
   ];
   for (const [label, text, trigger] of cases) {
     it(label, () => {
@@ -106,6 +126,18 @@ describe("classifyReply — replies that need a human look", () => {
       expect(result.review).toMatch(reason);
     });
   }
+
+  it("a reply mainly in another language that isn't an opt-out", () => {
+    for (const text of ["Gracias, me interesa. Llámeme mañana.", "Bonjour, oui ça m'intéresse, appelez-moi."]) {
+      const result = classifyReply({ text });
+      expect(result.optOut).toBe(false);
+      expect(result.review).toMatch(/another language/);
+    }
+  });
+
+  it("an English reply that greets in Spanish needs no look", () => {
+    expect(classifyReply({ text: "Hola Thomas, yes I'm interested — send the price." }).review).toBeNull();
+  });
 
   it("an interested reply needs no look", () => {
     expect(classifyReply({ text: "Yes, send pricing please." }).review).toBeNull();

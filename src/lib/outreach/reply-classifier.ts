@@ -16,12 +16,18 @@
 //    negated ones ("please don't stop sending these") don't count.
 // 3. A reply that isn't an opt-out but reads like a brush-off or a
 //    complaint ("not interested", "wrong person", "how did you get my
-//    email") is flagged for a human look (`review`) instead of being
-//    treated as an ordinary positive reply.
+//    email"), or is mainly in another language, is flagged for a human
+//    look (`review`) instead of being treated as an ordinary positive reply.
+//    Common Spanish and French opt-outs ("no me envíe más correos",
+//    "désabonnez-moi") count as opt-outs.
+//
+// REPLY_RULES_VERSION identifies these rules on every stored verdict.
 //
 // tests/reply-classifier.test.ts holds the development cases;
 // tests/heuristics-eval.test.ts measures precision and recall on a
 // separate labelled set and fails the build if they drop.
+
+import { rulesVersion } from "@/lib/outreach/rules-version";
 
 export type ReplyClassification = {
   optOut: boolean;
@@ -58,8 +64,24 @@ const COMMAND_WORDS = new Set([
   "stop emailing me",
   "stop sending",
   "no more emails",
+  // Spanish and French one-word replies.
+  "baja",
+  "de baja",
+  "darme de baja",
+  "alto",
+  "desuscribir",
+  "desuscribirme",
+  "cancelar suscripcion",
+  "cancelar suscripción",
+  "désabonner",
+  "désabonnez moi",
+  "desabonnez moi",
+  "désinscrire",
+  "désinscrivez moi",
+  "arrêtez",
+  "arretez",
 ]);
-const FILLER_RE = /\b(please|pls|plz|kindly|thanks|thank you|thx|asap|now)\b/g;
+const FILLER_RE = /\b(please|pls|plz|kindly|thanks|thank you|thx|asap|now|por favor|gracias|merci|svp|sil vous plait|sil vous plaît)\b/g;
 
 const ME = String.raw`(?:me|us|this\s+(?:e-?mail\s+)?(?:address|account|e-?mail))`;
 const CONTACT_VERB = String.raw`(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to|send\s+(?:me|us)\s+(?:any\s*more\s+|more\s+)?(?:e-?mails?|messages?|anything|stuff))`;
@@ -94,7 +116,31 @@ const OPT_OUT_PHRASES: RegExp[] = [
   /\b(?:delete|erase)\s+(?:me|us)\s+from\b/i,
   /\bcease\s+and\s+desist\b/i,
   /\bleave\s+(?:me|us)\s+alone\b/i,
-  /\b(?:i|we)\s+(?:do\s+not|don'?t)\s+want\s+(?:any\s+more|any|more|your)\s+(?:e-?mails?|messages?)\b/i,
+  // "I don't want these emails", "we do not wish to receive your messages",
+  // "no longer want to get this kind of email" — but not "I don't want these
+  // emails to stop" or "I don't want emails about Pinal, only Maricopa".
+  new RegExp(
+    String.raw`\b(?:(?:i|we)\s+(?:really\s+|just\s+|simply\s+)?)?(?:do\s+not|don'?t|dont|no\s+longer)\s+(?:want|wish|care)\s+(?:to\s+(?:receive|get|see|be\s+sent|keep\s+(?:getting|receiving))\s+)?(?:(?:any\s*more|any|more|your|these|this|such|those|the|further|future|all|ur)\s+)?(?:(?:kind|kinds|type|types|sort)\s+of\s+)?(?:(?:marketing|sales|promotional|cold|spam|junk)\s+)?(?:e-?mails?|messages?|mails?|solicitations?|pitches)\b(?!\s+to\s+(?:stop|end|cease|go\s+away)\b|\s+(?:about|on|regarding|for)\b)`,
+    "i",
+  ),
+  /\b(?:do\s+not|don'?t|dont|no\s+longer)\s+(?:want|wish)\s+to\s+hear\s+from\s+(?:you|u|your\s+company)\b(?!\s+(?:until|before|unless))/i,
+  // Spanish: "no me envíe más correos", "denme de baja", "quítenme de su
+  // lista", "no quiero recibir más mensajes", "cancelar suscripción".
+  /\b(?:dar(?:me|nos)?|d[eé]n?(?:me|nos)|doy|darse)\s+de\s+baja\b/i,
+  /\bbaja\s+de\s+(?:la|su|sus|esta|tu|vuestra)\s+(?:lista|listas|base)\b/i,
+  /\bno\s+(?:me|nos)\s+(?:env[ií](?:e|en|es)|mand(?:e|en|es)|escrib(?:a|an|as)|contact(?:e|en|es)|llam(?:e|en|es)|vuelva(?:n)?\s+a)\b/i,
+  /\bno\s+(?:quiero|queremos|deseo|deseamos)\s+(?:recibir\s+|seguir\s+recibiendo\s+)?(?:m[aá]s\s+)?(?:sus\s+|tus\s+|estos\s+|sus\s+|ning[uú]n\s+)?(?:correos?|e-?mails?|emails?|mensajes?|publicidad)\b/i,
+  /\b(?:b[oó]rre(?:n)?(?:me|nos)|elim[ií]ne(?:n)?(?:me|nos)|qu[ií]te(?:n)?(?:me|nos)|s[aá]que(?:n)?(?:me|nos))\s+de\s+(?:la|su|sus|esta|tu|vuestra)\s+(?:lista|listas|base)/i,
+  /\bcancelar\s+(?:la\s+|mi\s+)?suscripci[oó]n\b/i,
+  /\bno\s+m[aá]s\s+(?:correos|mensajes|e-?mails|emails)\b/i,
+  // French: "désabonnez-moi", "ne m'envoyez plus de mails", "retirez-moi de
+  // votre liste", "je ne souhaite plus recevoir vos messages".
+  /\bd[ée]sabonn(?:er|ez|e)\b/i,
+  /\bd[ée]sinscri(?:re|vez|s)\b/i,
+  /\bne\s+(?:m'|me\s+|nous\s+)(?:envoyez|[ée]crivez|contactez|recontactez|sollicitez)\s+plus\b/i,
+  /\b(?:retirez|supprimez|enlevez|rayez)[\s-](?:moi|nous)\b/i,
+  /\b(?:retirez|supprimez|enlevez)\s+(?:mon|notre)\s+(?:adresse|e-?mail|courriel)\b/i,
+  /\b(?:je|nous)\s+ne\s+(?:veux|voulons|souhaite|souhaitons|d[ée]sire)\s+plus\s+(?:recevoir|[êe]tre\s+contact[ée]s?)\b/i,
 ];
 
 // Not an opt-out on their own, but not a "yes" either: the lead is flagged
@@ -175,12 +221,44 @@ function stripReplyPrefix(subject: string): string {
   return subject.replace(/^\s*((re|fw|fwd|aw)\s*:\s*)+/i, "").trim();
 }
 
+// Common words that are distinctly Spanish or French (not also English), and
+// common English words: a reply mostly in another language is flagged for a
+// look rather than counted as a positive reply the rules didn't understand.
+const FOREIGN_WORDS = new Set(
+  (
+    "el los las que y en por para con es su sus lo mi más mas pero gracias hola favor usted ustedes estoy este esta estos muy correo correos " +
+    "nos del al una uno sí si señor señora quiero puede interesa llame llámeme bueno buenos buenas días tardes también " +
+    "le les des du et est je vous nous une pour pas ne avec sur ce cette merci bonjour mon mes votre vos suis très oui cordialement madame monsieur"
+  ).split(" "),
+);
+const ENGLISH_WORDS = new Set(
+  (
+    "the and is i you we to of in it for this that with on my your are be not yes please thanks thank interested can what how send call " +
+    "will would could do does have has sure sounds good great here there more info information price cost when time today tomorrow"
+  ).split(" "),
+);
+
+/** True when the text reads as mainly Spanish or French rather than English. */
+function isMainlyForeign(text: string): boolean {
+  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  let foreign = 0;
+  let english = 0;
+  for (const word of words) {
+    if (FOREIGN_WORDS.has(word)) foreign++;
+    else if (ENGLISH_WORDS.has(word)) english++;
+  }
+  return foreign > english && (foreign >= 2 || english === 0) && foreign >= 1;
+}
+
 export function classifyReply(input: { subject?: string | null; text?: string | null }): ReplyClassification {
   const newText = extractNewReplyText(input.text ?? "");
+  // Phones send curly apostrophes ("don’t"); the rules are written with
+  // straight ones. Same length, so match positions still line up.
+  const matchText = newText.replace(/[\u2018\u2019\u02BC]/g, "'");
   const optOut = (trigger: string): ReplyClassification => ({ optOut: true, trigger, review: null, newText });
 
   // A line, or a sentence of one ("Not interested. Remove."), that is just the command.
-  for (const line of newText.split("\n")) {
+  for (const line of matchText.split("\n")) {
     for (const part of [line, ...line.split(/(?<=[.!?])\s+/)]) {
       const normalized = normalizeCommandLine(part);
       if (normalized && COMMAND_WORDS.has(normalized)) return optOut(line.trim());
@@ -189,8 +267,8 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
 
   for (const re of OPT_OUT_PHRASES) {
     const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
-    for (const match of newText.matchAll(new RegExp(re.source, flags))) {
-      if (isNegated(newText, match.index)) continue;
+    for (const match of matchText.matchAll(new RegExp(re.source, flags))) {
+      if (isNegated(matchText, match.index)) continue;
       return optOut(sentenceAround(newText, match.index, match[0].length));
     }
   }
@@ -200,8 +278,12 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   if (subject && COMMAND_WORDS.has(normalizeCommandLine(subject))) return optOut(`Subject: ${subject}`);
 
   for (const { re, reason } of REVIEW_PHRASES) {
-    const match = re.exec(newText);
+    const match = re.exec(matchText);
     if (match) return { optOut: false, trigger: null, review: `${reason}: “${sentenceAround(newText, match.index, match[0].length)}”`, newText };
+  }
+
+  if (isMainlyForeign(matchText)) {
+    return { optOut: false, trigger: null, review: `is written in another language — check whether it asks to stop: “${sentenceAround(newText, 0, 0)}”`, newText };
   }
 
   return { optOut: false, trigger: null, review: null, newText };
@@ -214,3 +296,21 @@ function sentenceAround(text: string, index: number, length: number): string {
   const line = text.slice(start, end).trim();
   return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
+
+/**
+ * Identifies this version of the reply rules; stored on every InboundReply.
+ * Bump the revision when the logic above changes without a pattern or word
+ * list changing.
+ */
+export const REPLY_RULES_VERSION = rulesVersion("reply", 1, [
+  COMMAND_WORDS,
+  FILLER_RE,
+  OPT_OUT_PHRASES,
+  REVIEW_PHRASES.map(({ re, reason }) => ({ re, reason })),
+  NEGATION_BEFORE_RE,
+  TEMPLATE_FOOTER_RE,
+  QUOTE_HEADER_PATTERNS,
+  SIGNATURE_PATTERNS,
+  FOREIGN_WORDS,
+  ENGLISH_WORDS,
+]);
