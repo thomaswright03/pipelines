@@ -2,10 +2,8 @@
 // Property Leads subscription to real estate agents. Used for every send
 // (single, bulk) and for the preview on each agent's page.
 
-// CAN-SPAM requires a valid physical postal address on commercial email —
-// same address Wright AI Solutions, LLC (dataleadsell.com's owner) uses on
-// Vault's outreach.
-const OUTREACH_MAILING_ADDRESS = "28 E 14 Street, Tempe, AZ 85281";
+// CAN-SPAM requires a valid physical postal address on commercial email.
+import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
 
 const COUNTY_PRICING: Record<string, string> = {
   Maricopa: "$500/mo",

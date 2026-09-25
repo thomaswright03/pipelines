@@ -1,7 +1,7 @@
 // The Cold Outreach pitch (same copy as The Vault's own outreach). Used for
 // every send — single, bulk, the daily cron — and the preview on each lead's
 // page. CAN-SPAM requires the physical mailing address and the opt-out line.
-const OUTREACH_MAILING_ADDRESS = "28 E 14 Street, Tempe, AZ 85281";
+import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
 
 export function buildOutreachEmail(businessName: string): { subject: string; body: string } {
   const subject = `I probably shouldn’t have sent this 😂`;

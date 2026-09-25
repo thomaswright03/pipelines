@@ -86,13 +86,13 @@ const MAX_STORED_REPLY_CHARS = 2_000;
 const MAX_ATTEMPTS_PER_LEAD = 3;
 
 /** "Jane Smith <Jane@Example.com>" or "jane@example.com" → "jane@example.com". */
-export function extractEmailAddress(from: string): string {
+function extractEmailAddress(from: string): string {
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1]! : from).trim().toLowerCase();
 }
 
 /** The key a re-delivery of the same reply maps to. */
-export function inboundDedupeKey(message: InboundEmail): string {
+function inboundDedupeKey(message: InboundEmail): string {
   const messageId = message.messageId?.trim().replace(/^<|>$/g, "");
   if (messageId) return `mid:${messageId}`;
   const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();

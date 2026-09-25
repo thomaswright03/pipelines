@@ -47,3 +47,14 @@ describe("the sent greeting matches the preview", () => {
     expect(await prisma.emailSendLog.count()).toBe(1);
   });
 });
+
+describe("the CAN-SPAM footer", () => {
+  it("both pipelines' pitches carry the one postal address and the STOP opt-out line", async () => {
+    const { OUTREACH_MAILING_ADDRESS } = await import("@/lib/outreach-mailing-address");
+    const { buildOutreachEmail } = await import("@/lib/vault-email-template");
+    for (const { body } of [buildOutreachEmail("Bob's Bakery"), buildAgentOutreachEmail("Jane Doe", "Maricopa")]) {
+      expect(body).toContain(OUTREACH_MAILING_ADDRESS);
+      expect(body).toMatch(/Reply STOP/i);
+    }
+  });
+});

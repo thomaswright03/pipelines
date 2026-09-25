@@ -108,7 +108,7 @@ function formatPercent(value: number | null): string {
 const n = (value: number) => value.toLocaleString("en-US");
 
 /** "6 of 21 leads that got past New (29%)" — every rate names what it's a share of. */
-export function shareOf(numerator: number, denominator: number, what: string): string {
+function shareOf(numerator: number, denominator: number, what: string): string {
   if (denominator === 0) return `none yet — no ${what}`;
   return `${n(numerator)} of ${n(denominator)} ${what} (${formatPercent(numerator / denominator)})`;
 }

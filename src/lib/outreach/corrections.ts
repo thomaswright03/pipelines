@@ -43,7 +43,7 @@ export type QualitySignals = {
   foundAddressesBounced: number;
 };
 
-export const QUALITY_WINDOW_DAYS = 90;
+const QUALITY_WINDOW_DAYS = 90;
 
 export async function getQualitySignals(now: Date = new Date()): Promise<QualitySignals> {
   const since = new Date(now.getTime() - QUALITY_WINDOW_DAYS * 86_400_000);

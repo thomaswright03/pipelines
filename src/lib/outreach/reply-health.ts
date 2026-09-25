@@ -8,9 +8,9 @@ import { countUnmatchedReplies, lastInboundReplyAt } from "@/lib/outreach/inboun
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** How far back sends are counted. */
-export const REPLY_WATCH_WINDOW_DAYS = 7;
+const REPLY_WATCH_WINDOW_DAYS = 7;
 /** Sends younger than this haven't had a fair chance of a reply yet. */
-export const REPLY_GRACE_DAYS = 2;
+const REPLY_GRACE_DAYS = 2;
 
 export type ReplyHealth = {
   lastReplyAt: Date | null;

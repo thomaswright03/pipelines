@@ -28,7 +28,7 @@ const DEFAULT_BUSINESSES_PER_RUN = 30;
 // picked up by the next daily run.
 const DISCOVERY_BUDGET_MS = 25_000;
 const RUN_LIMIT_MS = 55_000;
-export const SEND_WORST_CASE_MS = 20_000;
+const SEND_WORST_CASE_MS = 20_000;
 const SEND_DELAY_MS = 500;
 /** Most leftover leads one run will queue; the time budget usually stops it well before. */
 const MAX_SEND_QUEUE = 100;

@@ -39,7 +39,7 @@ const NO_LOOKUP: EmailLookup = { website: null, email: null, evidence: null, unv
  * so a batch's time budget can't be blown by one slow site. A lookup is
  * also cut short at the batch's deadline (see createLeadsFromCandidates).
  */
-export const LOOKUP_TIME_LIMIT_MS = 15_000;
+const LOOKUP_TIME_LIMIT_MS = 15_000;
 /** A lookup isn't started with less time than this left before the deadline. */
 const MIN_LOOKUP_MS = 2_000;
 
@@ -127,7 +127,7 @@ export async function findAddressConflict(
 }
 
 /** Who else already uses this address, in words (see findAddressConflict). */
-export async function describeAddressConflict(
+async function describeAddressConflict(
   pipelineId: PipelineId,
   email: string,
   excludeLeadId?: string,

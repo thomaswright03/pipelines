@@ -3,7 +3,7 @@
 // and survives a refresh or the back button.
 export const PAGE_SIZE = 50;
 
-export const SORT_KEYS = ["created", "name", "emailed"] as const;
+const SORT_KEYS = ["created", "name", "emailed"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export type SortDir = "asc" | "desc";
 

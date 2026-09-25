@@ -333,7 +333,7 @@ export async function confirmColdCall(
   );
 }
 
-export const MAX_ACTIVITY_CHARS = 2_000;
+const MAX_ACTIVITY_CHARS = 2_000;
 
 /** Logs a call, email, meeting or note in the lead's history. */
 export async function addLeadActivity(
