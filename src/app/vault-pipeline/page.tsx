@@ -1,17 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
+import ReplyStatus from "@/components/ReplyStatus";
+import { getReplyHealth } from "@/lib/outreach/reply-health";
 import VaultScheduleSettings, { type RunView } from "@/components/VaultScheduleSettings";
 import LeadTable from "@/components/LeadTable";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { getPipelineSchedule, VAULT_DAILY_RUN_TIME_LABEL, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { isRunOverdue, recentRuns } from "@/lib/outreach/runs";
+import { displayRunStatus, isRunOverdue, recentRuns } from "@/lib/outreach/runs";
 import { COLD_OUTREACH_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
 import { formatDateTime } from "@/lib/time";
 import { getPipeline } from "@/lib/outreach/pipelines";
 
+export const metadata: Metadata = { title: "Cold Outreach — Leads" };
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Discovery guesses a website and finds an email per business.
 
@@ -22,7 +26,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     ...searchWhere(params.q, ["name", "company", "email", "city"]),
   };
 
-  const [filteredTotal, total, counts, schedule, settings, runs, unsent] = await Promise.all([
+  const [filteredTotal, total, counts, schedule, settings, runs, unsent, blocked, replyHealth] = await Promise.all([
     prisma.lead.count({ where }),
     prisma.lead.count(),
     prisma.lead.groupBy({ by: ["status"], _count: true }),
@@ -30,6 +34,8 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     getAppSettings(),
     recentRuns("cold-outreach", "daily", 5),
     getPipeline("cold-outreach").countSendable(prisma),
+    getPipeline("cold-outreach").countBlockedNew(prisma),
+    getReplyHealth(),
   ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.lead.findMany({
@@ -46,9 +52,9 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
       : null;
   const runViews: RunView[] = runs.map((r) => ({
     id: r.id,
-    status: r.status,
+    status: displayRunStatus(r),
     startedAt: formatDateTime(r.startedAt),
-    summary: r.summary,
+    summary: r.summary ?? (displayRunStatus(r) === "interrupted" ? "The run was cut off before it could record what it did." : null),
     errors: r.errors ? r.errors.split("\n").filter(Boolean) : [],
     numbers:
       r.businessesChecked !== null && r.leadsFound !== null && r.emailsSent !== null
@@ -68,7 +74,8 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         </p>
       </div>
 
-      <OutreachControls pipeline="cold-outreach" paused={settings.outboundPaused} unsent={unsent} />
+      <OutreachControls pipeline="cold-outreach" paused={settings.outboundPaused} unsent={unsent} blocked={blocked} />
+      <ReplyStatus health={replyHealth} />
       <VaultScheduleSettings
         schedule={schedule}
         runTimeLabel={VAULT_DAILY_RUN_TIME_LABEL}

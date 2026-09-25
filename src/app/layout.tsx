@@ -8,6 +8,7 @@ import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { resolveTransportKind } from "@/lib/mail-transport-kind";
 import { logError } from "@/lib/log";
+import { countUnmatchedReplies } from "@/lib/outreach/inbound";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,7 +22,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pipelines",
+  // Pages set their own title ("Settings", a lead's name…); this is the suffix and the fallback.
+  title: { default: "Pipelines", template: "%s · Pipelines" },
   description: "Dashboard for Wright AI Solutions' email outreach pipelines",
 };
 
@@ -46,7 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               </span>
               <span className="hidden sm:inline">Pipelines</span>
             </Link>
-            <SiteNav />
+            <NavWithCounts />
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <OutboundStatus />
               <ThemeToggle />
@@ -62,6 +64,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </body>
     </html>
   );
+}
+
+/** The main nav, with the number of replies waiting to be matched to a lead. */
+async function NavWithCounts() {
+  await connection();
+  let unmatched = 0;
+  try {
+    unmatched = await countUnmatchedReplies();
+  } catch (err) {
+    logError("layout.unmatchedReplies", err);
+  }
+  return <SiteNav unmatchedReplies={unmatched} />;
 }
 
 /**

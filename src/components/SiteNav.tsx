@@ -7,10 +7,12 @@ const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/dataleadsell", label: "dataleadsell.com" },
   { href: "/vault-pipeline", label: "Cold Outreach" },
+  { href: "/replies", label: "Replies" },
   { href: "/settings", label: "Settings" },
 ];
 
-export default function SiteNav() {
+/** `unmatchedReplies`: replies waiting to be matched to a lead, shown as a count on "Replies". */
+export default function SiteNav({ unmatchedReplies = 0 }: { unmatchedReplies?: number }) {
   const pathname = usePathname();
 
   return (
@@ -29,6 +31,12 @@ export default function SiteNav() {
             }`}
           >
             {label}
+            {href === "/replies" && unmatchedReplies > 0 && (
+              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
+                {unmatchedReplies}
+                <span className="sr-only"> waiting to be matched</span>
+              </span>
+            )}
           </Link>
         );
       })}

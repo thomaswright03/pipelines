@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
+import ReplyStatus from "@/components/ReplyStatus";
+import { getReplyHealth } from "@/lib/outreach/reply-health";
 import AdreImportPanel from "@/components/AdreImportPanel";
 import LeadTable from "@/components/LeadTable";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
@@ -11,6 +14,7 @@ import { DATALEADSELL_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
 import { formatDate } from "@/lib/time";
 
+export const metadata: Metadata = { title: "dataleadsell — Agents" };
 export const dynamic = "force-dynamic";
 // Discovery guesses a website and finds an email per agent; loading the
 // ADRE roster downloads a large CSV. Each call is budgeted to finish well
@@ -24,7 +28,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     ...searchWhere(params.q, ["name", "brokerage", "email", "city", "county"]),
   };
 
-  const [filteredTotal, total, withEmail, counts, settings, adre, unsent] = await Promise.all([
+  const [filteredTotal, total, withEmail, counts, settings, adre, unsent, blocked, replyHealth] = await Promise.all([
     prisma.agentLead.count({ where }),
     prisma.agentLead.count(),
     prisma.agentLead.count({ where: { email: { not: null } } }),
@@ -32,6 +36,8 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     getAppSettings(),
     getAdreStatus(),
     getPipeline("dataleadsell").countSendable(prisma),
+    getPipeline("dataleadsell").countBlockedNew(prisma),
+    getReplyHealth(),
   ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.agentLead.findMany({
@@ -58,7 +64,8 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <Stat label="With email" value={withEmail} />
       </div>
 
-      <OutreachControls pipeline="dataleadsell" paused={settings.outboundPaused} unsent={unsent} />
+      <OutreachControls pipeline="dataleadsell" paused={settings.outboundPaused} unsent={unsent} blocked={blocked} />
+      <ReplyStatus health={replyHealth} />
       <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
 
       <div>
@@ -100,7 +107,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="card p-4">
       <div className="text-2xl font-semibold">{value.toLocaleString("en-US")}</div>
-      <div className="text-xs muted">{label}</div>
+      <div className="text-sm muted">{label}</div>
     </div>
   );
 }

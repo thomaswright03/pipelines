@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { suppressEmail } from "@/lib/email-suppression";
 import { formatDateTime } from "@/lib/time";
-import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED } from "@/lib/lead-status";
+import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@/lib/lead-status";
 import { classifyReply } from "@/lib/outreach/reply-classifier";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type PipelineAdapter } from "@/lib/outreach/pipelines";
@@ -54,7 +54,7 @@ const MAX_STORED_REPLY_CHARS = 2_000;
 const MAX_ATTEMPTS_PER_LEAD = 3;
 
 /** "Jane Smith <Jane@Example.com>" or "jane@example.com" → "jane@example.com". */
-function extractEmailAddress(from: string): string {
+export function extractEmailAddress(from: string): string {
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1]! : from).trim().toLowerCase();
 }
@@ -76,13 +76,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
   const dedupeKey = inboundDedupeKey(message);
 
   const replyText = classification.newText.slice(0, MAX_STORED_REPLY_CHARS);
-  const note = [
-    `[Reply received ${formatDateTime(now)}]${message.subject ? ` ${message.subject}` : ""}`,
-    replyText,
-    classification.optOut ? `→ Read as an opt-out because of: "${classification.trigger}"` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const note = replyNote(now, message.subject ?? null, replyText || null, classification.optOut ? classification.trigger : null);
 
   return prisma.$transaction(
     async (tx) => {
@@ -130,6 +124,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           subject: message.subject?.slice(0, 500) ?? null,
           optedOut: classification.optOut,
           matched,
+          text: replyText || null,
           receivedAt: now,
         },
       });
@@ -169,6 +164,116 @@ export function replyUpdateFor(
     return { data, needsReview: true };
   }
   return { data, needsReview: false };
+}
+
+function replyNote(receivedAt: Date, subject: string | null, text: string | null, trigger: string | null, from?: string): string {
+  return [
+    `[Reply received ${formatDateTime(receivedAt)}${from ? ` from ${from}` : ""}]${subject ? ` ${subject}` : ""}`,
+    text,
+    trigger ? `→ Read as an opt-out because of: "${trigger}"` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// --- Replies that matched no lead ---------------------------------------
+// A reply from an address no lead has (an assistant, a personal address, a
+// forward) is kept with its text and listed in the app until the operator
+// attaches it to the right lead — which applies the normal reply rules to
+// that lead — or dismisses it.
+
+export type UnmatchedReply = {
+  id: string;
+  fromEmail: string;
+  subject: string | null;
+  text: string | null;
+  optedOut: boolean;
+  receivedAt: Date;
+};
+
+const UNMATCHED = { matched: { isEmpty: true }, resolvedAt: null } as const;
+
+export async function listUnmatchedReplies(take = 20): Promise<UnmatchedReply[]> {
+  return prisma.inboundReply.findMany({
+    where: UNMATCHED,
+    orderBy: { receivedAt: "desc" },
+    take,
+    select: { id: true, fromEmail: true, subject: true, text: true, optedOut: true, receivedAt: true },
+  });
+}
+
+export function countUnmatchedReplies(): Promise<number> {
+  return prisma.inboundReply.count({ where: UNMATCHED });
+}
+
+/** When the last reply of any kind arrived, for "is reply tracking working?". */
+export async function lastInboundReplyAt(): Promise<Date | null> {
+  const last = await prisma.inboundReply.findFirst({ orderBy: { receivedAt: "desc" }, select: { receivedAt: true } });
+  return last?.receivedAt ?? null;
+}
+
+export type AttachResult = { ok: true; message: string } | { ok: false; error: string };
+
+/**
+ * Records an unmatched reply on a lead the operator picked, exactly as if
+ * it had come from the lead's own address: reply time, status move, and —
+ * for an opt-out — the lead's address goes on the do-not-email list too.
+ */
+export async function attachReplyToLead(replyId: string, pipelineId: PipelineAdapter["id"], leadId: string): Promise<AttachResult> {
+  const pipeline = ALL_PIPELINES.find((p) => p.id === pipelineId)!;
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${INBOUND_LOCK_NAMESPACE}::int, hashtext(${replyId}))`;
+      const reply = await tx.inboundReply.findUnique({ where: { id: replyId } });
+      if (!reply) return { ok: false as const, error: "That reply no longer exists." };
+      if (reply.resolvedAt || reply.matched.length > 0) {
+        return { ok: false as const, error: "That reply was already dealt with — reload the page." };
+      }
+      const lead = await pipeline.findLead(tx, leadId);
+      if (!lead) return { ok: false as const, error: "That lead no longer exists." };
+
+      const trigger = reply.optedOut ? classifyReply({ subject: reply.subject, text: reply.text }).trigger : null;
+      if (reply.optedOut && lead.email) {
+        await suppressEmail(
+          lead.email,
+          {
+            reason: `A reply from ${reply.fromEmail} about this lead asked not to be emailed`,
+            source: "inbound_reply",
+            evidence: trigger,
+          },
+          tx,
+        );
+      }
+      const note = replyNote(reply.receivedAt, reply.subject, reply.text, trigger, reply.fromEmail);
+      await recordOnLead(tx, pipeline, lead, {
+        optOut: reply.optedOut,
+        fromEmail: lead.email ?? reply.fromEmail,
+        note,
+        now: reply.receivedAt,
+      });
+      const key = `${pipeline.id}:${lead.id}`;
+      await tx.inboundReply.update({
+        where: { id: reply.id },
+        data: { matched: [key], resolvedAt: new Date(), resolution: `attached:${key}` },
+      });
+      const after = await pipeline.findLead(tx, lead.id);
+      return {
+        ok: true as const,
+        message: `Added the reply from ${reply.fromEmail} to ${lead.name}${after && after.status !== lead.status ? ` — moved to ${statusLabel(after.status)}` : ""}${reply.optedOut && lead.email ? `, and ${lead.email} is now on the do-not-email list` : ""}.`,
+      };
+    },
+    { timeout: 20_000 },
+  );
+}
+
+export async function dismissReply(replyId: string): Promise<AttachResult> {
+  const { count } = await prisma.inboundReply.updateMany({
+    where: { id: replyId, ...UNMATCHED },
+    data: { resolvedAt: new Date(), resolution: "dismissed" },
+  });
+  return count === 1
+    ? { ok: true, message: "Dismissed the reply." }
+    : { ok: false, error: "That reply was already dealt with — reload the page." };
 }
 
 async function recordOnLead(
