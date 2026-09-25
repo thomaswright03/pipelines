@@ -1,23 +1,23 @@
 // Arizona Department of Real Estate's public license roster — a real,
 // verified alternative to Yelp for Maricopa County specifically. Unlike
-// Yelp, this gives a genuine mailing address (useful as a physical-mail
-// fallback channel later, even when no email turns up) and a real license
-// status, at the cost of being Arizona-only: Utah's equivalent public data
-// (checked directly) has no address/county field at all, so Salt Lake and
-// Utah counties still go through yelp-discovery.ts.
+// Yelp it gives a genuine mailing address and license status, at the cost
+// of being Arizona-only: Utah's equivalent public data has no
+// address/county field, so Salt Lake and Utah counties use Yelp.
 //
-// Source: https://services.azre.gov/PdbWeb/List/DownloadList/1 — a ~50MB
-// CSV of every individual license ADRE has ever issued (all categories,
-// all statuses, active and long-expired). We filter down to Maricopa
-// County, Active, "Real Estate" category (excludes Cemetery/Campground
-// licenses ADRE also regulates under the same system) — a still-large
-// pool (~44k as of writing) of real, currently-licensed agents/brokers.
+// Source: https://services.azre.gov/PdbWeb/List/DownloadList/1 — a ~50 MB
+// CSV of every individual license ADRE has issued (all categories and
+// statuses). We keep Active, "Real Estate" category Brokers and
+// Salespersons in the county asked for (~44k for Maricopa as of writing).
+import { createHash } from "node:crypto";
 import { parse } from "csv-parse/sync";
 
 const ADRE_LIST_URL = "https://services.azre.gov/PdbWeb/List/DownloadList/1";
-const FETCH_TIMEOUT_MS = 45 * 1000;
+// Loading the roster has its own call (see adre-import.ts); leave room in
+// the 60 s function limit for parsing and saving after the download.
+const FETCH_TIMEOUT_MS = 35 * 1000;
 
 export type AzLicensee = {
+  key: string; // ADRE license number when present, else a stable hash
   name: string;
   brokerage: string | null;
   phone: string | null;
@@ -26,79 +26,79 @@ export type AzLicensee = {
   licenseType: string; // Broker | Salesperson
 };
 
-type AdreRow = {
-  LastName: string;
-  FirstName: string;
-  MiddleName: string;
-  LicCategory: string;
-  LicType: string;
-  LicStatus: string;
-  EmployerDBAName: string;
-  EmployerLegalName: string;
-  EmployerPhone: string;
-  MailingAddress1: string;
-  MailingAddress2: string;
-  MailingCity: string;
-  MailingState: string;
-  MailingZip: string;
-  MailingCounty: string;
-};
+type AdreRow = Record<string, string | undefined>;
+
+const LICENSE_NUMBER_COLUMNS = ["LicenseNumber", "LicenseNo", "LicNumber", "LicNo", "LicenseNum", "License"];
+
+function col(row: AdreRow, name: string): string {
+  return (row[name] ?? "").trim();
+}
 
 function formatName(row: AdreRow): string {
-  const parts = [row.FirstName, row.MiddleName, row.LastName].map((p) => p.trim()).filter(Boolean);
-  return parts.join(" ");
+  return [col(row, "FirstName"), col(row, "MiddleName"), col(row, "LastName")].filter(Boolean).join(" ");
 }
 
 function formatAddress(row: AdreRow): string | null {
-  const line1 = row.MailingAddress1.trim();
-  const line2 = row.MailingAddress2.trim();
-  const cityStateZip = [row.MailingCity.trim(), row.MailingState.trim()].filter(Boolean).join(", ");
-  const full = [line1, line2, [cityStateZip, row.MailingZip.trim()].filter(Boolean).join(" ")]
+  const cityState = [col(row, "MailingCity"), col(row, "MailingState")].filter(Boolean).join(", ");
+  const full = [col(row, "MailingAddress1"), col(row, "MailingAddress2"), [cityState, col(row, "MailingZip")].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
   return full || null;
 }
 
-/**
- * Downloads and parses ADRE's full license roster, returning only Active,
- * "Real Estate" category licensees (Broker or Salesperson) in the given
- * county. This re-downloads the full ~50MB file every call — there's no
- * partial/filtered download offered — so callers should call this at most
- * once per pipeline run, not per-lead.
- */
-export async function findLicenseesByCounty(county: string): Promise<AzLicensee[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let csvText: string;
-  try {
-    const res = await fetch(ADRE_LIST_URL, { signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`ADRE download failed (${res.status})`);
-    }
-    csvText = await res.text();
-  } finally {
-    clearTimeout(timer);
+function licenseeKey(row: AdreRow, name: string, licenseType: string, address: string | null): string {
+  for (const column of LICENSE_NUMBER_COLUMNS) {
+    const value = col(row, column);
+    if (value) return `adre:${value}`;
   }
+  return `adre-hash:${createHash("sha1").update(`${name}|${licenseType}|${address ?? ""}`).digest("hex")}`;
+}
 
+/**
+ * Parses ADRE's roster CSV into the Active, "Real Estate" category Brokers
+ * and Salespersons whose mailing county is `county`, in file order.
+ */
+export function parseAdreRoster(csvText: string, county: string): AzLicensee[] {
   const rows = parse(csvText, { columns: true, skip_empty_lines: true, relax_column_count: true }) as AdreRow[];
 
   const licensees: AzLicensee[] = [];
+  const seen = new Set<string>();
   for (const row of rows) {
-    if (row.MailingCounty?.trim() !== county) continue;
-    if (row.LicStatus?.trim() !== "Active") continue;
-    if (row.LicCategory?.trim() !== "Real Estate") continue;
-    const licenseType = row.LicType?.trim();
+    if (col(row, "MailingCounty") !== county) continue;
+    if (col(row, "LicStatus") !== "Active") continue;
+    if (col(row, "LicCategory") !== "Real Estate") continue;
+    const licenseType = col(row, "LicType");
     if (licenseType !== "Broker" && licenseType !== "Salesperson") continue;
+    const name = formatName(row);
+    if (!name) continue;
+
+    const address = formatAddress(row);
+    const key = licenseeKey(row, name, licenseType, address);
+    if (seen.has(key)) continue;
+    seen.add(key);
 
     licensees.push({
-      name: formatName(row),
-      brokerage: (row.EmployerDBAName || row.EmployerLegalName || "").trim() || null,
-      phone: row.EmployerPhone?.trim() || null,
-      address: formatAddress(row),
-      city: row.MailingCity?.trim() || null,
+      key,
+      name,
+      brokerage: (col(row, "EmployerDBAName") || col(row, "EmployerLegalName")) || null,
+      phone: col(row, "EmployerPhone") || null,
+      address,
+      city: col(row, "MailingCity") || null,
       licenseType,
     });
   }
-
   return licensees;
+}
+
+/** Downloads ADRE's full roster CSV (there's no filtered download). */
+export async function downloadAdreRoster(): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(ADRE_LIST_URL, { signal: controller.signal });
+    if (!res.ok) throw new Error(`ADRE download failed (HTTP ${res.status})`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
 }
