@@ -80,6 +80,11 @@ const OPT_OUT_PHRASES: RegExp[] = [
   ),
   new RegExp(String.raw`\b${NEG}\s+(?:e-?mail|contact|message|reach\s+out|write)\s+(?:again|anymore|any\s+more)\b`, "i"),
   /\bno\s+more\s+(?:e-?mails?|messages?|contact)\b/i,
+  // "do not send further emails", "don't send me anything else"
+  new RegExp(
+    String.raw`\b${NEG}\s+send\s+(?:(?:me|us)\s+)?(?:any\s*(?:more|thing)|further|more|other|anything(?:\s+else)?)(?:\s+(?:e-?mails?|messages?|stuff))?(?=\s*[.!,;]|\s*$|\s+(?:e-?mails?|messages?|again|to\s+(?:me|us|this)))`,
+    "im",
+  ),
   /\b(?:delete|erase|purge)\s+(?:my|our)\s+(?:e-?mail(?:\s+address)?|address|info(?:rmation)?|contact(?:\s+(?:info|details))?|details|data)\b/i,
   /\b(?:delete|erase)\s+(?:me|us)\s+from\b/i,
   /\bcease\s+and\s+desist\b/i,

@@ -1,0 +1,165 @@
+// A labelled evaluation set for the reply classifier, kept apart from the
+// development cases in tests/reply-classifier.test.ts and scored by
+// tests/heuristics-eval.test.ts (precision/recall with a floor that fails
+// CI).
+//
+// Provenance: these are SYNTHETIC replies written to resemble what cold
+// email to real-estate agents and small businesses gets back — they are
+// not real people's mail. They were written as a batch before the scores
+// were run, and a miss is recorded as a miss rather than patched away. To
+// make the measurement reflect production, add anonymised real replies
+// (names, addresses, phone numbers and firm names replaced) from the
+// InboundReply table — see README → "Measuring the reply and address rules".
+//
+// First run (2026-09-25), before any rule was changed for it: precision
+// 96.8%, recall 95.2%. The two missed "don't send me anything else" / "do
+// not send further emails" phrasings were then added to the classifier (a
+// genuine gap), so those two cases no longer measure anything new.
+//
+// optOut: true  — the sender is asking not to be contacted (CAN-SPAM opt-out).
+// optOut: false — anything else, including "no thanks" and complaints that
+//                 don't ask to stop (those are flagged for a look instead).
+
+export type LabelledReply = { text: string; subject?: string; optOut: boolean };
+
+const QUOTED_PITCH = [
+  "",
+  "On Tue, Sep 22, 2026 at 8:33 AM Thomas Wright <thomas@wright-ai-solutions.com> wrote:",
+  "> Hi Jane, quick one: dataleadsell.com sends probate property leads for Maricopa County.",
+  "> Don't want to hear from us again? Reply STOP and we won't email you again.",
+].join("\n");
+
+export const REPLY_CORPUS: LabelledReply[] = [
+  // --- Opt-outs ---------------------------------------------------------
+  { text: "STOP", optOut: true },
+  { text: "stop" + QUOTED_PITCH, optOut: true },
+  { text: "Unsubscribe", optOut: true },
+  { text: "unsubscribe me please", optOut: true },
+  { text: "Please unsubscribe this address.", optOut: true },
+  { text: "Remove me.", optOut: true },
+  { text: "remove", optOut: true },
+  { text: "Please remove me from your list." + QUOTED_PITCH, optOut: true },
+  { text: "Remove from list", optOut: true },
+  { text: "pls remove from your mailing list thx", optOut: true },
+  { text: "Take me off your list.", optOut: true },
+  { text: "Take us off this list please", optOut: true },
+  { text: "Please take my email off your list.", optOut: true },
+  { text: "Stop emailing me.", optOut: true },
+  { text: "Stop sending me these emails.", optOut: true },
+  { text: "Please stop contacting me.", optOut: true },
+  { text: "Stop spamming me", optOut: true },
+  { text: "Quit emailing me", optOut: true },
+  { text: "quit contacting our office", optOut: true },
+  { text: "Cease all contact. This is a cease and desist.", optOut: true },
+  { text: "Don't email me.", optOut: true },
+  { text: "Do not email me again.", optOut: true },
+  { text: "Do not contact me.", optOut: true },
+  { text: "Don't contact us again.", optOut: true },
+  { text: "Never contact me again", optOut: true },
+  { text: "Please don't message me.", optOut: true },
+  { text: "Please do not reach out to me again.", optOut: true },
+  { text: "I'm not interested. Please don't reach out again.", optOut: true },
+  { text: "Not interested, please remove me from your list.", optOut: true },
+  { text: "No thanks. Stop emailing.", optOut: true },
+  { text: "Delete my email address", optOut: true },
+  { text: "Please delete my information from your database.", optOut: true },
+  { text: "Erase my details, I never signed up for this.", optOut: true },
+  { text: "Leave me alone", optOut: true },
+  { text: "leave us alone please", optOut: true },
+  { text: "Opt out", optOut: true },
+  { text: "Please opt me out.", optOut: true },
+  { text: "I'd like to opt out of these emails.", optOut: true },
+  { text: "No more emails please.", optOut: true },
+  { text: "I don't want any more emails from you.", optOut: true },
+  { text: "We do not want your emails.", optOut: true },
+  { text: "Please don't send me emails.", optOut: true },
+  { text: "Don't send me anything else.", optOut: true },
+  { text: "", subject: "Re: UNSUBSCRIBE", optOut: true },
+  { text: "", subject: "Stop", optOut: true },
+  { text: "STOP\n\nSent from my iPhone", optOut: true },
+  { text: "Stop it!", optOut: true },
+  { text: "I've told you before, stop emailing this address.", optOut: true },
+  { text: "Kindly remove this email address from your mailing list.", optOut: true },
+  { text: "Don't ever email me again.", optOut: true },
+  { text: "Do not contact this address.", optOut: true },
+  { text: "Please stop sending emails to this account.", optOut: true },
+  { text: "Unsubscribe. Thanks.", optOut: true },
+  { text: "Not interested — take me off your list", optOut: true },
+  { text: "We're all set, don't contact us.", optOut: true },
+  { text: "don't email me anymore", optOut: true },
+  { text: "Stop messaging me or I will report you.", optOut: true },
+  { text: "Remove my address from all your lists.", optOut: true },
+  { text: "I am not a realtor anymore, remove me.", optOut: true },
+  { text: "Please cease emailing me.", optOut: true },
+  { text: "Take me off the list, thanks", optOut: true },
+  { text: "Lose my email.", optOut: true },
+  { text: "Do not send further emails.", optOut: true },
+
+  // --- Not opt-outs -----------------------------------------------------
+  { text: "Yes, interested! What does it cost?", optOut: false },
+  { text: "Sounds good, send me the details." + QUOTED_PITCH, optOut: false },
+  { text: "Can you call me tomorrow afternoon?", optOut: false },
+  { text: "How much for Salt Lake County?", optOut: false },
+  { text: "Interested. Do you cover Utah County too?", optOut: false },
+  { text: "Tell me more.", optOut: false },
+  { text: "Send pricing please", optOut: false },
+  { text: "What's the catch?", optOut: false },
+  { text: "Who is this?", optOut: false },
+  { text: "Is this legit?", optOut: false },
+  { text: "Sure, stop by the office on Tuesday.", optOut: false },
+  { text: "Can't stop thinking about this — call me.", optOut: false },
+  { text: "Please don't stop emailing me, these are useful.", optOut: false },
+  { text: "Never stop sending these, they're gold.", optOut: false },
+  { text: "I'm not asking to unsubscribe, just send less often.", optOut: false },
+  { text: "I do not want to opt out, call me.", optOut: false },
+  { text: "Don't remove me from your list, I want the updates.", optOut: false },
+  { text: "Don't hesitate to email me the sample.", optOut: false },
+  { text: "Busy this month — don't contact me until March, then yes.", optOut: false },
+  { text: "No thanks, not interested right now.", optOut: false },
+  { text: "Not interested.", optOut: false },
+  { text: "Not at this time, maybe next year.", optOut: false },
+  { text: "We already use a lead service.", optOut: false },
+  { text: "You have the wrong person.", optOut: false },
+  { text: "Wrong email, Jane left our brokerage last year.", optOut: false },
+  { text: "How did you get my email?", optOut: false },
+  { text: "This looks like spam.", optOut: false },
+  { text: "I'm retired.", optOut: false },
+  { text: "Thanks!", optOut: false },
+  { text: "Received, will review.", optOut: false },
+  { text: "Out of office until Monday, September 28. For urgent matters call the front desk.", optOut: false },
+  { text: "I am currently out of the office with limited access to email.", optOut: false },
+  { text: "Automatic reply: I'm away and will respond when I return.", optOut: false },
+  { text: "Please send more info to my assistant at the office.", optOut: false },
+  { text: "Can you send me a sample list?", optOut: false },
+  { text: "Remind me in two weeks.", optOut: false },
+  { text: "Please remove the old listing from your site and send the new pricing.", optOut: false },
+  { text: "Stop by our booth at the expo, we can talk there.", optOut: false },
+  { text: "Let's set up a call. When works?", optOut: false },
+  { text: "Do you have a free trial?", optOut: false },
+  { text: "What counties do you cover?", optOut: false },
+  { text: "Yes please — sign me up.", optOut: false },
+  { text: "Maybe. What's the data source?", optOut: false },
+  { text: "I only work in Pinal County, sorry.", optOut: false },
+  { text: "Can you email my partner instead? mike@example.test", optOut: false },
+  { text: "Unsure, what makes your leads different?", optOut: false },
+  { text: "I'm interested but my broker handles subscriptions.", optOut: false },
+  { text: "Great timing, I was just looking for this.", optOut: false },
+  { text: "Not sure yet. Send details and I'll look.", optOut: false },
+  { text: "Could you remove the county filter and show me everything?", optOut: false },
+  { text: "We can't stop the probate process but happy to learn more.", optOut: false },
+  { text: "Hi Thomas, got your note, calling you now.", optOut: false },
+  { text: "Please call instead of emailing, 480-555-0100.", optOut: false },
+  { text: "Reply STOP? Ha. No, I'm interested actually.", optOut: false },
+  { text: "Your unsubscribe link didn't work but I want to stay on anyway.", optOut: false },
+  { text: "Do you offer a discount for teams?", optOut: false },
+  { text: "Interested!" + QUOTED_PITCH, optOut: false },
+  { text: "What's the monthly cost? Don't want a contract.", optOut: false },
+  { text: "Too expensive for me right now.", optOut: false },
+  { text: "Who else in my office did you email?", optOut: false },
+  { text: "Forwarding to my team lead.", optOut: false },
+  { text: "ok", optOut: false },
+  { text: "Can you resend? It went to spam folder.", optOut: false },
+  { text: "Please email me the brochure.", optOut: false },
+  { text: "Don't email me the PDF, just the link.", optOut: false },
+  { text: "Stop sign on Main St is where our office is — come by.", optOut: false },
+];

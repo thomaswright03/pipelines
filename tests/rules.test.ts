@@ -42,6 +42,13 @@ describe("email policy", () => {
     expect(addressMatchesPerson("maria.garcia-lopez@kw.test", "Maria Garcia-Lopez")).toBe(true);
     expect(addressMatchesPerson("mgarcialopez@kw.test", "Maria Garcia-Lopez")).toBe(true);
     expect(addressMatchesPerson("rob.king@kw.test", "Rob King Jr.")).toBe(true);
+    expect(addressMatchesPerson("patricia.oneil@kw.test", "Patricia O'Neil")).toBe(true);
+  });
+
+  it("rejects a team or assistant inbox built on the agent's name", () => {
+    for (const e of ["jdoe.team@", "john.doe.assistant@", "johndoe-office@", "jdoe.info@"]) {
+      expect(addressMatchesPerson(`${e}kw.test`, "John Doe"), e).toBe(false);
+    }
   });
 
   it("only accepts the agent's own address on a brokerage site", () => {

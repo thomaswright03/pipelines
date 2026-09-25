@@ -68,6 +68,8 @@ describe("classifyReply — genuine opt-outs", () => {
     ["don't send me emails", "Please don't send me emails.", "Please don't send me emails."],
     ["don't message me anymore", "don't message me anymore thanks", "don't message me anymore thanks"],
     ["stop it", "Stop it!", "Stop it!"],
+    ["do not send further emails", "Do not send further emails.", "Do not send further emails."],
+    ["don't send me anything else", "Don't send me anything else.", "Don't send me anything else."],
   ];
   for (const [label, text, trigger] of cases) {
     it(label, () => {

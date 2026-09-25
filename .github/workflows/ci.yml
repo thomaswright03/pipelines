@@ -61,6 +61,19 @@ jobs:
             console.log(["### Unit/integration test coverage (src/)", "", "| Metric | Covered |", "| --- | --- |", ...rows].join("\n"));
           ' >> "$GITHUB_STEP_SUMMARY"
 
+      # Precision/recall of the opt-out classifier and the brokerage-address
+      # rule on the labelled sets in tests/corpus/ (also part of the run
+      # above, where a drop below the floors fails the build).
+      - name: Heuristic scores
+        if: always()
+        run: |
+          npx vitest run tests/heuristics-eval.test.ts --reporter=basic 2>&1 | tee eval.log
+          {
+            echo "### Heuristics on the labelled sets"
+            echo
+            grep -E "precision|miss:" eval.log | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Browser smoke tests against the production build: single send, bulk
       # send with Stop, pause/resume, lead form validation, editing and
       # deleting a lead, attaching an unmatched reply, confirm-dialog focus,

@@ -46,6 +46,9 @@ const ROLE_LOCAL_PARTS = new Set([
   "brokerage",
 ]);
 
+// Words that make a name-based address a shared or delegated inbox.
+const SHARED_SUFFIXES = new Set(["team", "group", "assistant", "asst", "assist", "office", "admin", "ea", "pa", "staff", "desk"]);
+
 /** frontdesk@, info2@, sales.team@ … — an inbox shared by an office, not a person. */
 export function isRoleAddress(email: string): boolean {
   const local = (email.split("@")[0] ?? "").toLowerCase();
@@ -59,6 +62,7 @@ function nameTokens(personName: string): string[] {
   return personName
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/['’]/g, "") // O'Neil → oneil
     .replace(/[^a-z\s-]/g, " ")
     .split(/[\s-]+/)
     .filter((t) => t.length >= 2 && !["jr", "sr", "ii", "iii", "iv"].includes(t));
@@ -69,6 +73,7 @@ function nameWords(personName: string): string[] {
   return personName
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/['’]/g, "") // O'Neil → oneil
     .replace(/[^a-z\s-]/g, " ")
     .split(/\s+/)
     .filter((w) => w.replace(/-/g, "") && !["jr", "sr", "ii", "iii", "iv"].includes(w.replace(/-/g, "")));
@@ -109,6 +114,8 @@ export function addressMatchesPerson(email: string, personName: string): boolean
 
   // Split on separators and digits: "john.doe2" → ["john", "doe"].
   const segments = local.split(/[^a-z]+/).filter(Boolean);
+  // jdoe.team@, jdoe.assistant@: an inbox around the person, not theirs.
+  if (segments.some((s) => SHARED_SUFFIXES.has(s) || ROLE_LOCAL_PARTS.has(s))) return false;
   const isGiven = (s: string) => s === first || s === initial;
 
   // Separate tokens: one is the surname, another the first name or initial.
