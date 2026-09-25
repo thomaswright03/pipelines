@@ -70,6 +70,7 @@ export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: R
 
   return (
     <form onSubmit={form.onSubmit} noValidate className="card mt-4 flex flex-col gap-3 p-5">
+      {form.guardDialog}
       <TextField label="Name" required maxLength={LIMITS.name} autoComplete="off" {...form.field("name")} />
       <TextField label="Company" maxLength={LIMITS.company} {...form.field("company")} />
       {locked ? (
@@ -138,6 +139,7 @@ export function AgentLeadForm({ mode, initial }: { mode: Mode; initial: Required
 
   return (
     <form onSubmit={form.onSubmit} noValidate className="card mt-4 flex flex-col gap-3 p-5">
+      {form.guardDialog}
       <TextField label="Name" required maxLength={LIMITS.name} autoComplete="off" {...form.field("name")} />
       <TextField label="Brokerage" maxLength={LIMITS.company} {...form.field("brokerage")} />
       {locked ? (

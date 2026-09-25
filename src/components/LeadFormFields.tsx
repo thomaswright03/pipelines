@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useConfirm } from "@/components/ConfirmDialog";
 import type { z } from "zod";
 import { fieldErrorsOf, type FieldErrors, type FormState } from "@/lib/lead-forms";
 
@@ -23,6 +25,9 @@ export function useLeadForm<T extends Record<string, string>>(
   const [links, setLinks] = useState<Links>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const dirty = !saved && (Object.keys(initial) as (keyof T)[]).some((k) => values[k] !== initial[k]);
+  const guardDialog = useUnsavedChangesGuard(dirty);
 
   function set(name: keyof T, value: string) {
     setValues((v) => ({ ...v, [name]: value }));
@@ -60,6 +65,7 @@ export function useLeadForm<T extends Record<string, string>>(
       try {
         const result = await submit(values);
         if (result.ok && result.leadId) {
+          setSaved(true);
           onSaved(result.leadId);
           return;
         }
@@ -83,7 +89,55 @@ export function useLeadForm<T extends Record<string, string>>(
     };
   }
 
-  return { values, set, field, onSubmit, isPending, formError };
+  return { values, set, field, onSubmit, isPending, formError, dirty, guardDialog };
+}
+
+/**
+ * While `dirty`, leaving the page asks first: closing or reloading the tab
+ * gets the browser's own prompt, and following a link inside the app gets a
+ * "Leave without saving?" dialog. Returns the dialog to render.
+ *
+ * The browser's Back button isn't intercepted: the app router owns history
+ * navigation, and trapping it reliably isn't possible without breaking it.
+ */
+export function useUnsavedChangesGuard(dirty: boolean): ReactNode {
+  const router = useRouter();
+  const [dialog, confirm] = useConfirm();
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // older browsers need this to show the prompt
+    };
+    // Capture phase, so this runs before the Link's own click handler.
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || (anchor.target && anchor.target !== "_self") || anchor.hasAttribute("download")) return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return; // a full page load: the browser's prompt covers it
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return; // same page
+      e.preventDefault();
+      e.stopPropagation();
+      void confirm({
+        title: "Leave without saving?",
+        body: <p>Your changes to this form haven&apos;t been saved and will be lost.</p>,
+        confirmLabel: "Leave without saving",
+        danger: true,
+      }).then((leave) => {
+        if (leave) router.push(`${url.pathname}${url.search}${url.hash}`);
+      });
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [dirty, confirm, router]);
+
+  return dialog;
 }
 
 export function TextField({
