@@ -9,6 +9,8 @@ import { getAppSettings } from "@/lib/outreach/settings";
 import { describeMailDestination } from "@/lib/mail-transport-kind";
 import { logError } from "@/lib/log";
 import { countUnmatchedReplies } from "@/lib/outreach/inbound";
+import { databaseReachable } from "@/lib/db-health";
+import DatabaseUnavailable from "@/components/DatabaseUnavailable";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -56,7 +58,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
         <main id="main" className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-8 sm:px-6">
-          {children}
+          <UnlessDatabaseDown>{children}</UnlessDatabaseDown>
         </main>
         <footer className="border-t border-zinc-200/70 px-6 py-4 text-center text-xs text-zinc-600 dark:border-zinc-800/70 dark:text-zinc-400">
           © {new Date().getFullYear()} Wright AI Solutions LLC
@@ -64,6 +66,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </body>
     </html>
   );
+}
+
+/**
+ * The page itself, or — when the database can't be reached — a plain
+ * explanation of the outage in its place, so the page never renders (and
+ * fails) against a database that isn't there. error.tsx covers the rarer
+ * case of the database dropping mid-render.
+ */
+async function UnlessDatabaseDown({ children }: { children: React.ReactNode }) {
+  await connection();
+  if (!(await databaseReachable())) return <DatabaseUnavailable />;
+  return children;
 }
 
 /** The main nav, with the number of replies waiting to be matched to a lead. */

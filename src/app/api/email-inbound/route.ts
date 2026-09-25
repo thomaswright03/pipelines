@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { isAuthorizedBearer } from "@/lib/auth-header";
 import { logError } from "@/lib/log";
+import { isDatabaseUnavailable } from "@/lib/db-health";
 import { handleInboundReply } from "@/lib/outreach/inbound";
 
 // Receives a parsed inbound email from the Cloudflare Email Worker that
@@ -35,14 +36,6 @@ const inboundSchema = z.object({
 });
 
 const BAD_BODY = "Body must be JSON: { from, subject, text, messageId, headers }";
-
-/** Prisma's "can't reach the database" family (P1001 and friends), or a dropped connection. */
-function isDatabaseUnavailable(err: unknown): boolean {
-  const code = (err as { code?: unknown; errorCode?: unknown } | null)?.code ?? (err as { errorCode?: unknown } | null)?.errorCode;
-  if (typeof code === "string" && /^P10(?:0[1-2]|17)$|^ECONNREFUSED$|^ETIMEDOUT$|^ENOTFOUND$/.test(code)) return true;
-  const name = (err as { name?: unknown } | null)?.name;
-  return name === "PrismaClientInitializationError" || /can't reach database|connection (?:refused|terminated)|ECONNREFUSED/i.test(String(err));
-}
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedBearer(request.headers.get("authorization"), process.env.EMAIL_INBOUND_SECRET)) {

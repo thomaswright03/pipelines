@@ -1,16 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-
 // Only fires if the root layout itself throws — replaces the entire
 // <html>, so it can't rely on layout.tsx's header/footer and has to repeat
 // the minimum (including the copyright line, which must appear on every
 // route with no exception).
-export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => {
-    console.error(error);
-  }, [error]);
-
+export default function GlobalError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
   return (
     <html lang="en">
       <body
@@ -32,7 +26,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           That&apos;s on us, not you. Try again.
         </p>
         <button
-          onClick={reset}
+          onClick={() => retry()}
           style={{
             marginTop: "8px",
             borderRadius: "8px",
