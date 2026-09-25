@@ -36,3 +36,18 @@ export async function setAllowCrossPipelineRepeats(allow: boolean, db: Db = pris
 }
 
 export const PAUSED_MESSAGE = "Outbound email is paused (see Settings) — nothing was sent.";
+
+/** Remembers the latest failed send, for Settings → Connections. Best-effort: never throws. */
+export async function recordSendFailure(message: string, at: Date = new Date(), db: Db = prisma): Promise<void> {
+  const data = { lastSendFailedAt: at, lastSendFailure: message.slice(0, 500) };
+  try {
+    await db.appSettings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, ...data }, update: data });
+  } catch {
+    // The send's own outcome is what matters; this is only for the status view.
+  }
+}
+
+export async function lastSendFailure(db: Db = prisma): Promise<{ at: Date; message: string | null } | null> {
+  const row = await db.appSettings.findUnique({ where: { id: SETTINGS_ID }, select: { lastSendFailedAt: true, lastSendFailure: true } });
+  return row?.lastSendFailedAt ? { at: row.lastSendFailedAt, message: row.lastSendFailure } : null;
+}

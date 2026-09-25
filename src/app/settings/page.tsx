@@ -4,8 +4,9 @@ import { prisma } from "@/lib/db";
 import SettingsControls from "@/components/SettingsControls";
 import { AddSuppressionForm, DoNotEmailRows } from "@/components/DoNotEmailList";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { describeMailDestination } from "@/lib/mail-transport-kind";
 import { formatDate, formatDateTime } from "@/lib/time";
+import { getConnectionStatus } from "@/lib/integration-status";
+import ConnectionStatusList from "@/components/ConnectionStatusList";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -28,10 +29,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const requestedPage = Math.max(1, Number.parseInt(first(raw.page), 10) || 1);
   const where = q ? { email: { contains: q.toLowerCase() } } : {};
 
-  const [settings, matching, suppressedCount] = await Promise.all([
+  const [settings, matching, suppressedCount, connections] = await Promise.all([
     getAppSettings(),
     prisma.suppressedEmail.count({ where }),
     prisma.suppressedEmail.count(),
+    getConnectionStatus(),
   ]);
   const pages = Math.max(1, Math.ceil(matching / DNE_PAGE_SIZE));
   const page = Math.min(requestedPage, pages);
@@ -41,7 +43,6 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     skip: (page - 1) * DNE_PAGE_SIZE,
     take: DNE_PAGE_SIZE,
   });
-  const mail = describeMailDestination();
   const pageHref = (n: number) => `/settings?${new URLSearchParams({ ...(q ? { q } : {}), page: String(n) })}#dne-heading`;
 
   return (
@@ -57,12 +58,17 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         allowCrossPipelineRepeats={settings.allowCrossPipelineRepeats}
       />
 
-      <section aria-labelledby="transport-heading" className="card flex flex-col gap-2 p-4">
-        <h2 id="transport-heading" className="text-base font-semibold">
-          Where email goes
-        </h2>
-        <p className="text-sm">{mail.description}</p>
-        <p className="text-sm muted">This is part of how the app is set up; ask your developer if it looks wrong.</p>
+      <section aria-labelledby="connections-heading" className="card flex flex-col gap-3 p-4">
+        <div>
+          <h2 id="connections-heading" className="text-base font-semibold">
+            Connections
+          </h2>
+          <p className="mt-1 text-sm muted">
+            Whether each outside service the pipelines depend on is working. A broken one otherwise looks just like
+            &ldquo;nobody replied&rdquo; or &ldquo;nothing to send&rdquo;. Checked each time this page loads.
+          </p>
+        </div>
+        <ConnectionStatusList items={connections} />
       </section>
 
       <section aria-labelledby="dne-heading" className="card flex flex-col gap-3 p-4">

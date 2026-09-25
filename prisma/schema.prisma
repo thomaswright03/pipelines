@@ -42,6 +42,11 @@ model AppSettings {
   // Whether an address already pitched by one pipeline may be pitched by
   // the other. Off by default: one cold pitch per inbox, full stop.
   allowCrossPipelineRepeats Boolean   @default(false)
+  // The last send the email service refused or couldn't be reached for
+  // (any pipeline), shown in Settings → Connections next to the last
+  // successful send.
+  lastSendFailedAt          DateTime?
+  lastSendFailure           String?
   updatedAt                 DateTime  @updatedAt
 }
 

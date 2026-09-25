@@ -15,7 +15,7 @@
 import { prisma } from "@/lib/db";
 import { logError, logWarn } from "@/lib/log";
 import { classifySendError, sendOutreachEmail } from "@/lib/send-email";
-import { getAppSettings, PAUSED_MESSAGE } from "@/lib/outreach/settings";
+import { getAppSettings, PAUSED_MESSAGE, recordSendFailure } from "@/lib/outreach/settings";
 import { getPipeline, type Db, type OutreachLead } from "@/lib/outreach/pipelines";
 import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { statusLabel } from "@/lib/lead-status";
@@ -167,6 +167,7 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
   } catch (err) {
     const failure = classifySendError(err);
     logError("outreach.send", err, { pipeline: pipelineId, leadId, delivery: failure.delivery });
+    await recordSendFailure(failure.message);
     if (failure.delivery === "not_sent") {
       await prisma.$transaction(async (tx) => {
         await tx.outreachRecipient.delete({ where: { id: recipientId } });
@@ -231,7 +232,7 @@ const BULK_BATCH_LIMIT = 50;
  * email, and checks its Stop button between calls — so after Stop at most
  * the one email already in progress still goes out.
  */
-export const BULK_CHUNK_SIZE = 1;
+const BULK_CHUNK_SIZE = 1;
 /** Failed sends in a row (across calls) after which the bulk send gives up. */
 const MAX_CONSECUTIVE_FAILURES = 3;
 const BULK_CHUNK_TIME_BUDGET_MS = 30_000;
