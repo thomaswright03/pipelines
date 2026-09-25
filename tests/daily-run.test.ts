@@ -85,6 +85,40 @@ describe("leads a daily run didn't get to", () => {
   });
 });
 
+describe("a daily run whose Yelp search fails", () => {
+  it("still emails the leads earlier runs found, records the Yelp error and is 'partial'", async () => {
+    mail = captureMail();
+    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
+    const leftover = await makeColdLead({
+      source: "Yelp search (daily automated run)",
+      address: "1 Main St, Phoenix, AZ 85001",
+      createdAt: new Date(Date.now() - 86_400_000),
+    });
+
+    const res = await dailyGET(new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }));
+    const json = await res.json();
+
+    expect(mail.messages).toHaveLength(1);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leftover.id } })).status).toBe("contacted");
+    expect(json.status).toBe("partial");
+    expect(json.summary).toMatch(/^Couldn't search .+, so no new leads were found, 1 left over from earlier runs, emailed 1\.$/);
+    const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
+    expect(run.status).toBe("partial");
+    expect(run.errors).toMatch(/^Search of .+ failed: Yelp isn't responding right now/);
+    // The city wasn't searched, so it stays available for a later run.
+    expect(await prisma.scrapedCity.count()).toBe(0);
+  });
+
+  it("is 'failed' when the search fails and there is nothing left to email", async () => {
+    mail = captureMail();
+    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
+    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0 });
+    expect(outcome.status).toBe("failed");
+    expect(outcome.errors?.[0]).toMatch(/Yelp isn't responding right now/);
+    expect(mail.messages).toHaveLength(0);
+  });
+});
+
 describe("the daily run's time budget", () => {
   it("never starts a lookup or a send whose worst case would run past the limit, and reports the rest as deferred", async () => {
     // A fake clock: every page fetch takes 5 s and every send 20 s (the

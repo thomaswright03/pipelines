@@ -3,14 +3,16 @@
 // address, save the ones an address was found for, then pitch every
 // sendable lead the daily runs have found — this run's plus any an earlier
 // run found but didn't get to (out of time, or the email service was down).
-// Discovery and sending go through the same shared rules as the buttons on
+// A failed search is recorded and doesn't stop the leftover leads from
+// being emailed. Discovery and sending go through the same shared rules as the buttons on
 // the page (src/lib/outreach/), so a cron run and a manual bulk send can
 // overlap without double-sending.
 import { prisma } from "@/lib/db";
-import { findBusinessesViaYelp } from "@/lib/yelp-discovery";
+import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
-import { createLeadsFromCandidates } from "@/lib/outreach/discovery";
+import { createLeadsFromCandidates, type DiscoveryResult } from "@/lib/outreach/discovery";
+import { describeError, logError } from "@/lib/log";
 import { sendFirstTouch } from "@/lib/outreach/send";
 import { getAppSettings } from "@/lib/outreach/settings";
 import type { RunOutcome } from "@/lib/outreach/runs";
@@ -66,20 +68,34 @@ export async function runDailyColdOutreach(
     return { status: "skipped", summary: "Outbound email is paused, so the daily run didn't search or send." };
   }
 
+  // Discovery failing (Yelp down, rate-limited, key revoked) must not stop
+  // the leads earlier runs already found from being emailed: the error is
+  // recorded and the run goes on to the send queue. The city is only marked
+  // as used when its search actually came back.
   const target = await withRetry(() => pickNextCity(prisma));
-  const results = await findBusinessesViaYelp("", `${target.city}, ${target.state}`);
-  await withRetry(() => markCityUsed(prisma, target.city, target.state));
+  let listed: number | null = null;
+  let discovery: DiscoveryResult | null = null;
+  let discoveryError: string | null = null;
+  try {
+    const results = await findBusinessesViaYelp("", `${target.city}, ${target.state}`);
+    listed = results.length;
+    await withRetry(() => markCityUsed(prisma, target.city, target.state));
+    discovery = await createLeadsFromCandidates("cold-outreach", results.slice(0, businessesPerRun), {
+      city: target.city,
+      state: target.state,
+      source: DAILY_RUN_SOURCE,
+      maxCreate: businessesPerRun,
+      deadline: startedAt + (options.discoveryBudgetMs ?? DISCOVERY_BUDGET_MS),
+      now,
+    });
+  } catch (err) {
+    logError("run.daily.discovery", err, { city: target.city, state: target.state });
+    discoveryError = err instanceof YelpError ? err.message : describeError(err);
+  }
 
-  const discovery = await createLeadsFromCandidates("cold-outreach", results.slice(0, businessesPerRun), {
-    city: target.city,
-    state: target.state,
-    source: DAILY_RUN_SOURCE,
-    maxCreate: businessesPerRun,
-    deadline: startedAt + (options.discoveryBudgetMs ?? DISCOVERY_BUDGET_MS),
-    now,
-  });
-
-  const createdIds = new Set(discovery.created.map((l) => l.id));
+  const created = discovery?.created ?? [];
+  const examined = discovery?.examined ?? 0;
+  const createdIds = new Set(created.map((l) => l.id));
   const queue = await listUnsentDailyLeads();
   const carriedOver = queue.filter((l) => !createdIds.has(l.id)).length;
   const sendsEndBy = startedAt + (options.sendBudgetMs ?? RUN_LIMIT_MS);
@@ -88,7 +104,7 @@ export async function runDailyColdOutreach(
   let failed = 0;
   let skipped = 0;
   let deferred = 0;
-  const errors: string[] = [];
+  const errors: string[] = discoveryError ? [`Search of ${target.city}, ${target.state} failed: ${discoveryError}`] : [];
   for (const [index, lead] of queue.entries()) {
     if (now() + SEND_WORST_CASE_MS > sendsEndBy) {
       deferred = queue.length - index;
@@ -113,11 +129,14 @@ export async function runDailyColdOutreach(
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
-  const parts = [
-    `Searched ${target.city}, ${target.state}: Yelp listed ${results.length} businesses`,
-    `checked ${discovery.examined} for an email${discovery.stoppedEarly ? " (stopped early: out of time)" : ""}`,
-    `found ${discovery.created.length} new ${discovery.created.length === 1 ? "address" : "addresses"}`,
-  ];
+  const parts =
+    discovery && listed !== null
+      ? [
+          `Searched ${target.city}, ${target.state}: Yelp listed ${listed} businesses`,
+          `checked ${examined} for an email${discovery.stoppedEarly ? " (stopped early: out of time)" : ""}`,
+          `found ${created.length} new ${created.length === 1 ? "address" : "addresses"}`,
+        ]
+      : [`Couldn't search ${target.city}, ${target.state}${listed === null ? " on Yelp" : " for email addresses"}, so no new leads were found`];
   if (carriedOver) parts.push(`${carriedOver} left over from earlier runs`);
   parts.push(`emailed ${sent}`);
   if (skipped) parts.push(`${skipped} skipped by the send rules`);
@@ -125,12 +144,14 @@ export async function runDailyColdOutreach(
   if (deferred) parts.push(`${deferred} left for the next run (out of time)`);
   const summary = `${parts.join(", ")}.`;
 
-  // Only real send failures make a run partial/failed.
-  const status = failed === 0 ? "succeeded" : sent === 0 ? "failed" : "partial";
+  // Send refusals are the rules working; only a failed search or a failed
+  // send makes a run partial, and it is "failed" only when nothing got done.
+  const problems = failed > 0 || discoveryError !== null;
+  const status = !problems ? "succeeded" : sent > 0 ? "partial" : "failed";
   return {
     status,
     summary,
     errors,
-    numbers: { businessesChecked: discovery.examined, leadsFound: discovery.created.length, emailsSent: sent },
+    numbers: { businessesChecked: examined, leadsFound: created.length, emailsSent: sent },
   };
 }

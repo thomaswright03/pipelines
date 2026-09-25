@@ -103,7 +103,7 @@ describe("daily Cold Outreach run", () => {
     expect(await prisma.lead.count({ where: { status: "new" } })).toBe(2);
   });
 
-  it("records a Yelp outage as a failed run with a readable cause", async () => {
+  it("records a Yelp outage with nothing left to send as a failed run with a readable cause", async () => {
     mail = captureMail();
     stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
     const json = await (await cron(dailyGET)).json();
