@@ -48,6 +48,9 @@ jobs:
 
       - run: npm run lint
 
+      # Formatting is enforced: run `npm run format` locally before pushing.
+      - run: npm run format:check
+
       # Applies prisma/migrations to the service database, runs every test
       # file against it, and prints a coverage summary.
       - run: npm run test:coverage

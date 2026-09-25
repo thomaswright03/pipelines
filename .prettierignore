@@ -1,0 +1,12 @@
+# Generated, vendored or produced by tools
+src/generated/
+node_modules/
+.next/
+coverage/
+test-results/
+playwright-report/
+package-lock.json
+prisma/migrations/
+next-env.d.ts
+docs/archive/
+*.md

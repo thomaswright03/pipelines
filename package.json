@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "postinstall": "prisma generate",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -38,6 +40,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "pg": "^8.23.0",
+    "prettier": "^3.9.9",
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
     "typescript": "^5",
