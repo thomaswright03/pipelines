@@ -47,7 +47,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         >
           Try again
         </button>
-        <footer style={{ marginTop: "24px", fontSize: "0.75rem", color: "#a1a1aa" }}>
+        <footer style={{ marginTop: "24px", fontSize: "0.75rem", color: "#52525b" }}>
           © {new Date().getFullYear()} Wright AI Solutions LLC
         </footer>
       </body>

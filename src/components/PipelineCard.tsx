@@ -30,7 +30,12 @@ export default function PipelineCard({
   function save(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const result = await updatePipelineMetaAction(pipelineId, formData);
+      let result: { error?: string };
+      try {
+        result = await updatePipelineMetaAction(pipelineId, formData);
+      } catch {
+        result = { error: "Couldn't reach the server — nothing was saved. Try again." };
+      }
       if (result.error) {
         setError(result.error);
         return;
@@ -44,11 +49,12 @@ export default function PipelineCard({
     <div className="card card-hover flex flex-col gap-3 p-5">
       {editing ? (
         <form action={save} className="flex flex-col gap-2">
-          <EditField label="Pipeline name" name="name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-          <EditField label="Company" name="company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+          <EditField label="Pipeline name" name="name" maxLength={80} value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
+          <EditField label="Company" name="company" maxLength={160} value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
           <EditField
             label="Product description"
             name="productDescription"
+            maxLength={600}
             value={form.productDescription}
             onChange={(v) => setForm({ ...form, productDescription: v })}
             textarea
@@ -56,11 +62,12 @@ export default function PipelineCard({
           <EditField
             label="Pipeline description"
             name="pipelineDescription"
+            maxLength={600}
             value={form.pipelineDescription}
             onChange={(v) => setForm({ ...form, pipelineDescription: v })}
             textarea
           />
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          <div aria-live="polite">{error && <p className="notice-error">{error}</p>}</div>
           <div className="flex gap-2">
             <button type="submit" disabled={isPending} className="btn-primary">
               {isPending ? "Saving…" : "Save"}
@@ -86,8 +93,8 @@ export default function PipelineCard({
                 {meta.name.slice(0, 1).toUpperCase()}
               </span>
               <div>
-                <h2 className="font-semibold">{meta.name}</h2>
-                {meta.company && <p className="text-xs text-zinc-500">{meta.company}</p>}
+                <h2 className="break-words font-semibold">{meta.name}</h2>
+                {meta.company && <p className="text-xs muted">{meta.company}</p>}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -97,7 +104,7 @@ export default function PipelineCard({
                   Always-on
                 </span>
               )}
-              <button onClick={() => setEditing(true)} className="btn-ghost px-2 py-1 text-xs">
+              <button onClick={() => setEditing(true)} className="btn-ghost text-xs">
                 Edit
               </button>
             </div>
@@ -105,14 +112,14 @@ export default function PipelineCard({
 
           {meta.productDescription && (
             <div>
-              <div className="text-xs font-medium uppercase text-zinc-400">Product</div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">{meta.productDescription}</p>
+              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Product</div>
+              <p className="break-words text-sm muted">{meta.productDescription}</p>
             </div>
           )}
           {meta.pipelineDescription && (
             <div>
-              <div className="text-xs font-medium uppercase text-zinc-400">Pipeline</div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">{meta.pipelineDescription}</p>
+              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Pipeline</div>
+              <p className="break-words text-sm muted">{meta.pipelineDescription}</p>
             </div>
           )}
         </>
@@ -141,21 +148,22 @@ function EditField({
   value,
   onChange,
   textarea,
+  maxLength,
 }: {
   label: string;
   name: string;
   value: string;
   onChange: (v: string) => void;
   textarea?: boolean;
+  maxLength: number;
 }) {
-  const className = "input";
   return (
-    <label className="flex flex-col gap-1 text-xs text-zinc-500">
+    <label className="field-label">
       {label}
       {textarea ? (
-        <textarea name={name} value={value} onChange={(e) => onChange(e.target.value)} rows={2} className={className} />
+        <textarea name={name} value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} rows={3} className="input" />
       ) : (
-        <input name={name} value={value} onChange={(e) => onChange(e.target.value)} className={className} />
+        <input name={name} value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} className="input" />
       )}
     </label>
   );

@@ -1,14 +1,21 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import VaultLeadActions from "@/components/VaultLeadActions";
+import LeadActions from "@/components/LeadActions";
+import ColdOutreachStagePanel from "@/components/ColdOutreachStagePanel";
 import VaultActivityLog from "@/components/VaultActivityLog";
+import { DetailField, EmailPreview, LedgerNotice, SendHistory } from "@/components/LeadDetailParts";
 import { buildOutreachEmail } from "@/lib/vault-email-template";
+import { loadLeadContext } from "@/lib/lead-page";
+import { canUseMailApp } from "@/lib/mail-app";
+import { formatDate, formatDateTime, toZonedInputValue } from "@/lib/time";
+import { formatCurrency } from "@/lib/format";
+import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // "Find email" now guesses a website first, which can take a few tries.
+export const maxDuration = 60; // "Find email" guesses a website first, which can take a few tries.
 
-export default async function LeadDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/[id]">) {
   const { id } = await params;
   const lead = await prisma.lead.findUnique({
     where: { id },
@@ -19,95 +26,77 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
   });
   if (!lead) notFound();
 
+  const { suppression, paused, ledgerNote } = await loadLeadContext("cold-outreach", lead.id, lead.email);
   const preview = buildOutreachEmail(lead.company || lead.name);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Link href="/vault-pipeline" className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+      <div className="min-w-0">
+        <Link href="/vault-pipeline" className="text-sm font-medium text-indigo-700 hover:text-indigo-600 dark:text-indigo-300">
           ← All leads
         </Link>
-        <h1 className="accent-text mt-1 text-2xl font-bold tracking-tight">{lead.name}</h1>
-        {lead.company && <p className="text-zinc-500">{lead.company}</p>}
+        <h1 className="accent-text mt-1 break-words text-2xl font-bold tracking-tight">{lead.name}</h1>
+        {lead.company && <p className="muted">{lead.company}</p>}
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-[2fr_1fr]">
-        <div className="flex flex-col gap-4">
-          <div className="card p-4">
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              <Field label="Email" value={lead.email ?? "—"} />
-              <Field label="Phone" value={lead.phone ?? "—"} />
-              <Field label="Address" value={lead.address ?? "—"} />
-              <Field label="City/State" value={lead.city ? `${lead.city}, ${lead.state ?? ""}` : "—"} />
-              <Field label="Website" value={lead.website ?? "—"} />
-              <Field label="Source" value={lead.source ?? "—"} />
-              <Field label="Last emailed" value={lead.lastEmailedAt ? lead.lastEmailedAt.toLocaleString() : "—"} />
-              <Field label="Replied" value={lead.repliedAt ? lead.repliedAt.toLocaleString() : "—"} />
-              <Field label="We replied back" value={lead.ourReplyAt ? lead.ourReplyAt.toLocaleString() : "—"} />
-              <Field label="Appointment" value={lead.appointmentAt ? lead.appointmentAt.toLocaleString() : "—"} />
-              <Field label="Call outcome" value={lead.callOutcome ?? "—"} />
-              <Field label="Estimated value" value={lead.estimatedValue ? `$${lead.estimatedValue}` : "—"} />
+      <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <LedgerNotice note={ledgerNote} />
+          <section className="card p-4" aria-label="Lead details">
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <DetailField label="Email" value={lead.email ?? "—"} href={lead.email ? `mailto:${lead.email}` : undefined} />
+              <DetailField label="Phone" value={lead.phone ?? "—"} href={lead.phone ? `tel:${lead.phone}` : undefined} />
+              <DetailField label="Address" value={lead.address ?? "—"} />
+              <DetailField label="City/State" value={lead.city ? [lead.city, lead.state].filter(Boolean).join(", ") : "—"} />
+              <DetailField label="Website" value={lead.website ?? "—"} href={lead.website ?? undefined} />
+              <DetailField label="Source" value={lead.source ?? "—"} />
+              <DetailField label="Added" value={formatDate(lead.createdAt)} />
+              <DetailField label="Last emailed" value={formatDateTime(lead.lastEmailedAt)} />
+              <DetailField label="Replied" value={formatDateTime(lead.repliedAt)} />
+              <DetailField label="We replied back" value={formatDateTime(lead.ourReplyAt)} />
+              <DetailField label="Appointment" value={formatDateTime(lead.appointmentAt)} />
+              <DetailField label="Call outcome" value={lead.callOutcome ? (CALL_OUTCOME_LABEL[lead.callOutcome] ?? lead.callOutcome) : "—"} />
+              <DetailField label="Estimated value" value={formatCurrency(lead.estimatedValue)} />
             </dl>
             {lead.notes && (
               <div className="mt-3 border-t border-zinc-200 pt-3 text-sm dark:border-zinc-800">
-                <div className="text-xs text-zinc-500">Notes</div>
-                <p className="mt-1 whitespace-pre-wrap">{lead.notes}</p>
+                <div className="text-xs muted">Notes</div>
+                <p className="mt-1 whitespace-pre-wrap break-words">{lead.notes}</p>
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="card p-4">
-            <h2 className="mb-2 text-sm font-semibold text-zinc-500">Outreach email preview</h2>
-            <p className="text-sm font-medium">{preview.subject}</p>
-            <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">{preview.body}</pre>
-          </div>
-
-          {lead.emailLogs.length > 0 && (
-            <div className="card p-4">
-              <h2 className="mb-2 text-sm font-semibold text-zinc-500">Send history</h2>
-              <ul className="flex flex-col gap-1.5 text-sm">
-                {lead.emailLogs.map((log) => (
-                  <li key={log.id} className="flex items-center justify-between">
-                    <span>{log.sentAt.toLocaleString()}</span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                        log.bounced
-                          ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
-                          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${log.bounced ? "bg-red-500" : "bg-emerald-500"}`} />
-                      {log.bounced ? "Bounced" : "Sent"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
+          <EmailPreview subject={preview.subject} body={preview.body} />
+          <SendHistory logs={lead.emailLogs} />
           <VaultActivityLog
             leadId={lead.id}
-            activities={lead.activities.map((a) => ({ id: a.id, type: a.type, notes: a.notes, date: a.date.toISOString() }))}
+            activities={lead.activities.map((a) => ({ id: a.id, type: a.type, notes: a.notes, date: formatDate(a.date) }))}
           />
         </div>
 
-        <VaultLeadActions
-          leadId={lead.id}
-          status={lead.status}
-          hasEmail={Boolean(lead.email)}
-          email={lead.email}
-          ourReplyAt={lead.ourReplyAt !== null}
-        />
+        <div className="flex min-w-0 flex-col gap-4">
+          <LeadActions
+            pipeline="cold-outreach"
+            paused={paused}
+            suppression={suppression}
+            lead={{
+              id: lead.id,
+              name: lead.name,
+              status: lead.status,
+              email: lead.email,
+              sendBlockedReason: lead.sendBlockedReason,
+              emailed: lead.emailLogs.length > 0,
+              replied: lead.repliedAt !== null,
+              ourReplied: lead.ourReplyAt !== null,
+            }}
+          />
+          <ColdOutreachStagePanel
+            lead={{ id: lead.id, name: lead.name, status: lead.status, email: lead.email, replied: lead.repliedAt !== null }}
+            appointmentInputValue={lead.appointmentAt ? toZonedInputValue(lead.appointmentAt) : ""}
+            canUseMailApp={canUseMailApp()}
+          />
+        </div>
       </div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs text-zinc-500">{label}</dt>
-      <dd>{value}</dd>
     </div>
   );
 }

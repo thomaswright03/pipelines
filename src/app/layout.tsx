@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { connection } from "next/server";
 import SiteNav from "@/components/SiteNav";
+import ThemeToggle from "@/components/ThemeToggle";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { getAppSettings } from "@/lib/outreach/settings";
+import { resolveTransportKind } from "@/lib/mail-transport-kind";
+import { logError } from "@/lib/log";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,32 +22,86 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Pipelines",
-  description: "Local host for email/SMS marketing pipelines",
+  description: "Dashboard for Wright AI Solutions' email outreach pipelines",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col text-zinc-900 dark:text-zinc-100">
-        <header className="sticky top-0 z-10 border-b border-zinc-200/70 bg-white/70 backdrop-blur-md dark:border-zinc-800/70 dark:bg-zinc-950/70">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3.5">
-            <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="flex min-h-full flex-col text-zinc-900 dark:text-zinc-100">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+        >
+          Skip to content
+        </a>
+        <header className="z-10 sm:sticky sm:top-0 border-b border-zinc-200/70 bg-white/80 backdrop-blur-md dark:border-zinc-800/70 dark:bg-zinc-950/80">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+            <Link href="/" className="flex min-h-11 items-center gap-2 text-lg font-semibold tracking-tight sm:min-h-8">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-sm shadow-indigo-600/30">
                 P
               </span>
               <span className="hidden sm:inline">Pipelines</span>
             </Link>
             <SiteNav />
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <OutboundStatus />
+              <ThemeToggle />
+            </div>
           </div>
         </header>
-        <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-6 py-8">{children}</main>
-        <footer className="border-t border-zinc-200/70 px-6 py-4 text-center text-xs text-zinc-400 dark:border-zinc-800/70 dark:text-zinc-500">
+        <main id="main" className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-8 sm:px-6">
+          {children}
+        </main>
+        <footer className="border-t border-zinc-200/70 px-6 py-4 text-center text-xs text-zinc-600 dark:border-zinc-800/70 dark:text-zinc-400">
           © {new Date().getFullYear()} Wright AI Solutions LLC
         </footer>
       </body>
     </html>
+  );
+}
+
+/**
+ * Header pills that are always visible: outbound email paused, and (off
+ * Vercel) that mail is being captured locally rather than delivered.
+ */
+async function OutboundStatus() {
+  // Read per request, never baked into a prerendered page.
+  await connection();
+  const transport = resolveTransportKind();
+  let paused: boolean | null = null;
+  try {
+    paused = (await getAppSettings()).outboundPaused;
+  } catch (err) {
+    logError("layout.settings", err);
+  }
+  return (
+    <>
+      {transport !== "zeptomail" && (
+        <span
+          className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200"
+          title={transport === "outbox" ? "Emails are written to the local .outbox folder, not delivered." : "Emails go to the SMTP server in SMTP_HOST (a local mail catcher)."}
+        >
+          Mail captured locally ({transport})
+        </span>
+      )}
+      {paused && (
+        <Link
+          href="/settings"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 sm:min-h-7 dark:bg-red-900/50 dark:text-red-200"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-red-600" aria-hidden />
+          Outbound email paused
+        </Link>
+      )}
+      {paused === null && (
+        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+          Can&apos;t reach the database
+        </span>
+      )}
+    </>
   );
 }

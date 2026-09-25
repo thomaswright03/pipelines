@@ -1,0 +1,261 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  findLeadEmailAction,
+  markBouncedAction,
+  markOptedOutAction,
+  markRepliedAction,
+  removeSuppressionAction,
+  sendOutreachEmailAction,
+  setOurReplyAction,
+  updateLeadStatusAction,
+} from "@/lib/actions/outreach";
+import { allowedTransitions, isBackwardMove, statusLabel } from "@/lib/lead-status";
+import type { ActionResult } from "@/lib/outreach/lead-actions";
+import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import StatusBadge from "@/components/StatusBadge";
+import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import { useConfirm } from "@/components/ConfirmDialog";
+
+export type LeadActionsLead = {
+  id: string;
+  name: string;
+  status: string;
+  email: string | null;
+  sendBlockedReason: string | null;
+  emailed: boolean;
+  replied: boolean;
+  ourReplied: boolean;
+};
+
+export type LeadSuppression = {
+  source: string | null;
+  evidence: string | null;
+  reason: string | null;
+  since: string; // already formatted in the app's time zone
+};
+
+/**
+ * The status control and email actions on a lead page, for both pipelines.
+ * Only moves and actions that make sense for the lead's current state are
+ * offered (the server enforces the same rules); consequential ones ask for
+ * confirmation first and every outcome is reported in plain words.
+ */
+export default function LeadActions({
+  pipeline,
+  lead,
+  suppression,
+  paused,
+}: {
+  pipeline: PipelineId;
+  lead: LeadActionsLead;
+  suppression: LeadSuppression | null;
+  paused: boolean;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [dialog, confirm] = useConfirm();
+
+  function run(fn: () => Promise<ActionResult>) {
+    setFeedback(null);
+    startTransition(async () => {
+      try {
+        const result = await fn();
+        setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
+      } catch {
+        setFeedback({ ok: false, text: "Couldn't reach the server — nothing was changed. Check your connection and try again." });
+      }
+      router.refresh();
+    });
+  }
+
+  const moves = allowedTransitions(pipeline, lead.status);
+  const canSend = lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason;
+
+  async function moveTo(to: string) {
+    const backward = isBackwardMove(lead.status, to);
+    const confirmed = await confirm({
+      title: `${backward ? "Move back" : "Move"} ${lead.name} to ${statusLabel(to)}?`,
+      body: (
+        <p>
+          From {statusLabel(lead.status)} to {statusLabel(to)}.
+          {to === "contacted" && " This undoes “Mark replied” — the reply time is cleared."}
+          {(to === "lost" || to === "not_interested") && " No further outreach goes to this lead."}
+        </p>
+      ),
+      confirmLabel: `${backward ? "Move back" : "Move"} to ${statusLabel(to)}`,
+      danger: to === "lost",
+    });
+    if (confirmed) run(() => updateLeadStatusAction(pipeline, lead.id, to));
+  }
+
+  async function send() {
+    const confirmed = await confirm({
+      title: `Email ${lead.name}?`,
+      body: (
+        <p>
+          Sends the first outreach email to <strong>{lead.email}</strong> and moves the lead to Contacted. Each address is
+          only ever pitched once.
+        </p>
+      ),
+      confirmLabel: "Send email",
+    });
+    if (confirmed) run(() => sendOutreachEmailAction(pipeline, lead.id));
+  }
+
+  async function optOut() {
+    const confirmed = await confirm({
+      title: `Stop emailing ${lead.email}?`,
+      body: <p>Adds the address to the do-not-email list. Neither pipeline will email it again unless you remove it.</p>,
+      confirmLabel: "Add to do-not-email list",
+      danger: true,
+    });
+    if (confirmed) run(() => markOptedOutAction(pipeline, lead.id));
+  }
+
+  async function bounced() {
+    const confirmed = await confirm({
+      title: `Mark the email to ${lead.name} as bounced?`,
+      body: <p>Records the latest send as bounced and moves the lead to Lost.</p>,
+      confirmLabel: "Mark bounced",
+      danger: true,
+    });
+    if (confirmed) run(() => markBouncedAction(pipeline, lead.id));
+  }
+
+  async function unsuppress() {
+    const confirmed = await confirm({
+      title: `Remove ${lead.email} from the do-not-email list?`,
+      body: (
+        <p>
+          Only do this if they did <strong>not</strong> ask to stop — for example, an interested reply that was misread.
+          Both pipelines may email this address again.
+        </p>
+      ),
+      confirmLabel: "Remove from list",
+      danger: true,
+    });
+    if (confirmed) run(() => removeSuppressionAction(pipeline, lead.id));
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {dialog}
+      <section aria-labelledby="status-heading" className="card flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="status-heading" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            Status
+          </h2>
+          <StatusBadge status={lead.status} />
+        </div>
+        {moves.length > 0 ? (
+          <label className="field-label">
+            Move to…
+            <select
+              value=""
+              disabled={isPending}
+              onChange={(e) => {
+                if (e.target.value) void moveTo(e.target.value);
+              }}
+              className="input"
+            >
+              <option value="">Choose a stage</option>
+              {moves.map((s) => (
+                <option key={s} value={s}>
+                  {isBackwardMove(lead.status, s) ? `← ${statusLabel(s)}` : statusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="text-sm muted">No manual moves from {statusLabel(lead.status)}.</p>
+        )}
+      </section>
+
+      <section aria-labelledby="email-heading" className="card flex flex-col gap-3 p-4">
+        <h2 id="email-heading" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Email
+        </h2>
+
+        {suppression && (
+          <div className="notice-error flex flex-col gap-2">
+            <p>
+              <strong>On the do-not-email list</strong> since {suppression.since}.{" "}
+              {suppression.source === "inbound_reply" ? (
+                <>
+                  Their reply was read as an opt-out
+                  {suppression.evidence ? (
+                    <>
+                      : <q className="font-medium">{suppression.evidence}</q>
+                    </>
+                  ) : (
+                    "."
+                  )}
+                </>
+              ) : suppression.source === "manual" ? (
+                "Marked opted out by hand."
+              ) : (
+                (suppression.reason ?? "")
+              )}
+            </p>
+            <button type="button" disabled={isPending} onClick={unsuppress} className="btn-secondary self-start">
+              Remove from do-not-email list
+            </button>
+          </div>
+        )}
+        {!suppression && lead.sendBlockedReason && <p className="notice-warning">{lead.sendBlockedReason}</p>}
+
+        {!lead.email && (
+          <button type="button" disabled={isPending} onClick={() => run(() => findLeadEmailAction(pipeline, lead.id))} className="btn-secondary">
+            {isPending ? "Working…" : "Find email"}
+          </button>
+        )}
+
+        {canSend && (
+          <>
+            <button type="button" disabled={isPending || paused} onClick={send} className="btn-primary">
+              Send outreach email
+            </button>
+            {paused && <p className="text-xs muted">Outbound email is paused — resume it in Settings to send.</p>}
+          </>
+        )}
+        {lead.email && !canSend && !suppression && !lead.sendBlockedReason && lead.status !== "new" && (
+          <p className="text-xs muted">
+            {lead.emailed ? "Already pitched — each lead gets one outreach email." : `The first pitch only goes to New leads; this one is ${statusLabel(lead.status)}.`}
+          </p>
+        )}
+
+        {lead.status === "contacted" && (
+          <button type="button" disabled={isPending} onClick={() => run(() => markRepliedAction(pipeline, lead.id))} className="btn-secondary">
+            Mark replied
+          </button>
+        )}
+        {lead.replied && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => run(() => setOurReplyAction(pipeline, lead.id, !lead.ourReplied))}
+            className="btn-secondary"
+          >
+            {lead.ourReplied ? "Clear “we replied”" : "Mark “we replied”"}
+          </button>
+        )}
+        {lead.emailed && (lead.status === "contacted" || lead.status === "responded") && (
+          <button type="button" disabled={isPending} onClick={bounced} className="btn-danger">
+            Mark bounced
+          </button>
+        )}
+        {lead.email && !suppression && (
+          <button type="button" disabled={isPending} onClick={optOut} className="btn-danger">
+            Mark opted out
+          </button>
+        )}
+
+        <ActionMessage feedback={feedback} />
+      </section>
+    </div>
+  );
+}
