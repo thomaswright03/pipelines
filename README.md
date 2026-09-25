@@ -17,8 +17,10 @@ Each pipeline has a lead list, a **call deck** for phone follow-up, and **Stats*
 replies from addresses that match no lead, so they can be attached to the right one. **Settings**
 (`/settings`) holds the switches that apply to both pipelines and the searchable do-not-email list.
 
-The interface is English-only by decision: the one operator and every recipient are in the US. All strings
-are hard-coded in the components; there is no translation layer to maintain.
+The interface is English-only: the one operator and every recipient are in the US, so all strings are
+hard-coded in the components and there is no translation layer. This is the developer's recommendation and
+still needs the owner's sign-off (see "Owner-only setup"); Spanish/French would mean moving every string
+into a translation layer with full catalogues and a language switcher.
 
 A third dashboard card, **AI Lead Responder**, links out to a separate Vercel project. It is not code in
 this repo.
@@ -43,6 +45,16 @@ the bulk send, and the daily cron.
   business or person with a similar name could get the lead's one pitch. The evidence is saved on the lead
   and shown on its page as **Why this address**. An uncorroborated find is not saved (a manual **Find
   email** reports it, so the operator can check it and enter it by hand).
+  - For agents whose only site is their brokerage's, an address there is used only if it names that agent:
+    the surname as a whole token together with the first name or initial (`john.doe@`, `jdoe@`,
+    `doej@`, `johndoe@`). `john@`, `johnson@`, `john.smith@`, `doe.family@`, team or assistant inboxes
+    (`jdoe.team@`) and shared inboxes (`info@`, `frontdesk@`) are refused (`src/lib/outreach/email-policy.ts`).
+  - A website that times out, drops the connection or answers with a 5xx is **not** a "no address"
+    verdict. The lead stays New and unchecked, **Find email** says the site couldn't be reached, and the
+    bulk lookup and the ADRE import try it again an hour later. Only a finished scan with no usable
+    address sends a lead to phone outreach.
+  - **Find email** refuses for a lead that already has an address or was emailed, and saves only if the
+    lead's status and address haven't changed while it ran.
   - Addresses found before this check existed are held back (see "Deploying" → unverified addresses) until
     someone presses **Address checked — allow sending** or edits the lead.
 - **Editing and deleting leads.** Edits use the same validation and address checks as adding a lead: an
@@ -52,9 +64,16 @@ the bulk send, and the daily cron.
 - **Manual moves never overwrite a change made meanwhile.** Every status change from a lead page is
   conditional on the status the page showed; if a reply or the stale-contacts job moved the lead in the
   meantime, the change is refused with "changed status a moment ago — reload".
-- **Opt-outs.** A reply that asks to stop puts the address on the do-not-email list, and every send checks
-  that list. The reply check reads only the new text of the reply: quoted history and signatures are
-  ignored, so an interested reply that quotes our "Reply STOP" footer is not an opt-out.
+- **Opt-outs.** A reply that asks not to be contacted puts the address on the do-not-email list, and every
+  send checks that list. That covers "STOP"/"Unsubscribe", "remove me (from your list)", "take me off",
+  "don't/do not email|contact|message|reach out to me/us" (with or without "again"), "quit/cease
+  emailing", "delete my email address", "cease and desist", "leave me alone" and similar; negated
+  phrasings ("please don't stop sending these") don't count. The reply check reads only the new text of
+  the reply: quoted history and signatures are ignored, so an interested reply that quotes our "Reply
+  STOP" footer is not an opt-out.
+  - A reply that isn't an opt-out but reads like a "no" or a complaint ("not interested", "wrong person",
+    "how did you get my email", "spam") is not counted as a positive response: the lead keeps its status
+    and is flagged **Reply needs a look** with the reason, for the operator to decide.
   - The words that triggered an opt-out are stored and shown on the lead page.
   - A wrong opt-out can be reversed there with **Remove from do-not-email list**.
 - **Kill switch.** **Settings → Pause all outbound email** stops every send path at its next send. That
@@ -166,12 +185,38 @@ What's covered, by file:
 | `tests/unmatched-replies.test.ts` | Replies from unknown addresses: listed, attached to a lead, dismissed; the "no replies lately" warning |
 | `tests/greeting.test.ts` | dataleadsell greets agents by first name; the preview is what's sent |
 | `tests/e2e.test.ts` | One run per pipeline through the same server actions the pages use |
+| `tests/actions.test.ts` | Every server action in `src/lib/actions/`: validation, happy path, Yelp and database failures |
+| `tests/review-findings.test.ts` | Plain opt-out phrasings end to end, "needs a look" replies, reply/call history vs. the notes limit, unreachable websites, Find email guards, bouncing after the stale-contacts move, correction counts |
+| `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
+| `tests/heuristics-eval.test.ts` | Precision/recall of the opt-out classifier and the address rule on the labelled sets in `tests/corpus/` (see below) |
+
+**Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines or
+`src/lib/actions` below 85% (`vitest.config.ts`). Pages and components are exercised by the browser tests.
+
+### Measuring the reply and address rules
+
+`tests/corpus/replies.ts` (129 labelled replies) and `tests/corpus/addresses.ts` (50 agent/address pairs)
+are kept apart from the unit-test cases. `tests/heuristics-eval.test.ts` prints precision and recall with
+every miss, and fails below its floors (opt-outs: 95% precision and recall; brokerage addresses: 95%
+precision, 90% recall). CI also writes the scores to the run summary.
+
+Both sets are **synthetic**, written to resemble real replies and staff directories; the file headers give
+the first-run scores. To make them measure production, add anonymised real cases: export recent replies
+with `SELECT text, "optedOut", "reviewReason" FROM "InboundReply" ORDER BY "receivedAt" DESC LIMIT 200`,
+replace names, addresses, phone numbers and firm names, label each one by reading it, and append it to the
+corpus. Never commit real addresses.
+
+In production, the **Replies** page shows how often the operator corrects the rules (last 90 days):
+opt-outs read from replies and how many were undone, opt-outs the rules missed (a reply later marked opted
+out by hand), replies flagged for a look (and how many said "wrong person"), and found addresses that
+bounced. These are recorded in `OutreachCorrection`.
 
 **Browser smoke tests** (`e2e/smoke.spec.ts`, Playwright) run against a production build served on port
 4100. They cover adding a lead with an invalid email, a single send, a bulk send stopped midway (at most
 two emails after Stop), pause/resume, Enter confirming a send but cancelling a destructive action,
 editing a lead (including the link to the lead holding an address), deleting a lead, attaching an
-unmatched reply, stale messages clearing, per-page tab titles, and the lead list at 375–2560 px. The server uses
+unmatched reply, stale messages clearing, per-page tab titles (including "Page not found"), reading a
+Stats bar's date and count by keyboard focus, and the lead list at 375–2560 px. The server uses
 `EMAIL_TRANSPORT=outbox` (mail is written to `test-results/e2e-outbox`, never delivered) and its own
 database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelines_e2e`), which
 `e2e/prepare-db.mjs` creates and migrates. It refuses non-local hosts.
@@ -180,7 +225,8 @@ database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelin
 
 `.github/workflows/ci.yml` runs on every push and pull request. It uses a throwaway `postgres:16` service
 container and runs `npm ci`, `npm run build` (including the type check), `npm run lint`, the test suite
-with coverage (the summary appears on the run page), and the browser smoke tests. CI has no secrets and
+with coverage floors (the summary appears on the run page), the heuristic precision/recall scores, and
+the browser smoke tests. CI has no secrets and
 reaches no external service other than downloading Chromium.
 
 ## Daily automation
@@ -240,12 +286,17 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
 - A lead that was emailed and is **Contacted**, **Cold call list** or **No phone number** moves to
   **Responded** and its reply time is set. That takes it off the call deck and counts it in the Stats
   page's reply rate, however late the reply arrives.
-- A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Replied — needs
-  review** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
+- A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Reply needs a
+  look** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
+- A reply that may be a "no" or a complaint (see "Opt-outs" above) gets a reply time and the same flag,
+  with the reason, instead of moving the lead to Responded.
 - A genuine opt-out goes on the do-not-email list with its evidence, whatever the lead's status, and a lead
   that was being worked (Contacted, Responded, on the call deck) moves to Lost (Not interested in
   dataleadsell). Customers keep their status.
-- The reply's new text is logged on the lead either way.
+- The reply's new text is added to the lead's **History** (with any opt-out trigger or "needs a look"
+  reason), never to its Notes, so automatically recorded replies and call notes can't push Notes past the
+  5,000-character limit. Leads whose Notes already exceed it (from before this change) stay editable; their
+  Notes just can't grow.
 - A reply from an address that is on no lead (an assistant, a personal inbox, a forward) is kept with its
   text and listed on **Replies**, with a count next to "Replies" in the header. **Attach** records it on the
   lead you pick exactly as if it had come from the lead's own address (for an opt-out, the lead's address
@@ -271,8 +322,9 @@ Email Workers don't retry `fetch` on their own, so the Worker needs a retry step
 with retries, or rejecting the message so the sending server retries it later.
 
 Replies that don't reach the route can be recorded by hand from the lead page with **Mark replied** (offered
-for Contacted, Cold call list and No phone number leads that were emailed), **Mark bounced** or **Mark opted
-out**.
+for Contacted, Cold call list and No phone number leads that were emailed), **Mark bounced** (any lead that was
+emailed, including after the stale-contacts move; a lead still being worked moves to Lost, a customer keeps
+its status) or **Mark opted out**.
 
 ## Deploying
 
@@ -300,8 +352,11 @@ Use expand-then-contract:
 3. Drop the old columns in a later release, once no live deployment reads them.
 
 A few columns are marked `unused` in `prisma/schema.prisma` and are waiting for that last step:
-`AgentLead.lastTextedAt`, `AgentLead.nextFollowUpDate`, `Lead.nextFollowUpDate`, and
-`PipelineSchedule.hour`/`minute`. Once this release is the live one, generate the drop with the command
+`AgentLead.lastTextedAt`, `AgentLead.nextFollowUpDate`, `Lead.nextFollowUpDate`, `Lead.estimatedValue`
+(replaced by `estimatedValueCents`), and `PipelineSchedule.hour`/`minute`. Before dropping
+`Lead.estimatedValue`, re-run the backfill from `20260927100000_estimated_value_cents` once, in case the
+previous deployment saved a value during the rollout:
+`UPDATE "Lead" SET "estimatedValueCents" = ROUND("estimatedValue"::numeric * 100)::integer WHERE "estimatedValue" IS NOT NULL AND "estimatedValueCents" IS NULL;` Once this release is the live one, generate the drop with the command
 below, commit it, and apply it as above.
 
 ```bash
@@ -323,7 +378,9 @@ entered leads are not affected.
 
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
 
-1. **Apply the migrations** in this release to production before deploying it. See "Deploying".
+1. **Apply the migrations** in this release to production before deploying it — including
+   `20260927090000_history_lookup_retries_reply_review` and `20260927100000_estimated_value_cents`. See
+   "Deploying".
 2. **Make reply tracking reachable.**
    - In Vercel, open Project Settings → Deployment Protection and enable **Protection Bypass for
      Automation**.
@@ -343,6 +400,10 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 6. **Lawful basis for the outreach.** This is a legal review, not a code change. See "Known limitations".
 7. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each
    pipeline's list to New and check the flagged rows (see "Deploying" → Unverified addresses).
+8. **Decide the interface language.** Confirm English-only is out of scope for this single-operator
+   tool (and note it here), or commission Spanish/French.
+9. **Grow the evaluation sets with real, anonymised replies and agent addresses** (see "Measuring the
+   reply and address rules"). Only the owner can read the production replies.
 
 ## Known limitations
 
@@ -351,8 +412,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
   no search engine, because those block automated queries or charge for them. A guessed site is only used
   when it shows the lead's phone, street or city, which trades some yield for not pitching the wrong
   business. Expect well under a quarter of results to yield a usable address.
-  - For agents, an address on a brokerage's site is used only if it is recognisably the agent's own, never
-    a shared inbox like `info@` or `frontdesk@`.
+  - For agents, an address on a brokerage's site is used only if it names the agent (surname plus first
+    name or initial), never a shared inbox like `info@` or `frontdesk@`.
 - **No bounce webhook.** ZeptoMail's SMTP relay gives no message id that a bounce notification could be
   matched against, so bounces are marked by hand with **Mark bounced**.
 - **Where the outreach data comes from is a business/legal question, not a code one.** Both pipelines email
