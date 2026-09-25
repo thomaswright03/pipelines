@@ -44,8 +44,8 @@ describe("agent discovery (dataleadsell)", () => {
     await makeAgentLead({ name: "Existing", email: "sam@samsellshomes.test" });
     await suppressEmail("opt@optoutrealty.test", { reason: "t", source: "manual" });
     stubFetch({
-      "https://www.samsellshomes.com": page(`Sam sells homes in Mesa: sam@samsellshomes.test`),
-      "https://www.optoutrealty.com": page(`Optout Realty, Mesa — opt@optoutrealty.test`),
+      "https://www.samsellshomes.com": { body: `<title>Sam Sells Homes</title>Sam sells homes in Mesa: sam@samsellshomes.test` },
+      "https://www.optoutrealty.com": { body: `<title>Optout Realty</title>Optout Realty, Mesa — opt@optoutrealty.test` },
     });
 
     const result = await createLeadsFromCandidates(
@@ -92,7 +92,7 @@ describe("email lookup for an existing lead", () => {
   it("flags a found address that another lead already uses, so it's never auto-sent", async () => {
     await makeAgentLead({ name: "First", email: "team@acmerealty.test" });
     const second = await makeAgentLead({ name: "Acme Realty", email: null, city: "Mesa" });
-    stubFetch({ "https://www.acmerealty.com": page(`Acme Realty of Mesa: team@acmerealty.test`) });
+    stubFetch({ "https://www.acmerealty.com": { body: `<title>Acme Realty</title>Acme Realty of Mesa: team@acmerealty.test` } });
 
     const outcome = await findEmailForLead("dataleadsell", (await getPipeline("dataleadsell").findLead(prisma, second.id))!);
 

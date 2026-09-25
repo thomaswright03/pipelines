@@ -17,8 +17,8 @@ import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id"
 /**
  * The outcome of looking for a lead's address.
  * - `email` + `evidence`: an address on a site that is the lead's own
- *   (entered on the lead, or a guessed site that shows the lead's phone,
- *   street or city).
+ *   (entered on the lead, or a guessed site that shows the lead's phone or
+ *   street, or its city plus the lead's name — see site-evidence.ts).
  * - `unverified`: an address was found, but on a guessed site nothing ties
  *   to the lead — it is not saved, only reported.
  * - `unreachable`: the lead's site (or a candidate site) couldn't be read —
@@ -55,7 +55,8 @@ function safeHostname(url: string): string {
  * Finds an address for a lead. For dataleadsell agents, a site that belongs
  * to their brokerage only yields an address that is recognisably the
  * agent's own (see email-policy.ts). A guessed site must also show the
- * lead's phone, street address or city (see site-evidence.ts).
+ * lead's phone or street address, or its city plus a name signal (see
+ * site-evidence.ts).
  */
 async function lookupEmail(
   pipelineId: PipelineId,
@@ -92,7 +93,7 @@ async function lookupEmail(
       evidence: `Found on ${safeHostname(website) || website}, the website saved on this lead.`,
     };
   }
-  const evidence = siteEvidence(website, scan.pages, lead);
+  const evidence = siteEvidence(website, scan.pages, { ...lead, name: person, addressNamesLead: basis === "brokerage" });
   if (!evidence) return { ...NO_LOOKUP, unverified: { website, email } };
   return { ...NO_LOOKUP, website, email, evidence };
 }

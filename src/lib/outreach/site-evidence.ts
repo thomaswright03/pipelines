@@ -6,11 +6,27 @@
 // name — pitching them wastes the lead's one pitch and risks complaints.
 // So an address found on a guessed site is only used when the site also
 // shows something we already know about the lead from Yelp/ADRE: its phone
-// number, its street address, or its city. The evidence found is saved on
-// the lead and shown on its page.
+// number or its street address. A mention of the lead's city alone isn't
+// enough — a chain, a franchise or a same-named business in the same big
+// city passes that — so the city only counts together with a second,
+// independent signal — the lead's distinctive name word(s) in the page's own
+// title, or an address that carries the lead's own name (an agent on their
+// brokerage's site) — on a site that doesn't list other locations. The evidence found is
+// saved on the lead and shown on its page.
+//
+// tests/heuristics-eval.test.ts scores this on a labelled set of guessed
+// sites (tests/corpus/sites.ts).
 import { digitsOnly, formatPhone } from "@/lib/phone";
 
 export type LeadFacts = {
+  /** The lead's name as Yelp/ADRE gave it, for the page-title check. */
+  name?: string | null;
+  /**
+   * The address found is recognisably the lead's own (an agent's name on
+   * their brokerage's site — see email-policy.ts): a name signal like the
+   * page title.
+   */
+  addressNamesLead?: boolean;
   phone: string | null;
   address: string | null;
   city: string | null;
@@ -71,6 +87,48 @@ function showsCity(text: string, city: string): boolean {
   return new RegExp(`\\b${escapeRegExp(c)}\\b`).test(text);
 }
 
+// Words that say what a business is rather than which one it is: seeing
+// "Pizza" in a pizza place's title says nothing about whose site it is.
+const GENERIC_NAME_WORDS = new Set(
+  (
+    "the and of for at by in on llc inc co corp company ltd pllc pc group team services service solutions " +
+    "pizza pizzeria restaurant cafe coffee bar grill kitchen bakery deli market shop store boutique salon spa barber " +
+    "plumbing plumber hvac heating cooling air electric electrical roofing landscaping cleaning construction contractors " +
+    "auto repair dental dentist clinic medical law firm agency studio center centre fitness gym home homes house " +
+    "realty real estate properties property realtor realtors broker brokerage associates partners international " +
+    "llp mortgage insurance tax accounting care pets pet vet veterinary"
+  ).split(" "),
+);
+
+/** "Joe's Pizza LLC" → ["joe"]: the name words that identify this business. */
+function distinctiveNameWords(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/['’]s\b/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3 && !GENERIC_NAME_WORDS.has(w) && !/^\d+$/.test(w));
+}
+
+/** The page's own title (and og:site_name), lower-cased. */
+function pageTitles(html: string): string {
+  const titles = [...html.matchAll(/<title[^>]*>([\s\S]*?)<\/title>/gi)].map((m) => m[1]!);
+  const siteNames = [...html.matchAll(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']*)["']/gi)].map((m) => m[1]!);
+  return [...titles, ...siteNames].join(" ").replace(/&amp;/gi, "&").replace(/&#0?39;|&apos;|’/gi, "'").toLowerCase();
+}
+
+// A site that lists more than one location (a chain, a franchise) can't be
+// tied to one lead by the city alone.
+const MULTI_LOCATION_RE =
+  /\b(?:our\s+locations|all\s+locations|other\s+locations|find\s+a\s+location|choose\s+(?:a|your)\s+location|locations\s+near\s+you|store\s+locator|location\s+finder|franchis(?:e|es|ing|ee|ees)|nationwide)\b/;
+
+function titleNamesLead(html: string, name: string | null | undefined): boolean {
+  if (!name) return false;
+  const words = distinctiveNameWords(name);
+  if (words.length === 0) return false;
+  const title = pageTitles(html).replace(/'s\b/g, "");
+  return words.every((w) => new RegExp(`\\b${escapeRegExp(w)}\\b`).test(title));
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname;
@@ -81,8 +139,9 @@ function hostOf(url: string): string {
 
 /**
  * The strongest evidence, across the pages fetched from `website`, that the
- * site belongs to the lead — or null when none of the lead's phone, street
- * address or city appears on it.
+ * site belongs to the lead — or null when it shows neither the lead's phone
+ * nor street address, and not the city together with the lead's name in the
+ * page title.
  */
 export function siteEvidence(website: string, pages: string[], facts: LeadFacts): string | null {
   if (pages.length === 0) return null;
@@ -96,8 +155,14 @@ export function siteEvidence(website: string, pages: string[], facts: LeadFacts)
   if (facts.address && showsStreet(text, facts.address)) {
     return `Found on ${host}, which shows the lead's street address (${facts.address.split(",")[0]!.trim()}).`;
   }
-  if (facts.city && showsCity(text, facts.city)) {
-    return `Found on ${host}, which mentions the lead's city (${facts.city.trim()}).`;
+  if (facts.city && showsCity(text, facts.city) && !MULTI_LOCATION_RE.test(text)) {
+    const city = facts.city.trim();
+    if (titleNamesLead(html, facts.name)) {
+      return `Found on ${host}, which is titled with the lead's name and mentions the lead's city (${city}), with no other locations listed.`;
+    }
+    if (facts.addressNamesLead) {
+      return `Found on ${host}, which mentions the lead's city (${city}) with no other locations listed; the address carries the lead's own name.`;
+    }
   }
   return null;
 }

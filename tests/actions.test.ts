@@ -263,7 +263,7 @@ describe("Cold Outreach lead actions", () => {
 
     stubFetch({
       [YELP_PREFIX]: () => yelpResponse([{ name: "Mesa Plumbing", phone: "+14805550111", address: "1 Main St" }]),
-      "https://www.mesaplumbing.com": page("Mesa Plumbing, Mesa AZ — hello@mesaplumbing.test"),
+      "https://www.mesaplumbing.com": page("Mesa Plumbing, Mesa AZ — (480) 555-0111 — hello@mesaplumbing.test"),
     });
     const found = await searchLeadsAction({}, form({ city: "Mesa", state: "AZ", businessType: "plumber" }));
     expect(found.message).toMatch(/^Found 1 businesses in Mesa, AZ and added 1 new lead/);

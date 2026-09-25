@@ -3,7 +3,7 @@
 // business or person with a similar name would get the lead's one pitch.
 import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { createLeadsFromCandidates, findEmailForLead, isSameLead, type DiscoveryCandidate } from "@/lib/outreach/discovery";
+import { createLeadsFromCandidates, describeDiscovery, findEmailForLead, isSameLead, type DiscoveryCandidate } from "@/lib/outreach/discovery";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { previewBulkSend } from "@/lib/outreach/send";
 import { siteEvidence } from "@/lib/outreach/site-evidence";
@@ -26,9 +26,25 @@ describe("siteEvidence", () => {
     }
   });
 
-  it("accepts the street address, then the city", () => {
+  it("accepts the street address", () => {
     expect(siteEvidence("https://www.x.com", ["Visit us at 1234 North Central Avenue"], facts)).toMatch(/street address/);
-    expect(siteEvidence("https://www.x.com", ["Proudly serving Phoenix since 1990"], facts)).toMatch(/city \(Phoenix\)/);
+  });
+
+  it("doesn't accept the city alone — a chain or a same-named business in a big city passes that", () => {
+    const joes = { ...facts, name: "Joe's Pizza", phone: "(480) 555-0199" };
+    expect(siteEvidence("https://www.joespizza.com", ["<p>Joe's Pizza — proudly serving Phoenix since 1990</p>"], joes)).toBeNull();
+    expect(siteEvidence("https://www.x.com", ["Proudly serving Phoenix since 1990"], facts)).toBeNull();
+  });
+
+  it("accepts the city with the lead's name in the page title, unless the site lists other locations", () => {
+    const joes = { ...facts, name: "Joe's Pizza", phone: null, address: null };
+    const titled = "<html><head><title>Joe&#39;s Pizza | Phoenix, AZ</title></head><body>Proudly serving Phoenix</body></html>";
+    expect(siteEvidence("https://www.joespizza.com", [titled], joes)).toMatch(/titled with the lead's name and mentions the lead's city \(Phoenix\)/);
+    expect(siteEvidence("https://www.joespizza.com", [titled.replace("Proudly", "Find a location near you · Proudly")], joes)).toBeNull();
+    // "Pizza" alone says what the business is, not which one.
+    expect(siteEvidence("https://www.pizza.com", ["<title>Pizza Phoenix</title>Phoenix"], { ...joes, name: "Pizza Restaurant" })).toBeNull();
+    // The title has to name this lead, not just any business.
+    expect(siteEvidence("https://www.joespizza.com", ["<title>Tony's Pizza</title>Phoenix"], joes)).toBeNull();
   });
 
   it("rejects a site that shows none of them, or a different number", () => {
@@ -49,6 +65,18 @@ describe("discovery only saves addresses from sites that are the lead's", () => 
     expect(result.created).toHaveLength(0);
     expect(result.skipped.unverifiedSite).toBe(1);
     expect(await prisma.lead.count()).toBe(0);
+  });
+
+  it("discards an address from a same-name site that only mentions the lead's city", async () => {
+    stubFetch({
+      "https://www.joespizza.com": page(`Joe's Pizza — the best slice in Phoenix! Call (602) 555-1234. orders@joespizza.test`),
+    });
+
+    const result = await createLeadsFromCandidates("cold-outreach", [joes], ctx);
+
+    expect(result.created).toHaveLength(0);
+    expect(result.skipped.unverifiedSite).toBe(1);
+    expect(describeDiscovery("cold-outreach", "Phoenix, AZ", 1, result)).toMatch(/1 whose guessed website couldn't be confirmed as theirs/);
   });
 
   it("saves the address when the site shows the Yelp phone number, and records why", async () => {
