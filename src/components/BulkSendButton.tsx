@@ -6,8 +6,9 @@ import { previewBulkSendAction, sendBulkChunkAction } from "@/lib/actions/outrea
 import type { BulkPreview } from "@/lib/outreach/send";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import { plural } from "@/lib/format";
+import { bulkSendSummary, runBulkSend, type BulkProgress } from "@/lib/bulk-send-run";
 
-type Progress = { sent: number; skipped: number; failed: number; processed: number; total: number; messages: string[] };
+type Progress = BulkProgress;
 
 type Phase =
   | { kind: "idle" }
@@ -55,64 +56,17 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
 
   async function send(preview: BulkPreview) {
     stopRequested.current = false;
-    let remaining = preview.leadIds;
-    const progress: Progress = { sent: 0, skipped: 0, failed: 0, processed: 0, total: preview.leadIds.length, messages: [] };
-    let stopReason: string | null = null;
-    let consecutiveFailures = 0;
-    setPhase({ kind: "sending", preview, progress: { ...progress }, stopping: false });
-
-    while (remaining.length > 0) {
-      if (stopRequested.current) {
-        stopReason = "You stopped the send.";
-        break;
-      }
-      let chunk;
-      try {
-        chunk = await sendBulkChunkAction(pipeline, remaining, consecutiveFailures);
-      } catch {
-        stopReason = "Lost contact with the server. Leads already emailed are marked Contacted; run the send again to continue.";
-        break;
-      }
-      if (!chunk.ok) {
-        stopReason = chunk.error;
-        break;
-      }
-      const r = chunk.result;
-      consecutiveFailures = r.consecutiveFailures;
-      progress.sent += r.sent;
-      progress.skipped += r.skipped;
-      progress.failed += r.failed;
-      progress.processed += r.processedIds.length;
-      progress.messages.push(...r.messages);
-      const done = new Set(r.processedIds);
-      remaining = remaining.filter((id) => !done.has(id));
-      setPhase((p) => (p.kind === "sending" ? { ...p, progress: { ...progress } } : p));
-
-      if (r.stop === "paused") {
-        stopReason = "Stopped: outbound email was paused.";
-        break;
-      }
-      if (r.stop === "email_service_down") {
-        stopReason = "Stopped: the email service failed three times in a row. Nothing more was sent — try again later.";
-        break;
-      }
-      if (r.processedIds.length === 0) break;
-    }
-
-    const summary =
-      `Sent ${progress.sent} of ${preview.willSend}.` +
-      (progress.skipped ? ` ${plural(progress.skipped, "lead")} skipped.` : "") +
-      (progress.failed ? ` ${plural(progress.failed, "send")} failed.` : "") +
-      (stopReason ? ` ${stopReason}` : "") +
-      (!stopReason && preview.totalEligible > preview.leadIds.length
-        ? ` ${plural(preview.totalEligible - preview.leadIds.length, "more New lead")} can go in the next batch.`
-        : "");
-    setPhase({
-      kind: "done",
-      progress,
-      summary,
-      tone: progress.failed || stopReason ? (progress.sent ? "warning" : "error") : "success",
-    });
+    const initial: Progress = { sent: 0, skipped: 0, failed: 0, processed: 0, total: preview.leadIds.length, messages: [] };
+    setPhase({ kind: "sending", preview, progress: initial, stopping: false });
+    const { progress, stopReason } = await runBulkSend(
+      preview.leadIds,
+      (ids, consecutiveFailures) => sendBulkChunkAction(pipeline, ids, consecutiveFailures),
+      {
+        shouldStop: () => stopRequested.current,
+        onProgress: (p) => setPhase((current) => (current.kind === "sending" ? { ...current, progress: p } : current)),
+      },
+    );
+    setPhase({ kind: "done", progress, ...bulkSendSummary(progress, stopReason, preview) });
     router.refresh();
   }
 

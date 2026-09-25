@@ -7,6 +7,14 @@ import { COLD_CALL_OUTCOMES, COLD_CALL_OUTCOME_LABEL, type ColdCallOutcome } fro
 import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { getTimezoneForState, formatLocalTime } from "@/lib/us-timezones";
 import type { CallDeckCard } from "@/lib/call-deck";
+import {
+  firstUnhandled,
+  readSavedDeck,
+  recordCall,
+  sessionDeckStorage,
+  writeSavedDeck,
+  type LoggedCall,
+} from "@/lib/call-deck-session";
 
 const CLOCK_TICK_MS = 30_000;
 
@@ -35,44 +43,7 @@ const OUTCOME_STYLE: Record<ColdCallOutcome, string> = {
   interested: "border-emerald-600 bg-emerald-600 text-white",
 };
 
-type Logged = { lead: Pick<ColdCallLead, "id" | "name">; outcome: ColdCallOutcome | "skipped" };
-
-// Where the caller is in the deck survives a refresh (per browser tab):
-// the cards already worked this session and what was recorded for each.
-// Browser storage can be missing or throw (private windows, blocked site
-// data), so the deck works without it — it just starts from the top.
-type SavedDeck = { handled: string[]; log: Logged[] };
-
-function storageKey(pipeline: PipelineId) {
-  return `call-deck:${pipeline}`;
-}
-
-function readSaved(pipeline: PipelineId): SavedDeck | null {
-  try {
-    const raw = window.sessionStorage.getItem(storageKey(pipeline));
-    if (!raw) return null;
-    const saved = JSON.parse(raw) as SavedDeck;
-    return Array.isArray(saved.handled) && Array.isArray(saved.log) ? saved : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeSaved(pipeline: PipelineId, saved: SavedDeck | null) {
-  try {
-    if (saved) window.sessionStorage.setItem(storageKey(pipeline), JSON.stringify(saved));
-    else window.sessionStorage.removeItem(storageKey(pipeline));
-  } catch {
-    // Not saved: a refresh starts the deck from the top.
-  }
-}
-
-/** The first card not yet worked this session. */
-function firstUnhandled(leads: ColdCallLead[], handled: string[]): number {
-  const done = new Set(handled);
-  const index = leads.findIndex((lead) => !done.has(lead.id));
-  return index === -1 ? leads.length : index;
-}
+type Logged = LoggedCall;
 
 // One card at a time. The deck is a snapshot taken when the page loaded, so
 // confirming a call (which may move the lead off the list) never shifts
@@ -93,7 +64,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
   // Pick up where this tab left off (after the first render, since the
   // server has no browser storage).
   useEffect(() => {
-    const saved = readSaved(pipeline);
+    const saved = readSavedDeck(sessionDeckStorage(), pipeline);
     if (!saved) return;
     const restore = setTimeout(() => {
       setLog(saved.log);
@@ -104,11 +75,10 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
 
   function next(entry: Logged) {
     // The log holds every card worked this session (restored after a refresh).
-    const nextLog = [...log, { lead: { id: entry.lead.id, name: entry.lead.name }, outcome: entry.outcome }];
-    const handled = nextLog.map((e) => e.lead.id);
-    writeSaved(pipeline, { handled, log: nextLog });
-    setLog(nextLog);
-    setIndex(firstUnhandled(leads, handled));
+    const saved = recordCall(log, entry);
+    writeSavedDeck(sessionDeckStorage(), pipeline, saved);
+    setLog(saved.log);
+    setIndex(firstUnhandled(leads, saved.handled));
     setOutcome(null);
     setNotes("");
     setError(null);
@@ -116,7 +86,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
 
   /** Forgets this session's progress and reloads, so the deck is the current call list. */
   function startOver() {
-    writeSaved(pipeline, null);
+    writeSavedDeck(sessionDeckStorage(), pipeline, null);
     window.location.reload();
   }
 
