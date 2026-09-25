@@ -14,8 +14,15 @@ Two pipelines live here:
 
 Each pipeline has a lead list, a **call deck** for phone follow-up, and **Stats**. Every lead page has
 **Edit details** and **Delete lead…**. **Replies** (`/replies`) shows whether replies are arriving and lists
-replies from addresses that match no lead, so they can be attached to the right one. **Settings**
-(`/settings`) holds the switches that apply to both pipelines and the searchable do-not-email list.
+replies from addresses that match no lead (and bounce notices that name no lead), so they can be attached
+to the right one. **Settings** (`/settings`) holds the switches that apply to both pipelines,
+**Connections** (whether sending, reply delivery, both cron jobs and Yelp are working, with the next step
+when one isn't) and the searchable do-not-email list.
+
+Each call-deck card shows the lead's company or brokerage, city/state with the local time, when the pitch
+was emailed (or "Never emailed"), the latest history entry, and a link that opens the lead page in a new
+tab. The deck keeps its place when the page is refreshed (per browser tab); **Start over** reloads the
+current call list.
 
 The interface is English-only: the one operator and every recipient are in the US, so all strings are
 hard-coded in the components and there is no translation layer. This is the developer's recommendation and
@@ -41,8 +48,11 @@ the bulk send, and the daily cron.
 - **First pitch only to New leads.** The server refuses a send for any other status and says why.
 - **Only addresses tied to the lead.** Discovery guesses a website from the lead's name (Yelp and ADRE
   don't give one). An address found on a guessed site is saved only if that site also shows the lead's
-  phone number, street address or city from Yelp/ADRE (`src/lib/outreach/site-evidence.ts`); otherwise a
-  business or person with a similar name could get the lead's one pitch. The evidence is saved on the lead
+  phone number or street address from Yelp/ADRE, or its city together with a second, independent sign
+  that the site is this lead's — the lead's distinctive name words in the page title, or (for an agent on
+  their brokerage's site) an address carrying the agent's own name — on a site that lists no other
+  locations (`src/lib/outreach/site-evidence.ts`). A mention of the city alone isn't enough: a chain, a
+  franchise or a same-named business in the same city would pass it and get the lead's one pitch. The evidence is saved on the lead
   and shown on its page as **Why this address**. An uncorroborated find is not saved (a manual **Find
   email** reports it, so the operator can check it and enter it by hand).
   - For agents whose only site is their brokerage's, an address there is used only if it names that agent:
@@ -74,6 +84,8 @@ the bulk send, and the daily cron.
   - A reply that isn't an opt-out but reads like a "no" or a complaint ("not interested", "wrong person",
     "how did you get my email", "spam") is not counted as a positive response: the lead keeps its status
     and is flagged **Reply needs a look** with the reason, for the operator to decide.
+  - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see "Reply
+    tracking". An opt-out is still honoured even when it comes from an autoresponder.
   - The words that triggered an opt-out are stored and shown on the lead page.
   - A wrong opt-out can be reversed there with **Remove from do-not-email list**.
 - **Kill switch.** **Settings → Pause all outbound email** stops every send path at its next send. That
@@ -84,8 +96,12 @@ the bulk send, and the daily cron.
   - Sending runs as one server call per email, with live progress and a Stop button, so after **Stop** at
     most the email already in progress goes out.
   - The send stops by itself after three failures in a row.
+- **Two tabs, one lead.** When the same lead is sent from two tabs at once, one email goes out and the
+  other tab says the lead "was just emailed from another tab or send"; the lead is not flagged as a
+  duplicate address.
 - **Email failures are classified.** A send that definitely didn't go out, such as an unreachable server,
-  releases the lead so it can be retried. A connection that dropped mid-send is recorded as "delivery
+  releases the lead so it can be retried. The latest failure is shown in **Settings → Connections** until a
+  later send succeeds. A connection that dropped mid-send is recorded as "delivery
   unknown" and is never retried automatically.
   - SMTP connections time out after 5–10 s.
   - Failures are logged with the lead id.
@@ -145,6 +161,11 @@ hand**.
 The app checks its environment at startup (`src/instrumentation.ts`) and refuses to start, naming whatever is
 missing.
 
+**When the database is down,** every page shows "Can't reach the database right now" with what that
+means (nothing loads or saves; no emails are sent) and a **Try again** button, instead of a generic error.
+`GET /api/health` answers `{"database":"ok"}` (200) or `{"database":"unreachable"}` (503) and can be used
+by an uptime monitor.
+
 ## Tests
 
 ```bash
@@ -171,16 +192,20 @@ What's covered, by file:
 
 | File | Covers |
 | --- | --- |
-| `tests/send.test.ts` | One pitch per address, overlapping sends, crash-after-claim, pause, SMTP failure handling |
+| `tests/send.test.ts` | One pitch per address, overlapping sends (including the same lead from two tabs), crash-after-claim, pause, SMTP failure handling |
 | `tests/inbound.test.ts`, `tests/reply-classifier.test.ts` | Reply and opt-out classification |
+| `tests/auto-mail.test.ts` | Automatic replies (headers, subjects, wording) change nothing but the history and still reach the call deck; bounce notices in Postfix/Gmail/Exchange/DSN form mark the send bounced; unmatched bounces; the Stats reply/opt-out/automatic figures in both pipelines |
+| `tests/call-deck.test.ts` | Call-deck cards (company, place, emailed date, latest history) and an order a saved call doesn't reshuffle |
+| `tests/connections.test.ts` | Settings → Connections: missing replies, failed and overdue runs, failed sends, missing secrets, all green |
+| `tests/db-health.test.ts` | Database-outage detection and `/api/health` |
 | `tests/discovery.test.ts`, `tests/email-finder.test.ts` | Discovery and email lookup |
-| `tests/adre.test.ts` | Resumable ADRE import |
+| `tests/adre.test.ts` | Resumable ADRE import; a roster whose columns changed, or that lists nobody in the county, is reported instead of "succeeding" with zero |
 | `tests/cron.test.ts` | The cron routes |
 | `tests/daily-run.test.ts` | What "businesses to check per run" yields; leftovers emailed by the next run; the 60 s budget (fake clock); skipped leads don't fail a run |
 | `tests/replies.test.ts` | Replies after the stale-contacts move, Lost-lead review flag, Mark replied, duplicate delivery, database outage and retry, stale-contacts race |
 | `tests/stats.test.ts` | Stats, including reply rate and Arizona days |
 | `tests/lead-actions.test.ts` | Stage rules, moves racing a reply, the Settings do-not-email list |
-| `tests/site-evidence.test.ts` | Guessed sites must show the lead's phone/street/city; duplicate detection by name plus phone/address/city |
+| `tests/site-evidence.test.ts` | Guessed sites must show the lead's phone/street, or the city plus the name in the title; duplicate detection by name plus phone/address/city |
 | `tests/lead-edit.test.ts` | Editing (address rules, links to the holder, pitched leads keep their address), deleting, unverified addresses |
 | `tests/unmatched-replies.test.ts` | Replies from unknown addresses: listed, attached to a lead, dismissed; the "no replies lately" warning |
 | `tests/greeting.test.ts` | dataleadsell greets agents by first name; the preview is what's sent |
@@ -188,23 +213,46 @@ What's covered, by file:
 | `tests/actions.test.ts` | Every server action in `src/lib/actions/`: validation, happy path, Yelp and database failures |
 | `tests/review-findings.test.ts` | Plain opt-out phrasings end to end, "needs a look" replies, reply/call history vs. the notes limit, unreachable websites, Find email guards, bouncing after the stale-contacts move, correction counts |
 | `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
-| `tests/heuristics-eval.test.ts` | Precision/recall of the opt-out classifier and the address rule on the labelled sets in `tests/corpus/` (see below) |
+| `tests/heuristics-eval.test.ts` | Precision/recall of every heuristic (opt-outs, needs-a-look, automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
 
 **Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines or
 `src/lib/actions` below 85% (`vitest.config.ts`). Pages and components are exercised by the browser tests.
 
 ### Measuring the reply and address rules
 
-`tests/corpus/replies.ts` (129 labelled replies) and `tests/corpus/addresses.ts` (50 agent/address pairs)
-are kept apart from the unit-test cases. `tests/heuristics-eval.test.ts` prints precision and recall with
-every miss, and fails below its floors (opt-outs: 95% precision and recall; brokerage addresses: 95%
-precision, 90% recall). CI also writes the scores to the run summary.
+`tests/heuristics-eval.test.ts` scores each heuristic on labelled sets kept apart from the unit-test cases
+and prints precision and recall, with every miss, for two splits:
 
-Both sets are **synthetic**, written to resemble real replies and staff directories; the file headers give
-the first-run scores. To make them measure production, add anonymised real cases: export recent replies
-with `SELECT text, "optedOut", "reviewReason" FROM "InboundReply" ORDER BY "receivedAt" DESC LIMIT 200`,
-replace names, addresses, phone numbers and firm names, label each one by reading it, and append it to the
-corpus. Never commit real addresses.
+| Heuristic | Corpus | What a miss costs |
+| --- | --- | --- |
+| Opt-out classifier | `tests/corpus/replies.ts` | Emailing someone who asked us to stop (recall first) |
+| "Needs a look" flag | `tests/corpus/review.ts` | A brush-off counted as a positive reply |
+| Automatic-reply detector | `tests/corpus/auto-mail.ts` | A real reply hidden, or an out-of-office counted as a reply |
+| Bounce detector (and the failed address) | `tests/corpus/auto-mail.ts` | Someone else's send marked bounced (precision first) |
+| Brokerage-site address rule | `tests/corpus/addresses.ts` | Pitching the wrong agent (precision first) |
+| Guessed-site acceptance | `tests/corpus/sites.ts` | Pitching the wrong business (precision first) |
+
+- **dev** — cases the rules were written or fixed against. Optimistic by construction.
+- **held-out** — written separately and scored once as-is; never used when changing a rule. **Quote this
+  score.** A miss there is recorded in the corpus header, not patched. The one exception so far: the first
+  held-out opt-out run missed 4 of 20 opt-outs, and because a missed opt-out means emailing someone who
+  asked us to stop, those cases were moved to dev, the rules fixed, and fresh held-out cases written (see
+  the header of `tests/corpus/replies.ts`).
+
+Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
+even when every unit test passes. CI also writes the scores to the run summary.
+
+Every set is **synthetic**, written to resemble real mail, sites and staff directories. To measure
+production traffic, export recent inbound mail with its anonymised text and the app's decision as a
+*suggested* label:
+
+```bash
+EVAL_EXPORT_DATABASE_URL="<read-only URL or a copy of production>" node scripts/export-eval-cases.mjs 200 > cases.json
+```
+
+The script runs one `SELECT` in a read-only transaction and replaces email addresses, phone numbers, URLs
+and long digit runs. It can't find people's or firms' names in free text: replace those by hand, read and
+correct each label, and add the cases to a **held-out** split. Never commit real addresses or names.
 
 In production, the **Replies** page shows how often the operator corrects the rules (last 90 days):
 opt-outs read from replies and how many were undone, opt-outs the rules missed (a reply later marked opted
@@ -216,7 +264,9 @@ bounced. These are recorded in `OutreachCorrection`.
 two emails after Stop), pause/resume, Enter confirming a send but cancelling a destructive action,
 editing a lead (including the link to the lead holding an address), deleting a lead, attaching an
 unmatched reply, stale messages clearing, per-page tab titles (including "Page not found"), reading a
-Stats bar's date and count by keyboard focus, and the lead list at 375–2560 px. The server uses
+Stats bar's date and count by keyboard focus, the lead list at 375–2560 px, the call-deck card's context
+and its place surviving a refresh, the single empty-list message, the sender address never splitting
+mid-word, and Settings → Connections. The server uses
 `EMAIL_TRANSPORT=outbox` (mail is written to `test-results/e2e-outbox`, never delivered) and its own
 database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelines_e2e`), which
 `e2e/prepare-db.mjs` creates and migrates. It refuses non-local hosts.
@@ -273,9 +323,18 @@ Content-Type: application/json
   "from": "Name <address@example.com>",
   "subject": "Re: …",
   "text": "plain-text body",
-  "messageId": "<the email's Message-ID header>"
+  "messageId": "<the email's Message-ID header>",
+  "headers": { "Auto-Submitted": "auto-replied", "Precedence": "bulk", "X-Failed-Recipients": "…" }
 }
 ```
+
+`headers` is optional: the message's headers as `{ name: value }` (a repeated header may be a list of
+values). The ones the app reads are `Auto-Submitted`, `X-Autoreply`, `X-Autorespond`, `Precedence`,
+`X-Auto-Response-Suppress`, `X-Failed-Recipients` and `Content-Type`; forwarding all of them (or every
+header) is simplest. Without them, automatic replies and bounces are still recognised by subject and
+wording, just less reliably. The Worker should also forward delivery-failure notices (from
+`MAILER-DAEMON`/`postmaster`) that reach the sending address — they are the app's only automatic bounce
+signal.
 
 `messageId` is optional but strongly recommended: it is how a re-delivered reply is recognised. Without it,
 the route treats a reply with the same sender, subject and body (whitespace ignored) within 7 days as the
@@ -283,9 +342,24 @@ same reply.
 
 What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
 
+- **Automatic replies** (out-of-office, vacation and "we got your message" autoresponders — recognised by
+  the headers above, or by subjects like "Automatic reply:"/"Out of Office" and wording like "I am out of
+  the office until…"; `src/lib/outreach/auto-mail.ts`) are added to the lead's History, marked as
+  automatic, and change nothing else. The lead keeps its status, gets no reply time, isn't counted as
+  replied, and still moves to the call deck after 7 days. A real reply later counts as usual; if a person
+  did write one that was read as automatic, **Mark replied** records it. Automatic replies from addresses
+  on no lead are filed away rather than listed on Replies.
+- **Bounce notices** (from `mailer-daemon`/`postmaster`, with delivery-status fields, or a bounce subject
+  plus 5.x.x codes) mark the failed recipient's latest send bounced, with the same rules as **Mark
+  bounced**, and add the notice to the lead's History. One that doesn't name a recipient the app can match
+  is listed on Replies, labelled as a bounce, with **Mark bounced** on the lead you pick instead of
+  **Attach**.
 - A lead that was emailed and is **Contacted**, **Cold call list** or **No phone number** moves to
   **Responded** and its reply time is set. That takes it off the call deck and counts it in the Stats
   page's reply rate, however late the reply arrives.
+- **Stats** use the same definitions in both pipelines: **Replied** counts emailed leads a person replied
+  to, excluding opt-outs and automatic replies; **Opted out** and **Automatic replies** are shown as their
+  own figures; **We replied back** is measured against genuine replies only.
 - A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Reply needs a
   look** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
 - A reply that may be a "no" or a complaint (see "Opt-outs" above) gets a reply time and the same flag,
@@ -313,9 +387,9 @@ nothing half-recorded.
 | Status | Meaning | Worker must |
 |---|---|---|
 | `200` | Recorded, or already recorded (`"duplicate": true`) | Stop. |
-| `400` | The body isn't `{ from, subject, text, messageId }` | Not retry; log it. |
+| `400` | The body isn't `{ from, subject, text, messageId, headers }` | Not retry; log it. |
 | `401` | Wrong or missing token | Not retry; fix the secret. |
-| `503` (or any other 5xx, or no response) | Nothing was recorded, e.g. the database was unreachable | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
+| `503` (or any other 5xx, or no response) | Nothing was recorded. The body is `{ "error", "code", "retry": true }` with `code` `db_unavailable` (the database couldn't be reached) or `internal`; the cause is only in the server log | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
 
 Resending is always safe: a reply is recorded once no matter how many times it is delivered. Cloudflare
 Email Workers don't retry `fetch` on their own, so the Worker needs a retry step, such as a Cloudflare Queue
@@ -379,8 +453,8 @@ entered leads are not affected.
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
 
 1. **Apply the migrations** in this release to production before deploying it — including
-   `20260927090000_history_lookup_retries_reply_review` and `20260927100000_estimated_value_cents`. See
-   "Deploying".
+   `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
+   `20260928090000_inbound_kind` and `20260928100000_send_failure_status` (all additive). See "Deploying".
 2. **Make reply tracking reachable.**
    - In Vercel, open Project Settings → Deployment Protection and enable **Protection Bypass for
      Automation**.
@@ -390,6 +464,12 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
      marked by hand.
    - Update the Worker to send `messageId` and to follow the retry contract in "Reply tracking" (resend
      any 5xx or failed request with backoff for at least 72 hours).
+   - Update the Worker to forward the message's headers as `headers` (at least `Auto-Submitted`,
+     `X-Autoreply`, `X-Autorespond`, `Precedence`, `X-Auto-Response-Suppress`, `X-Failed-Recipients`,
+     `Content-Type`) and to forward delivery-failure notices too, so automatic replies and bounces are
+     recognised reliably.
+   - Once replies arrive, **Settings → Connections** shows "Receiving replies: Working" with the time of the
+     last one.
 3. **Set `EMAIL_TRANSPORT=zeptomail` explicitly** on the Production environment in Vercel. Off Vercel,
    the transport defaults to the local outbox. Setting the value explicitly means production doesn't
    depend on Vercel's system variables being exposed.
@@ -410,12 +490,16 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 - **Email finding is a heuristic.** Neither Yelp nor ADRE gives a business's website, so
   `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly. It uses
   no search engine, because those block automated queries or charge for them. A guessed site is only used
-  when it shows the lead's phone, street or city, which trades some yield for not pitching the wrong
-  business. Expect well under a quarter of results to yield a usable address.
+  when it shows the lead's phone or street, or its city plus the lead's name in the page title (see "How
+  outreach is kept safe"), which trades some yield for not pitching the wrong business. Expect well under a quarter of results to yield a usable address.
   - For agents, an address on a brokerage's site is used only if it names the agent (surname plus first
     name or initial), never a shared inbox like `info@` or `frontdesk@`.
 - **No bounce webhook.** ZeptoMail's SMTP relay gives no message id that a bounce notification could be
-  matched against, so bounces are marked by hand with **Mark bounced**.
+  matched against. Bounce notices that reach the reply inbox are recorded automatically (see "Reply
+  tracking"); any other bounce is marked by hand with **Mark bounced**.
+- **Automatic-reply detection is a heuristic.** Headers are reliable; without them, subject and wording
+  decide. A person's reply worded like an out-of-office ("I'm away until Monday — yes, interested") can be
+  read as automatic: it is still in the lead's History, and **Mark replied** records it.
 - **Where the outreach data comes from is a business/legal question, not a code one.** Both pipelines email
   people found through Yelp's API and Arizona's public ADRE roster, without prior opt-in.
   - What CAN-SPAM explicitly requires is handled: every email includes the mailing address and a working

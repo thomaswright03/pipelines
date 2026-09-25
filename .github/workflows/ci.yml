@@ -61,15 +61,16 @@ jobs:
             console.log(["### Unit/integration test coverage (src/)", "", "| Metric | Covered |", "| --- | --- |", ...rows].join("\n"));
           ' >> "$GITHUB_STEP_SUMMARY"
 
-      # Precision/recall of the opt-out classifier and the brokerage-address
-      # rule on the labelled sets in tests/corpus/ (also part of the run
-      # above, where a drop below the floors fails the build).
+      # Precision/recall of every heuristic (opt-outs, needs-a-look,
+      # automatic replies, bounces, brokerage addresses, guessed sites) on
+      # the development and held-out splits in tests/corpus/ (also part of
+      # the run above, where a drop below any floor fails the build).
       - name: Heuristic scores
         if: always()
         run: |
           npx vitest run tests/heuristics-eval.test.ts --reporter=basic 2>&1 | tee eval.log
           {
-            echo "### Heuristics on the labelled sets"
+            echo "### Heuristics on the labelled sets (quote the held-out split)"
             echo
             grep -E "precision|miss:" eval.log | sed 's/^/    /'
           } >> "$GITHUB_STEP_SUMMARY"
