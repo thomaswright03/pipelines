@@ -8,7 +8,7 @@
 // for every column the shared rules touch, so the only per-pipeline
 // differences are data — which tables, which pitch, which sender, and the
 // one pipeline-specific column (company vs brokerage/county).
-import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import type { AgentLead, Lead, Prisma, PrismaClient } from "@/generated/prisma/client";
 import { buildAgentOutreachEmail } from "@/lib/dataleadsell-email-template";
 import { buildOutreachEmail } from "@/lib/vault-email-template";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
@@ -145,9 +145,11 @@ export type PipelineAdapter = {
   deleteLead(db: Db, id: string): Promise<boolean>;
 };
 
-const SENDABLE = { status: "new", email: { not: null }, sendBlockedReason: null } as const;
-const BLOCKED_NEW = { status: "new", email: { not: null }, sendBlockedReason: { not: null } } as const;
-function needsLookup(retryBefore?: Date) {
+const SENDABLE = { status: "new", email: { not: null }, sendBlockedReason: null } as const satisfies Prisma.LeadWhereInput &
+  Prisma.AgentLeadWhereInput;
+const BLOCKED_NEW = { status: "new", email: { not: null }, sendBlockedReason: { not: null } } as const satisfies Prisma.LeadWhereInput &
+  Prisma.AgentLeadWhereInput;
+function needsLookup(retryBefore?: Date): Prisma.LeadWhereInput & Prisma.AgentLeadWhereInput {
   return {
     email: null,
     emailCheckedAt: null,
@@ -157,31 +159,40 @@ function needsLookup(retryBefore?: Date) {
 
 // The two lead tables (and the two send-log tables) differ only in their
 // pipeline-specific columns, so the factory talks to them through these
-// minimal structural views. Prisma's own delegate types can't be unified
-// across two models, hence the loose argument types here — every call below
-// only uses columns both tables have.
+// minimal structural views. Prisma's delegate types can't be unified across
+// two models (hence the casts where each view is made), but every argument is
+// typed as valid for both models at once — see LeadTable below.
 type Row = Omit<OutreachLead, "company" | "brokerage" | "county"> & {
   company?: string | null;
   brokerage?: string | null;
   county?: string | null;
 };
-type Args = Record<string, unknown>;
+// Every argument must be valid for BOTH models (the intersection of the two
+// Prisma argument types), so a column the shared rules use that one table
+// lacks, or has with a different type, is a compile error.
 type LeadTable = {
-  findUnique(args: Args): Promise<Row | null>;
-  findMany(args: Args): Promise<Row[]>;
-  create(args: Args): Promise<Row>;
-  update(args: Args): Promise<unknown>;
-  updateMany(args: Args): Promise<{ count: number }>;
-  deleteMany(args: Args): Promise<{ count: number }>;
-  count(args: Args): Promise<number>;
+  findUnique(args: Prisma.LeadFindUniqueArgs & Prisma.AgentLeadFindUniqueArgs): Promise<Row | null>;
+  findMany(args: Prisma.LeadFindManyArgs & Prisma.AgentLeadFindManyArgs): Promise<Row[]>;
+  create(args: Prisma.LeadCreateArgs & Prisma.AgentLeadCreateArgs): Promise<Row>;
+  update(args: Prisma.LeadUpdateArgs & Prisma.AgentLeadUpdateArgs): Promise<unknown>;
+  updateMany(args: Prisma.LeadUpdateManyArgs & Prisma.AgentLeadUpdateManyArgs): Promise<{ count: number }>;
+  deleteMany(args: Prisma.LeadDeleteManyArgs & Prisma.AgentLeadDeleteManyArgs): Promise<{ count: number }>;
+  count(args: Prisma.LeadCountArgs & Prisma.AgentLeadCountArgs): Promise<number>;
 };
-type ActivityTable = { create(args: Args): Promise<unknown> };
+type ActivityTable = { create(args: Prisma.LeadActivityCreateArgs & Prisma.AgentLeadActivityCreateArgs): Promise<unknown> };
 type SendLogTable = {
-  create(args: Args): Promise<unknown>;
-  findFirst(args: Args): Promise<{ id: string } | null>;
-  update(args: Args): Promise<unknown>;
-  count(args: Args): Promise<number>;
+  create(args: Prisma.LeadEmailSendLogCreateArgs & Prisma.EmailSendLogCreateArgs): Promise<unknown>;
+  findFirst(args: Prisma.LeadEmailSendLogFindFirstArgs & Prisma.EmailSendLogFindFirstArgs): Promise<{ id: string } | null>;
+  update(args: Prisma.LeadEmailSendLogUpdateArgs & Prisma.EmailSendLogUpdateArgs): Promise<unknown>;
+  count(args: Prisma.LeadEmailSendLogCountArgs & Prisma.EmailSendLogCountArgs): Promise<number>;
 };
+
+// What the adapter reads back must exist, with the same type, on both models.
+type SharedRow = Omit<Row, "company" | "brokerage" | "county">;
+type HasColumns<Model, Columns> =
+  Model extends Pick<Columns, keyof Columns & keyof Model> ? (keyof Columns extends keyof Model ? true : false) : false;
+const rowColumnsExist: [HasColumns<Lead, SharedRow>, HasColumns<AgentLead, SharedRow>] = [true, true];
+void rowColumnsExist;
 
 type PipelineSpec = {
   id: PipelineId;
