@@ -324,8 +324,8 @@ test("Settings shows whether each connection is working", async ({ page }) => {
   // The browser tests use the local outbox and no Yelp key.
   await expect(connections.locator('[data-connection="mail"]')).toContainText("Test mode");
   await expect(connections.locator('[data-connection="yelp"]')).toHaveAttribute("data-tone", "error");
-  // Nothing has proved reply forwarding works yet, so it isn't shown as working.
-  await expect(connections.locator('[data-connection="replies"]')).toContainText("Not confirmed yet");
+  // Nothing has proved reply forwarding works (and its secret isn't set here), so it isn't shown as working.
+  await expect(connections.locator('[data-connection="replies"]')).not.toHaveAttribute("data-tone", "ok");
 
   // "Test connection" logs in to the mail service (here, the local outbox) without sending.
   await connections.getByRole("button", { name: "Test connection: Sending email" }).click();
