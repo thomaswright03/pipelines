@@ -26,7 +26,8 @@ const PARKED_DOMAIN_MARKERS = [
   "domain parking",
 ];
 
-function splitPersonAndBrokerage(raw: string): { person: string; brokerage: string | null } {
+/** "Jane Doe - Keller Williams" → person "Jane Doe", brokerage "Keller Williams". */
+export function splitPersonAndBrokerage(raw: string): { person: string; brokerage: string | null } {
   for (const sep of NAME_SEPARATORS) {
     const idx = raw.indexOf(sep);
     if (idx > 0) {
@@ -61,16 +62,16 @@ function pickSignificantWord(name: string): string | null {
   return words.reduce((longest, w) => (w.length > longest.length ? w : longest));
 }
 
-async function checkCandidate(url: string, significantWord: string): Promise<boolean> {
+async function checkCandidate(url: string, significantWord: string, outer?: AbortSignal): Promise<boolean> {
+  if (outer?.aborted) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: outer ? AbortSignal.any([controller.signal, outer]) : controller.signal,
       redirect: "follow",
       headers: { "User-Agent": "Mozilla/5.0 (compatible; PipelinesOutreachBot/1.0)" },
     });
-    clearTimeout(timer);
     if (!res.ok) return false;
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("html")) return false;
@@ -80,8 +81,18 @@ async function checkCandidate(url: string, significantWord: string): Promise<boo
     return html.includes(significantWord);
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
+
+/**
+ * A guessed site, and whether it was guessed from the brokerage's name
+ * (so it's the office's site, not the person's) or from the lead's own
+ * name. Callers use `basedOn` to avoid pitching an individual agent through
+ * their brokerage's shared inbox.
+ */
+export type WebsiteGuess = { url: string; basedOn: "brokerage" | "name" };
 
 /**
  * Tries a handful of plausible domains for a business and returns the
@@ -90,26 +101,38 @@ async function checkCandidate(url: string, significantWord: string): Promise<boo
  * nothing plausible turns up — callers should treat that as "no website
  * found," same as if Yelp/ADRE had returned one that led nowhere.
  */
-export async function guessWebsiteForBusiness(name: string, brokerage?: string | null): Promise<string | null> {
-  const { person, brokerage: splitBrokerage } = splitPersonAndBrokerage(name);
-  const brokerageName = (brokerage || splitBrokerage)?.trim() || null;
+export async function guessWebsiteForBusiness(
+  name: string,
+  options: { brokerage?: string | null; splitPersonName?: boolean; signal?: AbortSignal } = {},
+): Promise<WebsiteGuess | null> {
+  // Only agent listings follow the "Person - Brokerage" convention; a
+  // business called "Joe's Pizza - Downtown" isn't a person at "Downtown".
+  const { person, brokerage: splitBrokerage } = options.splitPersonName
+    ? splitPersonAndBrokerage(name)
+    : { person: name, brokerage: null };
+  const brokerageName = (options.brokerage || splitBrokerage)?.trim() || null;
 
-  const nameCandidates = brokerageName ? [brokerageName, person] : [name];
+  const nameCandidates: { name: string; basedOn: WebsiteGuess["basedOn"] }[] = brokerageName
+    ? [
+        { name: brokerageName, basedOn: "brokerage" },
+        { name: person, basedOn: "name" },
+      ]
+    : [{ name, basedOn: "name" }];
 
   const tried = new Set<string>();
   let attempts = 0;
-  for (const candidateName of nameCandidates) {
-    const significantWord = pickSignificantWord(candidateName);
+  for (const candidate of nameCandidates) {
+    const significantWord = pickSignificantWord(candidate.name);
     if (!significantWord) continue;
 
-    for (const slug of buildSlugCandidates(candidateName)) {
+    for (const slug of buildSlugCandidates(candidate.name)) {
       if (attempts >= MAX_ATTEMPTS) return null;
       const url = `https://www.${slug}.com`;
       if (tried.has(url)) continue;
       tried.add(url);
       attempts++;
 
-      if (await checkCandidate(url, significantWord)) return url;
+      if (await checkCandidate(url, significantWord, options.signal)) return { url, basedOn: candidate.basedOn };
     }
   }
   return null;
