@@ -172,19 +172,49 @@ Authorization: Bearer $EMAIL_INBOUND_SECRET
 x-vercel-protection-bypass: <Vercel "Protection Bypass for Automation" secret>
 Content-Type: application/json
 
-{ "from": "Name <address@example.com>", "subject": "Re: …", "text": "plain-text body" }
+{
+  "from": "Name <address@example.com>",
+  "subject": "Re: …",
+  "text": "plain-text body",
+  "messageId": "<the email's Message-ID header>"
+}
 ```
 
-The route matches the sender to leads in both pipelines, moves Contacted leads to Responded, and logs the
-reply's new text on the lead. A genuine opt-out also goes on the do-not-email list, with its evidence.
+`messageId` is optional but strongly recommended: it is how a re-delivered reply is recognised. Without it,
+the route treats a reply with the same sender, subject and body (whitespace ignored) within 7 days as the
+same reply.
 
-The route's responses:
+What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
 
-- A missing or wrong token gets `401`.
-- A malformed body gets `400` with the expected shape.
+- A lead that was emailed and is **Contacted**, **Cold call list** or **Contactless list** moves to
+  **Responded** and its reply time is set. That takes it off the call deck and counts it in Data Central's
+  reply rate, however late the reply arrives.
+- A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Replied — needs
+  review** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
+- A genuine opt-out goes on the do-not-email list with its evidence, whatever the lead's status, and a lead
+  that was being worked (Contacted, Responded, on the call deck) moves to Lost (Not interested in
+  dataleadsell). Customers keep their status.
+- The reply's new text is logged on the lead either way.
 
-Replies that don't reach the webhook can be recorded by hand from the lead page with **Mark replied**,
-**Mark bounced** or **Mark opted out**.
+The reply, its effects and a record of it are written in one database transaction, so a failure leaves
+nothing half-recorded.
+
+**Retry contract for the Worker.** Every response body includes `"retry": true | false`.
+
+| Status | Meaning | Worker must |
+|---|---|---|
+| `200` | Recorded, or already recorded (`"duplicate": true`) | Stop. |
+| `400` | The body isn't `{ from, subject, text, messageId }` | Not retry; log it. |
+| `401` | Wrong or missing token | Not retry; fix the secret. |
+| `503` (or any other 5xx, or no response) | Nothing was recorded, e.g. the database was unreachable | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
+
+Resending is always safe: a reply is recorded once no matter how many times it is delivered. Cloudflare
+Email Workers don't retry `fetch` on their own, so the Worker needs a retry step, such as a Cloudflare Queue
+with retries, or rejecting the message so the sending server retries it later.
+
+Replies that don't reach the route can be recorded by hand from the lead page with **Mark replied** (offered
+for Contacted, Cold call list and Contactless list leads that were emailed), **Mark bounced** or **Mark opted
+out**.
 
 ## Deploying
 
@@ -236,6 +266,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
      Bearer token.
    - Until then, Vercel's SSO wall answers the Worker with its own 401, and replies and opt-outs must be
      marked by hand.
+   - Update the Worker to send `messageId` and to follow the retry contract in "Reply tracking" (resend
+     any 5xx or failed request with backoff for at least 72 hours).
 3. **Set `EMAIL_TRANSPORT=zeptomail` explicitly** on the Production environment in Vercel. Off Vercel,
    the transport defaults to the local outbox. Setting the value explicitly means production doesn't
    depend on Vercel's system variables being exposed.

@@ -144,6 +144,20 @@ export function isBackwardMove(from: string, to: string): boolean {
 // marketing email doesn't make a client "lost".
 export const CUSTOMER_STATUSES: readonly string[] = ["working_for", "paying_client", "subscribed"];
 
+// --- Replies (both pipelines) ---
+// A genuine reply from a lead that was emailed moves it to Responded from
+// these statuses — including after the stale-contacts job moved it to
+// phone outreach. "Mark replied" on the lead page is offered for the same.
+export const REPLY_MOVES_TO_RESPONDED: readonly string[] = ["contacted", "cold_call_list", "contactless_list"];
+// A reply to a lead in one of these keeps its status but is flagged
+// "Replied — needs review", since it may have got there without a decision
+// about this prospect (a bounce, an old call outcome).
+export const REPLY_FLAGS_FOR_REVIEW: readonly string[] = ["lost", "not_interested"];
+
+export function canMarkReplied(status: string): boolean {
+  return REPLY_MOVES_TO_RESPONDED.includes(status);
+}
+
 // --- Cold-call outcomes (both pipelines' call decks) ---
 export const COLD_CALL_OUTCOMES = ["no_answer", "invalid_number", "not_interested", "interested"] as const;
 export type ColdCallOutcome = (typeof COLD_CALL_OUTCOMES)[number];

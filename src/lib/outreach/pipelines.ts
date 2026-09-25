@@ -44,6 +44,7 @@ export type LeadUpdate = {
   callOutcome?: string | null;
   notes?: string | null;
   starred?: boolean;
+  replyNeedsReview?: boolean;
 };
 
 export type NewLeadData = {
@@ -74,6 +75,12 @@ export type PipelineAdapter = {
   findNamesTaken(db: Db, names: string[]): Promise<Set<string>>;
   createLead(db: Db, data: NewLeadData): Promise<OutreachLead>;
   update(db: Db, id: string, data: LeadUpdate): Promise<void>;
+  /**
+   * Applies `data` only if the lead is still in one of `statuses` (so an
+   * automated move can't overwrite a change made a moment earlier).
+   * Returns whether it applied.
+   */
+  updateIfStatus(db: Db, id: string, statuses: readonly string[], data: LeadUpdate): Promise<boolean>;
   /** Moves a lead new → contacted iff it is still new with this address. */
   claimForSend(db: Db, leadId: string, email: string, at: Date): Promise<boolean>;
   /** Undoes claimForSend after a send that definitely didn't go out. */
@@ -195,6 +202,10 @@ const dataleadsell: PipelineAdapter = {
   async update(db, id, data) {
     await db.agentLead.update({ where: { id }, data });
   },
+  async updateIfStatus(db, id, statuses, data) {
+    const { count } = await db.agentLead.updateMany({ where: { id, status: { in: [...statuses] } }, data });
+    return count === 1;
+  },
   async claimForSend(db, leadId, email, at) {
     const { count } = await db.agentLead.updateMany({
       where: { id: leadId, status: "new", email, sendBlockedReason: null },
@@ -288,6 +299,10 @@ const coldOutreach: PipelineAdapter = {
   },
   async update(db, id, data) {
     await db.lead.update({ where: { id }, data });
+  },
+  async updateIfStatus(db, id, statuses, data) {
+    const { count } = await db.lead.updateMany({ where: { id, status: { in: [...statuses] } }, data });
+    return count === 1;
   },
   async claimForSend(db, leadId, email, at) {
     const { count } = await db.lead.updateMany({

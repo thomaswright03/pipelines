@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  dismissReplyReviewAction,
   findLeadEmailAction,
   markBouncedAction,
   markOptedOutAction,
@@ -12,7 +13,7 @@ import {
   setOurReplyAction,
   updateLeadStatusAction,
 } from "@/lib/actions/outreach";
-import { allowedTransitions, isBackwardMove, statusLabel } from "@/lib/lead-status";
+import { allowedTransitions, canMarkReplied, isBackwardMove, statusLabel } from "@/lib/lead-status";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
@@ -28,6 +29,7 @@ export type LeadActionsLead = {
   emailed: boolean;
   replied: boolean;
   ourReplied: boolean;
+  replyNeedsReview: boolean;
 };
 
 export type LeadSuppression = {
@@ -151,6 +153,22 @@ export default function LeadActions({
           </h2>
           <StatusBadge status={lead.status} />
         </div>
+        {lead.replyNeedsReview && (
+          <div className="notice-warning flex flex-col gap-2">
+            <p>
+              <strong>Replied — needs review.</strong> A reply arrived while this lead was {statusLabel(lead.status)}. Read it on
+              this page, then move the lead (for example back to Responded) or keep it as it is.
+            </p>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => run(() => dismissReplyReviewAction(pipeline, lead.id))}
+              className="btn-secondary self-start"
+            >
+              Keep as {statusLabel(lead.status)}
+            </button>
+          </div>
+        )}
         {moves.length > 0 ? (
           <label className="field-label">
             Move to…
@@ -228,7 +246,7 @@ export default function LeadActions({
           </p>
         )}
 
-        {lead.status === "contacted" && (
+        {canMarkReplied(lead.status) && (lead.status === "contacted" || lead.emailed) && (
           <button type="button" disabled={isPending} onClick={() => run(() => markRepliedAction(pipeline, lead.id))} className="btn-secondary">
             Mark replied
           </button>

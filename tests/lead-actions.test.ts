@@ -59,7 +59,7 @@ describe("status changes", () => {
     const lead = await makeColdLead({ name: "Yara", status: "new" });
     expect(await markRepliedAction("cold-outreach", lead.id)).toEqual({
       ok: false,
-      error: "Only a Contacted lead can be marked replied — Yara is New.",
+      error: "Yara is New — only a lead waiting on a reply can be marked replied.",
     });
     expect(await setOurReplyAction("cold-outreach", lead.id, true)).toEqual({
       ok: false,

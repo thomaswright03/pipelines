@@ -17,9 +17,11 @@ export async function routeStaleContacts(now: Date = new Date()): Promise<StaleC
   for (const pipeline of ALL_PIPELINES) {
     const counts = { coldCall: 0, contactless: 0 };
     for (const lead of await pipeline.listStaleContacted(prisma, cutoff)) {
+      // Conditional on the lead still being Contacted: one that replied or
+      // was moved by hand since the list was read is left alone.
       const status = await routeToPhoneOutreach(pipeline.id, lead);
       if (status === "cold_call_list") counts.coldCall++;
-      else counts.contactless++;
+      else if (status === "contactless_list") counts.contactless++;
     }
     result[pipeline.id] = counts;
   }

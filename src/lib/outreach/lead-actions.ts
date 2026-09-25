@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getSuppression, suppressEmail, unsuppressEmail } from "@/lib/email-suppression";
 import {
   allowedTransitions,
+  canMarkReplied,
   COLD_CALL_OUTCOMES,
   coldCallResult,
   CUSTOMER_STATUSES,
@@ -43,21 +44,39 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
     if (!(await pipeline.hasBeenEmailed(prisma, leadId))) {
       return refuse(`${lead.name} was never emailed, so they can't go back to Contacted.`);
     }
-    await pipeline.update(prisma, leadId, { status: to, repliedAt: null, ourReplyAt: null });
+    await pipeline.update(prisma, leadId, { status: to, repliedAt: null, ourReplyAt: null, replyNeedsReview: false });
   } else {
-    await pipeline.update(prisma, leadId, { status: to });
+    // A deliberate move is the operator's review of any pending reply.
+    await pipeline.update(prisma, leadId, { status: to, replyNeedsReview: false });
   }
   return ok(`Moved ${lead.name} from ${statusLabel(lead.status)} to ${statusLabel(to)}.`);
 }
 
 export async function markReplied(pipelineId: PipelineId, leadId: string): Promise<ActionResult> {
+  const pipeline = getPipeline(pipelineId);
   const lead = await loadLead(pipelineId, leadId);
   if (!lead) return NOT_FOUND;
-  if (lead.status !== "contacted") {
-    return refuse(`Only a Contacted lead can be marked replied — ${lead.name} is ${statusLabel(lead.status)}.`);
+  if (!canMarkReplied(lead.status)) {
+    return refuse(`${lead.name} is ${statusLabel(lead.status)} — only a lead waiting on a reply can be marked replied.`);
   }
-  await getPipeline(pipelineId).update(prisma, leadId, { repliedAt: new Date(), status: "responded" });
-  return ok(`Marked ${lead.name} as replied — moved to Responded.`);
+  if (lead.status !== "contacted" && !(await pipeline.hasBeenEmailed(prisma, leadId))) {
+    return refuse(`${lead.name} was never emailed, so there's no email reply to record.`);
+  }
+  const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], {
+    repliedAt: lead.repliedAt ?? new Date(),
+    status: "responded",
+    replyNeedsReview: false,
+  });
+  if (!moved) return refuse(`${lead.name} changed status a moment ago — reload the page and try again.`);
+  return ok(`Marked ${lead.name} as replied — moved from ${statusLabel(lead.status)} to Responded.`);
+}
+
+/** Clears the "Replied — needs review" flag once the operator has looked. */
+export async function dismissReplyReview(pipelineId: PipelineId, leadId: string): Promise<ActionResult> {
+  const lead = await loadLead(pipelineId, leadId);
+  if (!lead) return NOT_FOUND;
+  await getPipeline(pipelineId).update(prisma, leadId, { replyNeedsReview: false });
+  return ok(`Marked the reply from ${lead.name} as reviewed — they stay ${statusLabel(lead.status)}.`);
 }
 
 export async function markBounced(pipelineId: PipelineId, leadId: string): Promise<ActionResult> {

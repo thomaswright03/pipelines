@@ -7,7 +7,6 @@ import VaultActivityLog from "@/components/VaultActivityLog";
 import { DetailField, EmailPreview, LedgerNotice, SendHistory } from "@/components/LeadDetailParts";
 import { buildOutreachEmail } from "@/lib/vault-email-template";
 import { loadLeadContext } from "@/lib/lead-page";
-import { canUseMailApp } from "@/lib/mail-app";
 import { formatDate, formatDateTime, toZonedInputValue } from "@/lib/time";
 import { formatCurrency } from "@/lib/format";
 import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
@@ -88,12 +87,12 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
               emailed: lead.emailLogs.length > 0,
               replied: lead.repliedAt !== null,
               ourReplied: lead.ourReplyAt !== null,
+              replyNeedsReview: lead.replyNeedsReview,
             }}
           />
           <ColdOutreachStagePanel
             lead={{ id: lead.id, name: lead.name, status: lead.status, email: lead.email, replied: lead.repliedAt !== null }}
             appointmentInputValue={lead.appointmentAt ? toZonedInputValue(lead.appointmentAt) : ""}
-            canUseMailApp={canUseMailApp()}
           />
         </div>
       </div>

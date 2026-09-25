@@ -94,8 +94,31 @@ model PipelineRun {
   summary    String?
   // Per-lead failure reasons, one per line.
   errors     String?
+  // What a daily Cold Outreach run actually did, shown beside its settings:
+  // Yelp businesses checked, new leads saved with an address, emails sent.
+  businessesChecked Int?
+  leadsFound        Int?
+  emailsSent        Int?
 
   @@index([pipeline, kind, startedAt])
+}
+
+// Every inbound reply the email Worker delivered, recorded in the same
+// transaction as its effects (reply time, status, opt-out). A re-delivery
+// of the same reply finds its row here and changes nothing again.
+model InboundReply {
+  id         String   @id @default(cuid())
+  // "mid:<Message-ID>" when the Worker sends one, otherwise
+  // "hash:<sha256 of sender, subject and body>" (matched within a window).
+  dedupeKey  String
+  fromEmail  String
+  subject    String?
+  optedOut   Boolean
+  // "pipeline:leadId" for each lead the reply was recorded on.
+  matched    String[]
+  receivedAt DateTime @default(now())
+
+  @@index([dedupeKey, receivedAt])
 }
 
 // Daily-automation settings per pipeline, editable from that pipeline's
@@ -141,6 +164,10 @@ model AgentLead {
   lastTextedAt      DateTime? // unused (SMS was never built) — drop in a follow-up migration, see README
   repliedAt         DateTime?
   ourReplyAt        DateTime?
+  // A reply arrived while the lead was in a status a reply doesn't move it
+  // out of automatically (Lost, Not interested). Shown as "Replied — needs
+  // review" until the operator moves the lead or dismisses it.
+  replyNeedsReview  Boolean   @default(false)
   notes             String?
   nextFollowUpDate  DateTime? // unused — drop in a follow-up migration, see README
   createdAt         DateTime  @default(now())
@@ -233,6 +260,7 @@ model Lead {
   lastEmailedAt     DateTime?
   repliedAt         DateTime? // a real reply was detected (inbound webhook or "Mark replied")
   ourReplyAt        DateTime? // we replied back — always manual
+  replyNeedsReview  Boolean   @default(false) // see AgentLead.replyNeedsReview
   estimatedValue    Float?
   notes             String?
   nextFollowUpDate  DateTime? // unused — drop in a follow-up migration, see README

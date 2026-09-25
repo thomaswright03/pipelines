@@ -6,7 +6,6 @@ import {
   markLeadLostAction,
   markResponseAsNonDeliveryAction,
   scheduleAppointmentAction,
-  viewLeadEmailThreadAction,
 } from "@/lib/actions/vault-pipeline";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { APP_TIME_ZONE_LABEL } from "@/lib/time";
@@ -24,17 +23,14 @@ const LOST_REASONS = [
 const APPOINTMENT_FROM = ["contacted", "responded", "cold_call_list", "appointment_set"];
 
 // Cold Outreach–only stage actions: appointments, Lost with a reason, the
-// "that reply was really a bounce" correction, and (on the owner's Mac
-// only) opening the thread in Mail.
+// "that reply was really a bounce" correction.
 export default function ColdOutreachStagePanel({
   lead,
   appointmentInputValue,
-  canUseMailApp,
 }: {
   lead: { id: string; name: string; status: string; email: string | null; replied: boolean };
   /** The current appointment as a datetime-local value in the app's zone, or "". */
   appointmentInputValue: string;
-  canUseMailApp: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -80,8 +76,7 @@ export default function ColdOutreachStagePanel({
 
   const canAppoint = APPOINTMENT_FROM.includes(lead.status);
   const canCorrectReply = lead.status === "responded" && lead.replied;
-  const showMail = canUseMailApp && Boolean(lead.email);
-  if (!canAppoint && lead.status === "lost" && !canCorrectReply && !showMail && !feedback) return null;
+  if (!canAppoint && lead.status === "lost" && !canCorrectReply && !feedback) return null;
 
   return (
     <section aria-labelledby="stage-heading" className="card flex flex-col gap-3 p-4">
@@ -147,11 +142,6 @@ export default function ColdOutreachStagePanel({
         </button>
       )}
 
-      {showMail && (
-        <button type="button" disabled={isPending} onClick={() => run(() => viewLeadEmailThreadAction(lead.id))} className="btn-ghost">
-          Open latest message in Mail
-        </button>
-      )}
 
       <ActionMessage feedback={feedback} />
     </section>

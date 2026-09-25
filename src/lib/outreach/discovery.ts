@@ -194,14 +194,19 @@ export async function createLeadsFromCandidates(
 
 // --- Email lookup for leads that already exist ----------------------------
 
-/** Moves a lead whose email channel didn't pan out to phone outreach. */
+/**
+ * Moves a lead whose email channel didn't pan out to phone outreach — only
+ * if it is still in the status it was read in (`from`), so a reply or a
+ * manual change that landed in between is never overwritten. Returns the
+ * list it moved to, or null if the lead had already moved on.
+ */
 export async function routeToPhoneOutreach(
   pipelineId: PipelineId,
-  lead: Pick<OutreachLead, "id" | "phone">,
-): Promise<"cold_call_list" | "contactless_list"> {
+  lead: Pick<OutreachLead, "id" | "phone" | "status">,
+): Promise<"cold_call_list" | "contactless_list" | null> {
   const status = lead.phone ? "cold_call_list" : "contactless_list";
-  await getPipeline(pipelineId).update(prisma, lead.id, { status });
-  return status;
+  const moved = await getPipeline(pipelineId).updateIfStatus(prisma, lead.id, [lead.status], { status });
+  return moved ? status : null;
 }
 
 export type FindEmailOutcome =

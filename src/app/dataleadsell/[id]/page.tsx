@@ -72,6 +72,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
               emailed: lead.emailLogs.length > 0,
               replied: lead.repliedAt !== null,
               ourReplied: lead.ourReplyAt !== null,
+              replyNeedsReview: lead.replyNeedsReview,
             }}
           />
         </div>

@@ -20,6 +20,7 @@ import { findEmailForLead, findEmailsChunk, type BulkFindResult } from "@/lib/ou
 import {
   changeStatus,
   confirmColdCall,
+  dismissReplyReview,
   markBounced,
   markOptedOut,
   markReplied,
@@ -96,6 +97,10 @@ export async function updateLeadStatusAction(pipeline: string, leadId: string, s
 
 export async function markRepliedAction(pipeline: string, leadId: string): Promise<ActionResult> {
   return guarded("markReplied", pipeline, leadId, (p) => markReplied(p, leadId));
+}
+
+export async function dismissReplyReviewAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("dismissReplyReview", pipeline, leadId, (p) => dismissReplyReview(p, leadId));
 }
 
 export async function markBouncedAction(pipeline: string, leadId: string): Promise<ActionResult> {

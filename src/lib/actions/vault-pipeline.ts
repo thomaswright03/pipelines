@@ -9,11 +9,9 @@ import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { normalizeState } from "@/lib/us-states";
-import { revealLatestMessageInMailApp, canUseMailApp } from "@/lib/mail-app";
 import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
-import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { parseZonedInputValue, formatDateTime } from "@/lib/time";
 import { statusLabel, CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 import {
@@ -219,27 +217,15 @@ export async function markResponseAsNonDeliveryAction(leadId: string): Promise<A
     await prisma.lead.update({ where: { id: leadId }, data: { repliedAt: null, ourReplyAt: null } });
     const status = await routeToPhoneOutreach("cold-outreach", lead);
     revalidate(leadId);
-    return { ok: true, message: `Recorded the bounce for ${lead.name} — moved to the ${statusLabel(status)}.` };
+    return {
+      ok: true,
+      message: status
+        ? `Recorded the bounce for ${lead.name} — moved to the ${statusLabel(status)}.`
+        : `Recorded the bounce for ${lead.name}. Their status changed meanwhile, so it was left as it is.`,
+    };
   } catch (err) {
     logError("action.markResponseAsNonDelivery", err, { leadId });
     return { ok: false, error: UNEXPECTED };
-  }
-}
-
-export async function viewLeadEmailThreadAction(leadId: string): Promise<ActionResult> {
-  if (!canUseMailApp()) {
-    return { ok: false, error: "Opening Mail only works when the app runs on your Mac, not on the deployed site." };
-  }
-  try {
-    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { email: true, name: true } });
-    if (!lead?.email) return { ok: false, error: "This lead has no email address." };
-    const found = await revealLatestMessageInMailApp(VAULT_PIPELINE_SENDER_EMAIL, lead.email);
-    return found
-      ? { ok: true, message: `Opened the latest message from ${lead.name} in Mail.` }
-      : { ok: false, error: `No message from ${lead.email} was found in Mail.` };
-  } catch (err) {
-    logError("action.viewLeadEmailThread", err, { leadId });
-    return { ok: false, error: "Mail couldn't be opened — is Mail.app set up with the sending account?" };
   }
 }
 
