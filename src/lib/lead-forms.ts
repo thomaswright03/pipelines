@@ -119,4 +119,6 @@ export type FormState<T> = {
   ok?: boolean;
   error?: string;
   fieldErrors?: FieldErrors<T>;
+  /** A link shown under a field's error, e.g. to the lead that already has this address. */
+  fieldLinks?: Partial<Record<keyof T, { href: string; label: string }>>;
 };

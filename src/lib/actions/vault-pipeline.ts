@@ -13,7 +13,7 @@ import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { parseZonedInputValue, formatDateTime } from "@/lib/time";
-import { statusLabel, CALL_OUTCOME_LABEL } from "@/lib/lead-status";
+import { allowedTransitions, APPOINTMENT_FROM, statusLabel, CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 import {
   coldOutreachLeadSchema,
   fieldErrorsOf,
@@ -22,7 +22,8 @@ import {
   type ColdOutreachLeadInput,
   type FormState,
 } from "@/lib/lead-forms";
-import { createLeadsFromCandidates, describeAddressConflict, routeToPhoneOutreach } from "@/lib/outreach/discovery";
+import { createLeadsFromCandidates, describeDiscovery, routeToPhoneOutreach } from "@/lib/outreach/discovery";
+import { checkAddressForLead, editLead, enteredByHandEvidence } from "@/lib/outreach/lead-edit";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
@@ -36,10 +37,27 @@ function revalidate(leadId?: string) {
 }
 
 const UNEXPECTED = "Something went wrong saving that — nothing was changed. Try again in a moment.";
+const CHANGED_MEANWHILE = (name: string) =>
+  `${name} changed status a moment ago (a reply or an automatic move) — reload the page to see it, then try again.`;
 
-// --- Manual entry ---
+// --- Manual entry and editing ---
 
 export type LeadFormState = FormState<ColdOutreachLeadInput> & { leadId?: string };
+
+function coldOutreachColumns(d: ColdOutreachLeadInput & { name: string }) {
+  return {
+    name: d.name,
+    company: d.company || null,
+    phone: normalizePhone(d.phone),
+    address: d.address || null,
+    city: d.city || null,
+    state: normalizeState(d.state ?? ""),
+    website: normalizeWebsite(d.website ?? ""),
+    source: d.source || "Manual entry",
+    estimatedValue: d.estimatedValue ? parseMoney(d.estimatedValue) : null,
+    notes: d.notes || null,
+  };
+}
 
 export async function createLeadAction(input: ColdOutreachLeadInput): Promise<LeadFormState> {
   const parsed = coldOutreachLeadSchema.safeParse(input);
@@ -51,28 +69,17 @@ export async function createLeadAction(input: ColdOutreachLeadInput): Promise<Le
 
   try {
     if (email) {
-      const conflict = await describeAddressConflict("cold-outreach", email);
-      if (conflict) {
+      const problem = await checkAddressForLead("cold-outreach", email);
+      if (problem) {
         return {
-          error: "This email is already in use.",
-          fieldErrors: { email: `${conflict} — each address gets one pitch. Edit that lead instead.` },
+          error: "This email can't be used.",
+          fieldErrors: { email: problem.message },
+          ...(problem.link ? { fieldLinks: { email: problem.link } } : {}),
         };
       }
     }
     const lead = await prisma.lead.create({
-      data: {
-        name: d.name,
-        company: d.company || null,
-        email,
-        phone: normalizePhone(d.phone),
-        address: d.address || null,
-        city: d.city || null,
-        state: normalizeState(d.state),
-        website: normalizeWebsite(d.website),
-        source: d.source || "Manual entry",
-        estimatedValue: d.estimatedValue ? parseMoney(d.estimatedValue) : null,
-        notes: d.notes || null,
-      },
+      data: { ...coldOutreachColumns(d), email, emailEvidence: email ? enteredByHandEvidence() : null },
     });
     revalidate();
     return { ok: true, leadId: lead.id };
@@ -82,13 +89,38 @@ export async function createLeadAction(input: ColdOutreachLeadInput): Promise<Le
   }
 }
 
+export async function updateLeadAction(leadId: string, input: ColdOutreachLeadInput): Promise<LeadFormState> {
+  const parsed = coldOutreachLeadSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
+  }
+  const d = parsed.data;
+  try {
+    const outcome = await editLead("cold-outreach", leadId, d.email || null, coldOutreachColumns(d));
+    if (!outcome.ok) {
+      if (outcome.field !== "email") return { error: outcome.error };
+      return {
+        error: "This email can't be used.",
+        fieldErrors: { email: outcome.error },
+        ...(outcome.link ? { fieldLinks: { email: outcome.link } } : {}),
+      };
+    }
+    revalidate(leadId);
+    return { ok: true, leadId };
+  } catch (err) {
+    logError("action.updateLead", err, { leadId });
+    return { error: UNEXPECTED };
+  }
+}
+
 // --- Discovery ---
 
 export type LeadSearchState = { error?: string; message?: string };
 
-// Leaves room under the 60 s function limit for the Yelp call (≤10 s) and
-// the last lookup in flight (≤15 s).
-const RUN_TIME_BUDGET_MS = 25 * 1000;
+// Every lookup ends by this long after the click (one in flight is cut
+// off), which leaves room under the 60 s function limit for saving and the
+// response. The Yelp call (≤10 s) is inside this budget.
+const RUN_TIME_BUDGET_MS = 45 * 1000;
 const MAX_PER_RUN = 50;
 
 const searchSchema = z.object({
@@ -99,19 +131,6 @@ const searchSchema = z.object({
     .refine((v) => normalizeState(v) !== null, "State must be a US state, like UT or Utah"),
   businessType: z.string().trim().max(80, "Business type can be at most 80 characters"),
 });
-
-function describeDiscovery(where: string, scraped: number, result: Awaited<ReturnType<typeof createLeadsFromCandidates>>) {
-  const skipped: string[] = [];
-  if (result.skipped.existingName) skipped.push(`${result.skipped.existingName} already in the list`);
-  if (result.skipped.noEmail) skipped.push(`${result.skipped.noEmail} with no findable email`);
-  if (result.skipped.addressInUse) skipped.push(`${result.skipped.addressInUse} whose email is already in use`);
-  if (result.skipped.optedOut) skipped.push(`${result.skipped.optedOut} opted out`);
-  return (
-    `Found ${scraped} businesses in ${where} and added ${result.created.length} new lead${result.created.length === 1 ? "" : "s"}` +
-    (skipped.length ? ` (skipped ${skipped.join(", ")})` : "") +
-    (result.stoppedEarly ? ". Stopped early to stay within the time limit — run again for more." : ".")
-  );
-}
 
 export async function searchLeadsAction(_prev: LeadSearchState, formData: FormData): Promise<LeadSearchState> {
   const parsed = searchSchema.safeParse({
@@ -134,7 +153,7 @@ export async function searchLeadsAction(_prev: LeadSearchState, formData: FormDa
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
     revalidate();
-    return { message: describeDiscovery(`${parsed.data.city}, ${state}`, results.length, result) };
+    return { message: describeDiscovery("cold-outreach", `${parsed.data.city}, ${state}`, results.length, result) };
   } catch (err) {
     if (err instanceof YelpError) return { error: err.message };
     logError("action.searchLeads", err);
@@ -156,7 +175,7 @@ export async function runPipelineScrapeAction(): Promise<ActionResult> {
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
     revalidate();
-    return { ok: true, message: describeDiscovery(`${target.city}, ${target.state}`, results.length, result) };
+    return { ok: true, message: describeDiscovery("cold-outreach", `${target.city}, ${target.state}`, results.length, result) };
   } catch (err) {
     if (err instanceof YelpError) return { ok: false, error: err.message };
     logError("action.runPipelineScrape", err);
@@ -165,8 +184,6 @@ export async function runPipelineScrapeAction(): Promise<ActionResult> {
 }
 
 // --- Pipeline stage (Cold Outreach only) ---
-
-const APPOINTMENT_FROM = ["contacted", "responded", "cold_call_list", "appointment_set"];
 
 export async function scheduleAppointmentAction(leadId: string, localDateTime: string): Promise<ActionResult> {
   const date = parseZonedInputValue(String(localDateTime ?? ""));
@@ -177,7 +194,11 @@ export async function scheduleAppointmentAction(leadId: string, localDateTime: s
     if (!APPOINTMENT_FROM.includes(lead.status)) {
       return { ok: false, error: `An appointment can't be set for a ${statusLabel(lead.status)} lead.` };
     }
-    await prisma.lead.update({ where: { id: leadId }, data: { appointmentAt: date, status: "appointment_set" } });
+    const { count } = await prisma.lead.updateMany({
+      where: { id: leadId, status: lead.status },
+      data: { appointmentAt: date, status: "appointment_set" },
+    });
+    if (count === 0) return { ok: false, error: CHANGED_MEANWHILE(lead.name) };
     revalidate(leadId);
     return { ok: true, message: `Appointment with ${lead.name} set for ${formatDateTime(date)} — moved to Appointment set.` };
   } catch (err) {
@@ -194,7 +215,11 @@ export async function markLeadLostAction(leadId: string, reason: string): Promis
     const lead = await pipeline.findLead(prisma, leadId);
     if (!lead) return { ok: false, error: "This lead no longer exists." };
     if (lead.status === "lost") return { ok: false, error: `${lead.name} is already Lost.` };
-    await prisma.lead.update({ where: { id: leadId }, data: { status: "lost", callOutcome: reason } });
+    if (!allowedTransitions("cold-outreach", lead.status).includes("lost")) {
+      return { ok: false, error: `${lead.name} can't move from ${statusLabel(lead.status)} to Lost.` };
+    }
+    const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], { status: "lost", callOutcome: reason });
+    if (!moved) return { ok: false, error: CHANGED_MEANWHILE(lead.name) };
     revalidate(leadId);
     return { ok: true, message: `Marked ${lead.name} as Lost (${CALL_OUTCOME_LABEL[reason] ?? reason}).` };
   } catch (err) {
@@ -220,7 +245,7 @@ export async function markResponseAsNonDeliveryAction(leadId: string): Promise<A
     return {
       ok: true,
       message: status
-        ? `Recorded the bounce for ${lead.name} — moved to the ${statusLabel(status)}.`
+        ? `Recorded the bounce for ${lead.name} — moved to ${statusLabel(status)}.`
         : `Recorded the bounce for ${lead.name}. Their status changed meanwhile, so it was left as it is.`,
     };
   } catch (err) {

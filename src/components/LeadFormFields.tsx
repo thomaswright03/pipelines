@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { z } from "zod";
 import { fieldErrorsOf, type FieldErrors, type FormState } from "@/lib/lead-forms";
@@ -18,6 +19,8 @@ export function useLeadForm<T extends Record<string, string>>(
 ) {
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<FieldErrors<T>>({});
+  type Links = NonNullable<FormState<T>["fieldLinks"]>;
+  const [links, setLinks] = useState<Links>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -25,10 +28,20 @@ export function useLeadForm<T extends Record<string, string>>(
     setValues((v) => ({ ...v, [name]: value }));
   }
 
+  // Typing in a field clears its error straight away, so the message (and
+  // the layout) doesn't jump when focus later leaves the field — e.g. on
+  // the way to the Save button.
+  function change(name: keyof T, value: string) {
+    set(name, value);
+    setErrors((e) => (e[name] ? { ...e, [name]: undefined } : e));
+    setLinks((l) => (l[name] ? ({ ...l, [name]: undefined } as Links) : l));
+  }
+
   function checkField(name: keyof T) {
     const parsed = schema.safeParse(values);
     const fieldErrors: FieldErrors<T> = parsed.success ? {} : fieldErrorsOf<T>(parsed.error);
     setErrors((e) => ({ ...e, [name]: fieldErrors[name] }));
+    setLinks((l) => ({ ...l, [name]: undefined }) as Links);
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -36,10 +49,12 @@ export function useLeadForm<T extends Record<string, string>>(
     const parsed = schema.safeParse(values);
     if (!parsed.success) {
       setErrors(fieldErrorsOf<T>(parsed.error));
+      setLinks({});
       setFormError("Fix the highlighted fields.");
       return;
     }
     setErrors({});
+    setLinks({});
     setFormError(null);
     startTransition(async () => {
       try {
@@ -49,6 +64,7 @@ export function useLeadForm<T extends Record<string, string>>(
           return;
         }
         setErrors(result.fieldErrors ?? {});
+        setLinks(result.fieldLinks ?? {});
         setFormError(result.error ?? "Couldn't save — try again.");
       } catch {
         setFormError("Couldn't reach the server — nothing was saved. Check your connection and try again.");
@@ -61,7 +77,8 @@ export function useLeadForm<T extends Record<string, string>>(
       name,
       value: values[name],
       error: errors[name],
-      onChange: (value: string) => set(name, value),
+      errorLink: links[name],
+      onChange: (value: string) => change(name, value),
       onBlur: () => checkField(name),
     };
   }
@@ -83,6 +100,7 @@ export function TextField({
   hint,
   inputMode,
   autoComplete,
+  errorLink,
 }: {
   label: string;
   name: string;
@@ -97,6 +115,8 @@ export function TextField({
   hint?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
+  /** A link shown under the error (e.g. to the lead that already has this address). */
+  errorLink?: { href: string; label: string };
 }) {
   const id = `field-${name}`;
   const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ") || undefined;
@@ -125,13 +145,21 @@ export function TextField({
         className="input"
       />
       {hint && !error && (
-        <p id={`${id}-hint`} className="text-xs muted">
+        <p id={`${id}-hint`} className="text-sm muted">
           {hint}
         </p>
       )}
       {error && (
         <p id={`${id}-error`} className="field-error">
           {error}
+          {errorLink && (
+            <>
+              {" "}
+              <Link href={errorLink.href} className="font-medium underline underline-offset-2">
+                {errorLink.label}
+              </Link>
+            </>
+          )}
         </p>
       )}
     </div>
@@ -151,6 +179,7 @@ export function TextAreaField({
   name: string;
   value: string;
   error?: string;
+  errorLink?: { href: string; label: string };
   onChange: (value: string) => void;
   onBlur: () => void;
   maxLength?: number;

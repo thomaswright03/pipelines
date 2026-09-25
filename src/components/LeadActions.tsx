@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  confirmAddressAction,
+  deleteLeadAction,
   dismissReplyReviewAction,
   findLeadEmailAction,
   markBouncedAction,
@@ -15,7 +18,7 @@ import {
 } from "@/lib/actions/outreach";
 import { allowedTransitions, canMarkReplied, isBackwardMove, statusLabel } from "@/lib/lead-status";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -74,7 +77,43 @@ export default function LeadActions({
     });
   }
 
+  const basePath = PIPELINE_BASE_PATH[pipeline];
   const moves = allowedTransitions(pipeline, lead.status);
+  const needsAddressCheck = Boolean(lead.email && lead.sendBlockedReason?.startsWith("Unverified address"));
+
+  async function remove() {
+    const confirmed = await confirm({
+      title: `Delete ${lead.name}?`,
+      body: (
+        <>
+          <p>Removes {lead.name} and their notes from the list. This can&apos;t be undone.</p>
+          {lead.email && (
+            <p className="mt-2">
+              The send history is kept: if <strong>{lead.email}</strong> was already emailed, it still counts as pitched and
+              won&apos;t be emailed again.
+            </p>
+          )}
+        </>
+      ),
+      confirmLabel: `Delete ${lead.name}`,
+      danger: true,
+    });
+    if (!confirmed) return;
+    setFeedback(null);
+    startTransition(async () => {
+      try {
+        const result = await deleteLeadAction(pipeline, lead.id);
+        if (result.ok) {
+          router.push(basePath);
+          router.refresh();
+          return;
+        }
+        setFeedback({ ok: false, text: result.error });
+      } catch {
+        setFeedback({ ok: false, text: "Couldn't reach the server — nothing was deleted. Check your connection and try again." });
+      }
+    });
+  }
   const canSend = lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason;
 
   async function moveTo(to: string) {
@@ -225,6 +264,16 @@ export default function LeadActions({
           </div>
         )}
         {!suppression && lead.sendBlockedReason && <p className="notice-warning">{lead.sendBlockedReason}</p>}
+        {!suppression && needsAddressCheck && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => run(() => confirmAddressAction(pipeline, lead.id))}
+            className="btn-secondary"
+          >
+            Address checked — allow sending
+          </button>
+        )}
 
         {!lead.email && (
           <button type="button" disabled={isPending} onClick={() => run(() => findLeadEmailAction(pipeline, lead.id))} className="btn-secondary">
@@ -237,11 +286,11 @@ export default function LeadActions({
             <button type="button" disabled={isPending || paused} onClick={send} className="btn-primary">
               Send outreach email
             </button>
-            {paused && <p className="text-xs muted">Outbound email is paused — resume it in Settings to send.</p>}
+            {paused && <p className="text-sm muted">Outbound email is paused — resume it in Settings to send.</p>}
           </>
         )}
         {lead.email && !canSend && !suppression && !lead.sendBlockedReason && lead.status !== "new" && (
-          <p className="text-xs muted">
+          <p className="text-sm muted">
             {lead.emailed ? "Already pitched — each lead gets one outreach email." : `The first pitch only goes to New leads; this one is ${statusLabel(lead.status)}.`}
           </p>
         )}
@@ -273,6 +322,18 @@ export default function LeadActions({
         )}
 
         <ActionMessage feedback={feedback} />
+      </section>
+
+      <section aria-labelledby="manage-heading" className="card flex flex-col gap-3 p-4">
+        <h2 id="manage-heading" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Lead details
+        </h2>
+        <Link href={`${basePath}/${lead.id}/edit`} className="btn-secondary text-center">
+          Edit details
+        </Link>
+        <button type="button" disabled={isPending} onClick={remove} className="btn-danger">
+          Delete lead…
+        </button>
       </section>
     </div>
   );

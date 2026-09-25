@@ -29,7 +29,7 @@ import {
   setStarred,
   type ActionResult,
 } from "@/lib/outreach/lead-actions";
-import { statusLabel } from "@/lib/lead-status";
+import { confirmAddress, deleteLead } from "@/lib/outreach/lead-edit";
 
 function refresh(pipeline: PipelineId, leadId?: string) {
   const base = PIPELINE_BASE_PATH[pipeline];
@@ -82,11 +82,15 @@ export async function findLeadEmailAction(pipeline: string, leadId: string): Pro
           : `Found ${outcome.email} for ${lead.name}.`,
       };
     }
+    const unverified = outcome.unverified
+      ? ` ${outcome.unverified.email} is on ${outcome.unverified.website}, but that site doesn't show ${lead.name}'s phone, street address or city, so it may be a different business and wasn't saved. If it is theirs, edit the lead and enter it.`
+      : "";
     return {
       ok: false,
-      error: outcome.routedTo
-        ? `No usable email found for ${lead.name} — moved to the ${statusLabel(outcome.routedTo)} for phone outreach.`
-        : `No usable email found for ${lead.name}.`,
+      error:
+        (outcome.routedTo
+          ? `No usable email found for ${lead.name} — moved to ${outcome.routedTo === "cold_call_list" ? "the call deck for phone outreach" : "“No phone number”, since there's no way to reach them yet"}.`
+          : `No usable email found for ${lead.name}.`) + unverified,
     };
   });
 }
@@ -113,6 +117,14 @@ export async function markOptedOutAction(pipeline: string, leadId: string): Prom
 
 export async function removeSuppressionAction(pipeline: string, leadId: string): Promise<ActionResult> {
   return guarded("removeSuppression", pipeline, leadId, (p) => removeSuppression(p, leadId));
+}
+
+export async function confirmAddressAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("confirmAddress", pipeline, leadId, (p) => confirmAddress(p, leadId));
+}
+
+export async function deleteLeadAction(pipeline: string, leadId: string): Promise<ActionResult> {
+  return guarded("deleteLead", pipeline, undefined, (p) => deleteLead(p, leadId));
 }
 
 export async function setStarredAction(pipeline: string, leadId: string, starred: boolean): Promise<ActionResult> {
@@ -147,7 +159,11 @@ export async function previewBulkSendAction(pipeline: string): Promise<BulkPrevi
 
 export type BulkChunkActionResult = { ok: true; result: BulkChunkResult } | { ok: false; error: string };
 
-export async function sendBulkChunkAction(pipeline: string, leadIds: string[]): Promise<BulkChunkActionResult> {
+export async function sendBulkChunkAction(
+  pipeline: string,
+  leadIds: string[],
+  consecutiveFailures = 0,
+): Promise<BulkChunkActionResult> {
   let p: PipelineId;
   try {
     p = parsePipelineId(pipeline);
@@ -156,7 +172,7 @@ export async function sendBulkChunkAction(pipeline: string, leadIds: string[]): 
   }
   try {
     const ids = Array.isArray(leadIds) ? leadIds.filter((id): id is string => typeof id === "string") : [];
-    const result = await sendBulkChunk(p, ids);
+    const result = await sendBulkChunk(p, ids, { consecutiveFailures: Number(consecutiveFailures) || 0 });
     refresh(p);
     return { ok: true, result };
   } catch (err) {

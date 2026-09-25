@@ -12,26 +12,42 @@ import { pickNextAgentCity, markAgentCityUsed } from "@/lib/agent-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { SOLD_COUNTIES, citiesInCounty, stateForCounty } from "@/lib/agent-cities";
 import { agentLeadSchema, fieldErrorsOf, normalizeWebsite, type AgentLeadInput, type FormState } from "@/lib/lead-forms";
-import { createLeadsFromCandidates, describeAddressConflict } from "@/lib/outreach/discovery";
+import { createLeadsFromCandidates, describeDiscovery } from "@/lib/outreach/discovery";
+import { checkAddressForLead, editLead, enteredByHandEvidence } from "@/lib/outreach/lead-edit";
 import { getAdreStatus, loadAdreRoster, processAdreChunk, type AdreChunkResult, type AdreStatus } from "@/lib/adre-import";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
 const BASE_PATH = "/dataleadsell";
 const BUSINESS_TYPE = "real estate agent";
 const MAX_PER_RUN = 50;
-// Leaves room under the 60 s function limit for the Yelp call (≤10 s) and
-// the last lookup in flight (≤15 s).
-const RUN_TIME_BUDGET_MS = 25 * 1000;
+// Every lookup ends by this long after the click (one in flight is cut
+// off), which leaves room under the 60 s function limit for saving and the
+// response. The Yelp call (≤10 s) is inside this budget.
+const RUN_TIME_BUDGET_MS = 45 * 1000;
 const UNEXPECTED = "Something went wrong saving that — nothing was changed. Try again in a moment.";
 
-function revalidate() {
+function revalidate(leadId?: string) {
   revalidatePath(BASE_PATH);
   revalidatePath(`${BASE_PATH}/stats`);
+  if (leadId) revalidatePath(`${BASE_PATH}/${leadId}`);
 }
 
-// --- Manual entry ---
+// --- Manual entry and editing ---
 
 export type AgentFormState = FormState<AgentLeadInput> & { leadId?: string };
+
+function agentColumns(d: AgentLeadInput & { name: string }) {
+  return {
+    name: d.name,
+    brokerage: d.brokerage || null,
+    phone: normalizePhone(d.phone),
+    city: d.city || null,
+    county: d.county || null,
+    state: d.county ? stateForCounty(d.county) : null,
+    website: normalizeWebsite(d.website ?? ""),
+    notes: d.notes || null,
+  };
+}
 
 export async function createAgentAction(input: AgentLeadInput): Promise<AgentFormState> {
   const parsed = agentLeadSchema.safeParse(input);
@@ -42,25 +58,20 @@ export async function createAgentAction(input: AgentLeadInput): Promise<AgentFor
   const email = d.email ? d.email.toLowerCase() : null;
   try {
     if (email) {
-      const conflict = await describeAddressConflict("dataleadsell", email);
-      if (conflict) {
+      const problem = await checkAddressForLead("dataleadsell", email);
+      if (problem) {
         return {
-          error: "This email is already in use.",
-          fieldErrors: { email: `${conflict} — each address gets one pitch. Edit that agent instead.` },
+          error: "This email can't be used.",
+          fieldErrors: { email: problem.message },
+          ...(problem.link ? { fieldLinks: { email: problem.link } } : {}),
         };
       }
     }
     const lead = await prisma.agentLead.create({
       data: {
-        name: d.name,
-        brokerage: d.brokerage || null,
+        ...agentColumns(d),
         email,
-        phone: normalizePhone(d.phone),
-        city: d.city || null,
-        county: d.county || null,
-        state: d.county ? stateForCounty(d.county) : null,
-        website: normalizeWebsite(d.website),
-        notes: d.notes || null,
+        emailEvidence: email ? enteredByHandEvidence() : null,
         source: "Manual entry",
       },
     });
@@ -72,22 +83,31 @@ export async function createAgentAction(input: AgentLeadInput): Promise<AgentFor
   }
 }
 
-// --- Yelp discovery ---
-
-type DiscoveryResult = Awaited<ReturnType<typeof createLeadsFromCandidates>>;
-
-function describeDiscovery(where: string, scraped: number, result: DiscoveryResult) {
-  const skipped: string[] = [];
-  if (result.skipped.existingName) skipped.push(`${result.skipped.existingName} already in the list`);
-  if (result.skipped.noEmail) skipped.push(`${result.skipped.noEmail} with no usable email of their own`);
-  if (result.skipped.addressInUse) skipped.push(`${result.skipped.addressInUse} whose email is already in use`);
-  if (result.skipped.optedOut) skipped.push(`${result.skipped.optedOut} opted out`);
-  return (
-    `Found ${scraped} agents in ${where} and added ${result.created.length} new` +
-    (skipped.length ? ` (skipped ${skipped.join(", ")})` : "") +
-    (result.stoppedEarly ? ". Stopped early to stay within the time limit — run again for more." : ".")
-  );
+export async function updateAgentAction(leadId: string, input: AgentLeadInput): Promise<AgentFormState> {
+  const parsed = agentLeadSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<AgentLeadInput>(parsed.error) };
+  }
+  const d = parsed.data;
+  try {
+    const outcome = await editLead("dataleadsell", leadId, d.email || null, agentColumns(d));
+    if (!outcome.ok) {
+      if (outcome.field !== "email") return { error: outcome.error };
+      return {
+        error: "This email can't be used.",
+        fieldErrors: { email: outcome.error },
+        ...(outcome.link ? { fieldLinks: { email: outcome.link } } : {}),
+      };
+    }
+    revalidate(leadId);
+    return { ok: true, leadId };
+  } catch (err) {
+    logError("action.updateAgent", err, { leadId });
+    return { error: UNEXPECTED };
+  }
 }
+
+// --- Yelp discovery ---
 
 const searchSchema = z
   .object({
@@ -122,7 +142,7 @@ export async function searchAgentsAction(_prev: AgentSearchState, formData: Form
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
     revalidate();
-    return { message: describeDiscovery(`${city}, ${county} County`, results.length, result) };
+    return { message: describeDiscovery("dataleadsell", `${city}, ${county} County`, results.length, result) };
   } catch (err) {
     if (err instanceof YelpError) return { error: err.message };
     logError("action.searchAgents", err);
@@ -145,7 +165,7 @@ export async function runAgentPipelineScrapeAction(): Promise<ActionResult> {
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
     revalidate();
-    return { ok: true, message: describeDiscovery(`${target.city}, ${target.county} County`, results.length, result) };
+    return { ok: true, message: describeDiscovery("dataleadsell", `${target.city}, ${target.county} County`, results.length, result) };
   } catch (err) {
     if (err instanceof YelpError) return { ok: false, error: err.message };
     logError("action.runAgentPipelineScrape", err);

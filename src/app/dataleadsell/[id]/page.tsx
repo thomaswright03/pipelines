@@ -1,9 +1,10 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import LeadActions from "@/components/LeadActions";
 import { DetailField, EmailPreview, LedgerNotice, SendHistory } from "@/components/LeadDetailParts";
-import { buildAgentOutreachEmail } from "@/lib/dataleadsell-email-template";
+import { getPipeline } from "@/lib/outreach/pipelines";
 import { loadLeadContext } from "@/lib/lead-page";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
@@ -11,13 +12,20 @@ import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // "Find email" guesses a website first, which can take a few tries.
 
+export async function generateMetadata({ params }: PageProps<"/dataleadsell/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const lead = await prisma.agentLead.findUnique({ where: { id }, select: { name: true } });
+  return { title: lead ? `${lead.name} — dataleadsell` : "Not found — dataleadsell" };
+}
+
 export default async function AgentLeadDetail({ params }: PageProps<"/dataleadsell/[id]">) {
   const { id } = await params;
   const lead = await prisma.agentLead.findUnique({ where: { id }, include: { emailLogs: { orderBy: { sentAt: "desc" } } } });
   if (!lead) notFound();
 
   const { suppression, paused, ledgerNote } = await loadLeadContext("dataleadsell", lead.id, lead.email);
-  const preview = buildAgentOutreachEmail(lead.name, lead.county);
+  // Exactly what a send would use.
+  const preview = getPipeline("dataleadsell").buildEmail({ name: lead.name, company: null, county: lead.county });
 
   return (
     <div className="flex flex-col gap-6">
@@ -35,6 +43,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
           <section className="card p-4" aria-label="Agent details">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <DetailField label="Email" value={lead.email ?? "—"} href={lead.email ? `mailto:${lead.email}` : undefined} />
+              {lead.email && lead.emailEvidence && <DetailField label="Why this address" value={lead.emailEvidence} />}
               <DetailField label="Phone" value={lead.phone ?? "—"} href={lead.phone ? `tel:${lead.phone}` : undefined} />
               <DetailField label="City" value={lead.city ?? "—"} />
               <DetailField label="County" value={lead.county ? `${lead.county}, ${lead.state ?? ""}` : "—"} />
@@ -48,7 +57,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
             </dl>
             {lead.notes && (
               <div className="mt-3 border-t border-zinc-200 pt-3 text-sm dark:border-zinc-800">
-                <div className="text-xs muted">Notes</div>
+                <div className="text-sm muted">Notes</div>
                 <p className="mt-1 whitespace-pre-wrap break-words">{lead.notes}</p>
               </div>
             )}
