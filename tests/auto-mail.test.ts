@@ -38,7 +38,8 @@ describe("detectAutoReply", () => {
     expect(detectAutoReply({ headers: { "X-Autoreply": "yes" } })).toMatch(/X-Autoreply/);
     expect(detectAutoReply({ headers: { "X-Autorespond": "1" } })).toMatch(/X-Autorespond/);
     expect(detectAutoReply({ headers: { Precedence: "auto_reply" } })).toMatch(/Precedence: auto_reply/);
-    expect(detectAutoReply({ headers: { Precedence: "bulk" } })).toMatch(/bulk/);
+    // "bulk" alone isn't enough: some ordinary mail clients set it.
+    expect(detectAutoReply({ headers: { Precedence: "bulk" }, subject: "Re: hello", text: "Sure." })).toBeNull();
     expect(detectAutoReply({ headers: { Precedence: "list" } })).toBeNull();
     expect(detectAutoReply({ headers: { "X-Auto-Response-Suppress": "All" } })).toMatch(/X-Auto-Response-Suppress/);
     expect(detectAutoReply({ headers: { "X-Auto-Response-Suppress": ["DR", "OOF"] } })).toMatch(/OOF/);
@@ -61,6 +62,10 @@ describe("detectAutoReply", () => {
       "I'm on vacation through 10/3 and will reply when I'm back.",
       "Thanks for your email. I'm away until Sept 30.",
       "This is an automated response. Thank you for contacting us, we will respond within 24 hours.",
+      // Helpdesk acknowledgements. A person could write one, but it reads as
+      // a receipt, not an answer; if it was a person, "Mark replied" counts it.
+      "Thank you for your message! We'll get back to you as soon as possible.",
+      "We've received your inquiry and will respond within one business day.",
     ]) {
       expect(detectAutoReply({ subject: "Re: hello", text }), text).not.toBeNull();
     }
@@ -73,8 +78,8 @@ describe("detectAutoReply", () => {
       "I was out of town last week — can you send pricing?",
       "Thanks for reaching out. What does it cost?",
       "Who is this?",
-      // A person could write this, so without an autoresponder header it counts as a reply.
-      "Thank you for your message! We'll get back to you as soon as possible.",
+      // A thank-you and a promise to answer, but no helpdesk time frame.
+      "Thanks for your message — I'll get back to you after I talk to my partner.",
     ]) {
       expect(detectAutoReply({ subject: "Re: hello", text }), text).toBeNull();
     }

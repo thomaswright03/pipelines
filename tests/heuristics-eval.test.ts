@@ -94,10 +94,9 @@ describe("heuristics on the labelled evaluation sets", () => {
       cases.map((c) => ({ expected: c.auto, actual: detectAutoReply(c) !== null, label: `[${c.subject}] ${firstLine(c.text)}` }));
     const words = { fp: "read a person's reply as automatic", fn: "missed an automatic reply" };
     evaluate("Automatic replies", "dev", run(AUTO_REPLY_DEV), { precision: 1, recall: 0.95 }, words);
-    // Held-out precision floor 0.9 (was 0.95 on 18 cases): the 50-case set
-    // measured 93.1% — "Precedence: bulk" on a person's reply and a subject a
-    // person changed to "Re: out of office stuff" are recorded misses.
-    evaluate("Automatic replies", "held-out", run(AUTO_REPLY_HELD_OUT), { precision: 0.9, recall: 0.85 }, words);
+    // Raised in round 7 from 0.9 / 0.85 (measured 100% / 100% on 64 cases
+    // after the fixes; see the corpus header).
+    evaluate("Automatic replies", "held-out", run(AUTO_REPLY_HELD_OUT), { precision: 0.95, recall: 0.9 }, words);
   });
 
   // Bounces: detection and the failed address must both be right — a

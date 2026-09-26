@@ -10,7 +10,7 @@
 //   same rules as the lead page's "Mark bounced" (see inbound.ts).
 //
 // Headers are the reliable signal (RFC 3834 `Auto-Submitted`, and the
-// de-facto `X-Autoreply`, `X-Autorespond`, `Precedence`,
+// de-facto `X-Autoreply`, `X-Autorespond`, `Precedence: auto_reply`,
 // `X-Auto-Response-Suppress`); the Cloudflare Email Worker forwards them
 // when it can (README → "Reply tracking"). Subject and body patterns cover
 // mail from Workers that don't forward headers yet.
@@ -43,7 +43,7 @@ export function headerValue(headers: MailHeaders | null | undefined, name: strin
 // --- Automatic replies ---------------------------------------------------
 
 const AUTO_SUBJECT_RE =
-  /^\s*(?:(?:re|aw|fw|fwd)\s*:\s*)*(?:automatic\s+reply|auto(?:matic)?[\s-]?(?:reply|response|respond(?:er)?)|autoreply|out\s+of\s+(?:the\s+)?office|ooo\b|away\s+from\s+(?:the\s+)?office|on\s+vacation|vacation\s+(?:reply|notice|response)|abwesenheitsnotiz|absence\s+du\s+bureau|r[ée]ponse\s+automatique|respuesta\s+autom[áa]tica)/i;
+  /^\s*(?:(?:re|aw|fw|fwd)\s*:\s*)*(?:automatic\s+reply|auto(?:matic)?[\s-]?(?:reply|response|respond(?:er)?)|autoreply|out\s+of\s+(?:the\s+)?office|ooo\b|away\s+from\s+(?:the\s+)?office|on\s+vacation|vacation\s+(?:reply|notice|response)|abwesenheitsnotiz|absence\s+du\s+bureau|r[ée]ponse\s+automatique|respuesta\s+autom[áa]tica)(?=\s*$|\s*[:\-–—([]|\s+(?:re|aw|fw|fwd)\s*:|\s+(?:auto)?(?:reply|response|notice|notification|message|alert|until|through|thru|from)\b)/i;
 
 // Phrases that only an out-of-office or autoresponder writes.
 const AUTO_BODY_PATTERNS: RegExp[] = [
@@ -54,7 +54,17 @@ const AUTO_BODY_PATTERNS: RegExp[] = [
   /\b(?:with\s+)?limited\s+(?:access\s+to\s+(?:e-?mail|my\s+inbox)|e-?mail\s+access)\b/i,
   /\bthis\s+is\s+an\s+auto(?:mated|matic)?(?:[\s-]generated)?\s+(?:reply|response|message)\b/i,
   /\bauto(?:mated|matic)[\s-](?:reply|response)\b/i,
-  /\b(?:thank\s+you|thanks)\s+for\s+(?:your\s+(?:e-?mail|message|inquiry)|contacting\s+us|reaching\s+out)[^.!\n]{0,80}\b(?:we|i)\s+(?:will|'ll)\s+(?:respond|reply|get\s+back|be\s+in\s+touch)\b[^.!\n]{0,60}\b(?:as\s+soon\s+as|within|shortly|upon\s+my\s+return)/i,
+  // Helpdesk-style acknowledgements: "Thank you for contacting Desert Realty!
+  // We will get back to you shortly.", "We have received your message and
+  // will respond within 24 hours." — a thank-you or receipt, then a promise
+  // to answer with a time frame. A person's "thanks, I'll get back to you
+  // after I talk to my partner" has no such time frame.
+  new RegExp(
+    String.raw`\b(?:(?:thank\s+you|thanks)\s+(?:so\s+much\s+)?for\s+(?:your\s+(?:e-?mail|message|inquiry|enquiry|note|request)|contacting|reaching\s+out|getting\s+in\s+touch|writing)|(?:we|i)(?:\s+have|'ve)\s+received\s+your\s+(?:e-?mail|message|inquiry|enquiry|request))` +
+      String.raw`[^\n]{0,120}?\b(?:(?:we|i|our\s+(?:team|office|staff)|someone|a\s+(?:member|representative)\s+of\s+our\s+team|an?\s+(?:agent|representative))(?:\s+(?:will|shall)|'ll)|and\s+(?:will|shall))\s+(?:respond|reply|get\s+back|be\s+in\s+touch|contact\s+you|follow\s+up|answer)\b` +
+      String.raw`[^\n]{0,60}?\b(?:as\s+soon\s+as|within|shortly|promptly|soon|during\s+(?:regular\s+|normal\s+)?business\s+hours|in\s+the\s+order|upon\s+my\s+return|next\s+business\s+day)`,
+    "i",
+  ),
   /\bupon\s+my\s+return\b/i,
 ];
 
@@ -71,8 +81,11 @@ export function detectAutoReply(input: AutoMailInput): string | null {
     const value = headerValue(h, name);
     if (value !== null && !/^\s*(?:no|false|0)\s*$/i.test(value)) return `${name} header`;
   }
+  // "Precedence: auto_reply" is specific; "bulk"/"junk" are also set by
+  // some ordinary mail clients and gateways, so on its own it doesn't make
+  // a short reply like "Sure." automatic (the wording checks below still run).
   const precedence = headerValue(h, "precedence")?.trim().toLowerCase();
-  if (precedence && /^(?:auto_reply|bulk|junk)$/.test(precedence)) return `Precedence: ${precedence} header`;
+  if (precedence === "auto_reply") return `Precedence: ${precedence} header`;
   const suppress = headerValue(h, "x-auto-response-suppress");
   if (suppress && /\b(?:all|oof|autoreply)\b/i.test(suppress)) return `X-Auto-Response-Suppress: ${suppress.trim()} header`;
 

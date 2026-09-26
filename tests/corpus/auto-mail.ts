@@ -25,6 +25,18 @@
 // "Re: Undeliverable?" reply read as a bounce. That was a real gap (a
 // server's notice never starts "Re:"), fixed from a new development case,
 // so that one held-out case no longer measures anything new.
+//
+// Round 7 (2026-09-26): 14 fresh automatic-reply cases (helpdesk "thank
+// you for contacting … we'll get back to you" acknowledgements, weak
+// Precedence headers on a person's reply, subjects a person wrote) written
+// before the rules changed. Before: 64 cases, precision 82.9%, recall 78.4%.
+// After ("Precedence: bulk/junk" alone no longer counts; a subject must be
+// an out-of-office subject, not merely start with the words; acknowledgement
+// wording with a time frame counts; the reviewers' phrasings went to
+// AUTO_REPLY_DEV): precision 100%, recall 91.9% — the three misses were
+// contraction bugs ("We'll", "We've", "…and will respond"), then fixed
+// (100% / 100%), so those three no longer measure anything new. Same
+// author wrote the batch and the rules.
 
 import type { MailHeaders } from "@/lib/outreach/auto-mail";
 
@@ -50,6 +62,11 @@ export const AUTO_REPLY_DEV: LabelledAutoReply[] = [
   { subject: "Re: hello", text: "Who is this?", auto: false },
   { subject: "Re: hello", text: "Call me at 480-555-0100.", headers: { "Auto-Submitted": "no" }, auto: false },
   { subject: "Re: hello", text: "Thanks, forwarding to our office manager.", headers: { Precedence: "list" }, auto: false },
+  // Round 7, from the reviewers' reports.
+  { subject: "Re: hello", text: "Thank you for contacting Acme Plumbing! We will get back to you shortly.", auto: true },
+  { subject: "Re: hello", text: "Thank you for your inquiry. Our team will respond within one business day.", auto: true },
+  { subject: "Re: hello", text: "Sure.", headers: { Precedence: "bulk" }, auto: false },
+  { subject: "Re: out of office stuff", text: "Tell me more.", auto: false },
 ];
 
 export const AUTO_REPLY_HELD_OUT: LabelledAutoReply[] = [
@@ -108,6 +125,36 @@ export const AUTO_REPLY_HELD_OUT: LabelledAutoReply[] = [
   { subject: "Re: hello", text: "Who is this from?", headers: { "Auto-Submitted": "no" }, auto: false },
   { subject: "Re: out of office stuff", text: "Ha, I thought this was spam at first. Tell me more.", auto: false },
   { subject: "Re: hello", text: "Away from the phone today, email is best.", auto: false },
+  // Fresh batch, 2026-09-26 (round 7): helpdesk-style "thank you for
+  // contacting … we'll get back to you" autoresponders, weak headers on a
+  // person's reply, and subjects a person wrote. Written before the rules
+  // changed; see the header for the scores.
+  {
+    subject: "Re: hello",
+    text: "Thank you for contacting Mesa Home Team. A member of our team will get back to you within one business day.",
+    auto: true,
+  },
+  {
+    subject: "Re: Quick question",
+    text: "Thanks for getting in touch! We've received your message and will respond as soon as we can.",
+    auto: true,
+  },
+  { subject: "Re: hello", text: "Thank you for your email. Our office will reply within 48 hours.", auto: true },
+  { subject: "Re: hello", text: "We have received your message and will get back to you shortly.", auto: true },
+  {
+    subject: "Re: hello",
+    text: "Thank you for reaching out to Sun Valley Realty. Someone will contact you during business hours.",
+    auto: true,
+  },
+  { subject: "Out of Office Reply", text: "Back Monday.", auto: true },
+  { subject: "Re: hello", text: "Thanks for your message! Our team will follow up shortly.", headers: { Precedence: "bulk" }, auto: true },
+  { subject: "Re: hello", text: "Yes please.", headers: { Precedence: "bulk" }, auto: false },
+  { subject: "Re: hello", text: "Ok.", headers: { Precedence: "junk" }, auto: false },
+  { subject: "Re: out of office tomorrow", text: "I'm out tomorrow, can we talk Thursday?", auto: false },
+  { subject: "Re: autoresponder setup?", text: "Do you also set up autoresponders for agents?", auto: false },
+  { subject: "Re: hello", text: "Thanks for reaching out — I'll get back to you after I check with my partner.", auto: false },
+  { subject: "Re: hello", text: "Thank you for contacting me. What's the monthly cost?", auto: false },
+  { subject: "Re: hello", text: "Yep.", auto: false },
 ];
 
 const POSTFIX = [
