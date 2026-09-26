@@ -4,9 +4,9 @@
 import { prisma } from "@/lib/db";
 import type { Db } from "@/lib/outreach/pipelines";
 
-export type SuppressionSource = "inbound_reply" | "manual";
+type SuppressionSource = "inbound_reply" | "manual";
 
-export type Suppression = {
+type Suppression = {
   email: string;
   reason: string | null;
   source: string | null;

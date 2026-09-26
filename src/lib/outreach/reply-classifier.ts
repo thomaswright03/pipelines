@@ -55,7 +55,7 @@ import { rulesVersion } from "@/lib/outreach/rules-version";
 
 export type ReplyVerdict = "opt_out" | "positive" | "needs_look";
 
-export type ReplyClassification = {
+type ReplyClassification = {
   verdict: ReplyVerdict;
   /** verdict === "opt_out". */
   optOut: boolean;

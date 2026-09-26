@@ -101,7 +101,7 @@ async function lookupEmail(
   return { ...NO_LOOKUP, website, email, evidence };
 }
 
-export type AddressConflict = {
+type AddressConflict = {
   message: string;
   href: string | null;
   leadName: string | null;
@@ -146,7 +146,7 @@ export type DiscoveryCandidate = {
   notes?: string | null;
 };
 
-export type DiscoveryContext = {
+type DiscoveryContext = {
   city: string | null;
   state: string | null;
   county?: string | null;
@@ -354,7 +354,7 @@ export async function routeToPhoneOutreach(
   return moved ? status : null;
 }
 
-export type FindEmailOutcome =
+type FindEmailOutcome =
   | { kind: "found"; email: string; evidence: string | null; blockedReason: string | null }
   | {
       kind: "none";

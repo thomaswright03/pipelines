@@ -45,7 +45,7 @@ const CHANGED_MEANWHILE = (name: string) =>
 
 // --- Manual entry and editing ---
 
-export type LeadFormState = FormState<ColdOutreachLeadInput> & { leadId?: string };
+type LeadFormState = FormState<ColdOutreachLeadInput> & { leadId?: string };
 
 function coldOutreachColumns(d: ColdOutreachLeadInput & { name: string }) {
   return {

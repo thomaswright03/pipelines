@@ -54,7 +54,7 @@ type SendRefusal =
   /** A reply from this address is waiting for the operator to read it. */
   | "reply_needs_look";
 
-export type SendOutcome =
+type SendOutcome =
   | { ok: true; leadId: string; leadName: string; email: string; message: string; warning?: string }
   | {
       ok: false;

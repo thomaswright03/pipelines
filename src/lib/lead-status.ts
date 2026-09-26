@@ -192,7 +192,7 @@ export function coldCallResult(pipeline: PipelineId, outcome: ColdCallOutcome): 
 // outcome). The one Lost control on a lead page — "Move to… → Lost" — asks
 // for one of these before it confirms, in both pipelines.
 export const LOST_REASONS = ["not_interested", "too_busy", "no_answer", "no_need", "unable_to_contact"] as const;
-export type LostReason = (typeof LOST_REASONS)[number];
+type LostReason = (typeof LOST_REASONS)[number];
 
 export function isLostReason(value: unknown): value is LostReason {
   return typeof value === "string" && (LOST_REASONS as readonly string[]).includes(value);

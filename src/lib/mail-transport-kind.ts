@@ -10,7 +10,7 @@ export function resolveTransportKind(env: Env = process.env): TransportKind {
   return env.VERCEL ? "zeptomail" : "outbox";
 }
 
-export type MailDestination = {
+type MailDestination = {
   kind: TransportKind;
   /** Whether mail can reach real recipients. */
   delivers: boolean;

@@ -10,7 +10,7 @@ type RunStatus = "succeeded" | "partial" | "failed" | "skipped";
 type RunNumbers = { businessesChecked: number; leadsFound: number; emailsSent: number };
 export type RunOutcome = { status: RunStatus; summary: string; errors?: string[]; numbers?: RunNumbers };
 
-export type RecordedRun = RunOutcome & { runId: string };
+type RecordedRun = RunOutcome & { runId: string };
 
 /**
  * Runs `fn` with a PipelineRun row around it. A thrown error becomes a

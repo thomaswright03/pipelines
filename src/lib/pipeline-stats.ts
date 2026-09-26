@@ -64,7 +64,7 @@ export type VaultStats = BaseStats & {
   automatedLeads: number; // source = daily automated run
 };
 
-export type DataleadsellStats = BaseStats & {
+type DataleadsellStats = BaseStats & {
   subscribed: number;
 };
 

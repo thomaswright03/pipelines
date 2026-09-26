@@ -22,7 +22,7 @@ import { rulesVersion } from "@/lib/outreach/rules-version";
 
 export type MailHeaders = Record<string, string | string[] | null | undefined>;
 
-export type AutoMailInput = {
+type AutoMailInput = {
   from?: string | null;
   subject?: string | null;
   text?: string | null;
@@ -69,7 +69,7 @@ const AUTO_BODY_PATTERNS: RegExp[] = [
 ];
 
 /** Why a message was read as automatic, and whether that came from its headers, subject or wording. */
-export type AutoReplySignal = { reason: string; basis: "header" | "subject" | "wording" };
+type AutoReplySignal = { reason: string; basis: "header" | "subject" | "wording" };
 
 /**
  * Why this message is an automatic reply ("Auto-Submitted: auto-replied
@@ -127,7 +127,7 @@ const BOUNCE_BODY_RE =
   /\b(?:could\s+not\s+be\s+delivered|couldn'?t\s+be\s+delivered|wasn'?t\s+delivered|was\s+not\s+delivered|delivery\s+(?:to\s+the\s+following\s+recipients?\s+)?(?:has\s+)?failed(?:\s+permanently)?|undeliverable|user\s+unknown|no\s+such\s+user|mailbox\s+(?:unavailable|not\s+found|does\s+not\s+exist)|address\s+(?:not\s+found|couldn'?t\s+be\s+found|rejected)|recipient\s+address\s+rejected|permanent\s+(?:fatal\s+)?error|Final-Recipient:|Diagnostic-Code:|Status:\s*5\.\d{1,3}\.\d{1,3})/i;
 const SMTP_PERMANENT_RE = /\b(?:5[0-5]\d[\s-]+)?5\.\d{1,3}\.\d{1,3}\b/;
 
-export type BounceInfo = {
+type BounceInfo = {
   /** The address that couldn't be delivered to, when the notice names one. */
   failedRecipient: string | null;
   /** Why it was read as a bounce, in words. */

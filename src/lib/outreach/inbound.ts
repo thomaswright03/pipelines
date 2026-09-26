@@ -59,7 +59,7 @@ import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type Pipeli
 /** The rules behind every stored inbound verdict (kind, opt-out, review). */
 export const INBOUND_RULES_VERSION = `${REPLY_RULES_VERSION} ${AUTO_MAIL_RULES_VERSION}`;
 
-export type InboundEmail = {
+type InboundEmail = {
   from: string;
   subject?: string | null;
   text?: string | null;
@@ -71,7 +71,7 @@ export type InboundEmail = {
 
 type InboundKind = "reply" | "auto_reply" | "bounce";
 
-export type InboundResult = {
+type InboundResult = {
   /** A reply a person wrote, an automatic reply, or a bounce notice. */
   kind: InboundKind;
   matched: string[];
@@ -342,7 +342,7 @@ function replyNote(
 // attaches it to the right lead — which applies the normal reply rules to
 // that lead — or dismisses it.
 
-export type UnmatchedReply = {
+type UnmatchedReply = {
   id: string;
   fromEmail: string;
   subject: string | null;
@@ -388,7 +388,7 @@ export async function lastInboundReplyAt(): Promise<Date | null> {
   return last?.receivedAt ?? null;
 }
 
-export type AttachResult = { ok: true; message: string } | { ok: false; error: string };
+type AttachResult = { ok: true; message: string } | { ok: false; error: string };
 
 /**
  * Records an unmatched reply on a lead the operator picked, exactly as if

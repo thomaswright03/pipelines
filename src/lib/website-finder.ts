@@ -104,7 +104,7 @@ type WebsiteGuess = { url: string; basedOn: "brokerage" | "name" };
  * checked (timeout, connection error, 5xx), so the guess should be retried
  * later rather than taken as "no website".
  */
-export type WebsiteGuessResult = { guess: WebsiteGuess; inconclusive: false } | { guess: null; inconclusive: boolean };
+type WebsiteGuessResult = { guess: WebsiteGuess; inconclusive: false } | { guess: null; inconclusive: boolean };
 
 /**
  * Tries a handful of plausible domains for a business and returns the

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import type { Db } from "@/lib/outreach/pipelines";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 
-export type CorrectionKind =
+type CorrectionKind =
   /** An opt-out read from a reply was removed from the do-not-email list (a false positive). */
   | "opt_out_reversed"
   /** "Mark opted out" on a lead whose reply was recorded but not read as an opt-out (a missed one). */
@@ -29,7 +29,7 @@ export async function recordCorrection(
   });
 }
 
-export type QualitySignals = {
+type QualitySignals = {
   sinceDays: number;
   /** Replies read as opt-outs, and how many of those the operator reversed. */
   autoOptOuts: number;

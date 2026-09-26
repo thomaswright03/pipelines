@@ -10,7 +10,7 @@ import { z } from "zod";
 import { logError } from "@/lib/log";
 import { recordServiceCheck } from "@/lib/outreach/settings";
 
-export type YelpCandidate = {
+type YelpCandidate = {
   name: string;
   phone: string | null;
   address: string | null;

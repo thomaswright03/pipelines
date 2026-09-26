@@ -8,7 +8,7 @@ import type { ColdCallOutcome } from "@/lib/lead-status";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 
 export type LoggedCall = { lead: { id: string; name: string }; outcome: ColdCallOutcome | "skipped" };
-export type SavedDeck = { handled: string[]; log: LoggedCall[] };
+type SavedDeck = { handled: string[]; log: LoggedCall[] };
 
 /** The part of the Storage API the deck uses (sessionStorage in the browser). */
 export type DeckStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;

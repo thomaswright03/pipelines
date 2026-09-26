@@ -2,7 +2,7 @@
 // to (Maricopa County AZ, Salt Lake County UT, Utah County UT) — the scrape
 // pool for finding real estate agents to pitch a subscription to. Add a
 // county's cities here when dataleadsell.com adds that county as a plan.
-export type AgentCityTarget = { city: string; county: string; state: string };
+type AgentCityTarget = { city: string; county: string; state: string };
 
 export const AGENT_CITIES: AgentCityTarget[] = [
   // Maricopa County, AZ

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-export type ConfirmOptions = {
+type ConfirmOptions = {
   title: string;
   body?: ReactNode;
   confirmLabel: string;
@@ -10,7 +10,7 @@ export type ConfirmOptions = {
 };
 
 /** A confirmation that also asks for one choice (a reason); confirming needs one picked. */
-export type ChooseOptions = ConfirmOptions & {
+type ChooseOptions = ConfirmOptions & {
   choiceLabel: string;
   choices: readonly { value: string; label: string }[];
 };

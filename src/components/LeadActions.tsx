@@ -23,7 +23,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
-export type LeadActionsLead = {
+type LeadActionsLead = {
   id: string;
   name: string;
   status: string;

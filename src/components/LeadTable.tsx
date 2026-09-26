@@ -9,7 +9,7 @@ import { statusLabel } from "@/lib/lead-status";
 import { formatDate } from "@/lib/time";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 
-export type LeadRow = {
+type LeadRow = {
   id: string;
   name: string;
   subtitle: string | null;

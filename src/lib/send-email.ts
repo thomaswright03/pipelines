@@ -40,7 +40,7 @@ export const LIST_UNSUBSCRIBE_SUBJECT = "unsubscribe";
 export function listUnsubscribeHeader(from: string): string {
   return `<mailto:${from}?subject=${LIST_UNSUBSCRIBE_SUBJECT}>`;
 }
-export type MailTransport = {
+type MailTransport = {
   sendMail(message: MailMessage): Promise<{ messageId: string }>;
   /** Connects, upgrades to TLS and logs in without sending anything (SMTP transports). */
   verify?(): Promise<unknown>;
@@ -176,7 +176,7 @@ export class MailConfigError extends Error {
   }
 }
 
-export type SendFailure = {
+type SendFailure = {
   /**
    * "not_sent": the failure happened before the provider could have accepted
    * the message (couldn't connect, auth failed, recipient or message

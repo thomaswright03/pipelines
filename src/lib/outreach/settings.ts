@@ -7,7 +7,7 @@ import type { Db } from "@/lib/outreach/pipelines";
 
 const SETTINGS_ID = "global";
 
-export type AppSettingsData = {
+type AppSettingsData = {
   outboundPaused: boolean;
   pausedAt: Date | null;
   allowCrossPipelineRepeats: boolean;
@@ -52,7 +52,7 @@ export async function lastSendFailure(db: Db = prisma): Promise<{ at: Date; mess
   return row?.lastSendFailedAt ? { at: row.lastSendFailedAt, message: row.lastSendFailure } : null;
 }
 
-export type ServiceCheck = { at: Date; error: string | null };
+type ServiceCheck = { at: Date; error: string | null };
 
 /**
  * Remembers the outcome of the latest contact with an outside service, for

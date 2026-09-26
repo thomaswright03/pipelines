@@ -35,7 +35,7 @@ const SEND_DELAY_MS = 500;
 /** Most leftover leads one run will queue; the time budget usually stops it well before. */
 const MAX_SEND_QUEUE = 100;
 
-export type DailyRunOptions = {
+type DailyRunOptions = {
   sendDelayMs?: number;
   /** Overrides the 55 s limit that sends must finish within (tests). */
   sendBudgetMs?: number;

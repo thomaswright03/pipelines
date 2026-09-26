@@ -6,7 +6,7 @@ import { attachReplyAction, dismissReplyAction, optOutReplyAction, searchLeadsFo
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
-export type UnmatchedReplyView = {
+type UnmatchedReplyView = {
   id: string;
   fromEmail: string;
   subject: string | null;

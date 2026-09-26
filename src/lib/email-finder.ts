@@ -129,7 +129,7 @@ async function fetchPage(url: string, outer?: AbortSignal): Promise<PageResult> 
   }
 }
 
-export type WebsiteScan = {
+type WebsiteScan = {
   /** Every plausible address on the site, best first. */
   emails: string[];
   /** The HTML of every page that was fetched, so callers can check whose site it is. */

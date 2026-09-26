@@ -16,7 +16,7 @@ const ADRE_LIST_URL = "https://services.azre.gov/PdbWeb/List/DownloadList/1";
 // the 60 s function limit for parsing and saving after the download.
 const FETCH_TIMEOUT_MS = 35 * 1000;
 
-export type AzLicensee = {
+type AzLicensee = {
   key: string; // ADRE license number when present, else a stable hash
   name: string;
   brokerage: string | null;

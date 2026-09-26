@@ -44,7 +44,7 @@ function revalidate(leadId?: string) {
 
 // --- Manual entry and editing ---
 
-export type AgentFormState = FormState<AgentLeadInput> & { leadId?: string };
+type AgentFormState = FormState<AgentLeadInput> & { leadId?: string };
 
 function agentColumns(d: AgentLeadInput & { name: string }) {
   return {
@@ -184,7 +184,7 @@ export async function runAgentPipelineScrapeAction(): Promise<ActionResult> {
 
 // --- ADRE (Maricopa) import: load the roster once, then work through it ---
 
-export type AdreStatusResult = { ok: true; status: AdreStatus } | { ok: false; error: string };
+type AdreStatusResult = { ok: true; status: AdreStatus } | { ok: false; error: string };
 
 export async function loadAdreRosterAction(): Promise<AdreStatusResult> {
   try {
@@ -213,7 +213,7 @@ export async function loadAdreRosterAction(): Promise<AdreStatusResult> {
   }
 }
 
-export type AdreChunkActionResult = { ok: true; result: AdreChunkResult } | { ok: false; error: string };
+type AdreChunkActionResult = { ok: true; result: AdreChunkResult } | { ok: false; error: string };
 
 export async function processAdreChunkAction(): Promise<AdreChunkActionResult> {
   try {

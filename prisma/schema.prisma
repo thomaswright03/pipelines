@@ -187,11 +187,8 @@ model OutreachCorrection {
 model PipelineSchedule {
   id        String   @id // pipeline id, e.g. "vault-pipeline"
   enabled   Boolean  @default(true)
-  // Unused since the run time moved to vercel.json. Kept only so the
-  // previous deployment keeps working while this release rolls out; drop
-  // in a follow-up migration (README → "Changing the database schema").
-  hour      Int      @default(8)
-  minute    Int      @default(33)
+  // The database still has unused "hour" and "minute" columns (the run time
+  // is in vercel.json); prisma/pending/drop_unused_columns drops them.
   leadCount Int      @default(30)
   updatedAt DateTime @updatedAt
 }
@@ -202,6 +199,8 @@ model PipelineSchedule {
 // Lake County UT, Utah County UT. Agents come from Yelp and (for Maricopa)
 // Arizona's ADRE license roster.
 model AgentLead {
+  // The database still has unused "lastTextedAt" and "nextFollowUpDate"
+  // columns; prisma/pending/drop_unused_columns drops them.
   id                  String    @id @default(cuid())
   name                String
   brokerage           String?
@@ -237,7 +236,6 @@ model AgentLead {
   lastSendFailure     String?
   sendRefusalCount    Int       @default(0)
   lastEmailedAt       DateTime?
-  lastTextedAt        DateTime? // unused (SMS was never built) — drop in a follow-up migration, see README
   repliedAt           DateTime?
   ourReplyAt          DateTime?
   // A reply arrived while the lead was in a status a reply doesn't move it
@@ -248,7 +246,6 @@ model AgentLead {
   // lead was Lost / Not interested, or it may be asking not to be emailed.
   replyReviewReason   String?
   notes               String?
-  nextFollowUpDate    DateTime? // unused — drop in a follow-up migration, see README
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -345,6 +342,9 @@ model AdreRoster {
 // Yelp, pitched by email, non-responders routed to a cold-call deck. Stage
 // transitions are defined in src/lib/lead-status.ts.
 model Lead {
+  // The database still has unused "estimatedValue" (replaced by
+  // estimatedValueCents) and "nextFollowUpDate" columns;
+  // prisma/pending/drop_unused_columns drops them.
   id                  String    @id @default(cuid())
   name                String
   company             String?
@@ -374,13 +374,7 @@ model Lead {
   replyReviewReason   String? // see AgentLead.replyReviewReason
   // Whole cents, so totals never pick up floating-point error.
   estimatedValueCents Int?
-  // Unused since estimatedValueCents (copied over by migration
-  // 20260927100000). Kept so the previous deployment keeps working while
-  // this release rolls out; drop in a follow-up migration (README →
-  // "Changing the database schema").
-  estimatedValue      Float?
   notes               String?
-  nextFollowUpDate    DateTime? // unused — drop in a follow-up migration, see README
   appointmentAt       DateTime? // set when status moves to appointment_set
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

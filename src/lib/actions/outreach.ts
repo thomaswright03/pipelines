@@ -149,7 +149,7 @@ export async function confirmColdCallAction(pipeline: string, leadId: string, ou
 
 // --- Bulk operations (the client loops over these to show progress) ---
 
-export type BulkPreviewResult = { ok: true; preview: BulkPreview } | { ok: false; error: string };
+type BulkPreviewResult = { ok: true; preview: BulkPreview } | { ok: false; error: string };
 
 export async function previewBulkSendAction(pipeline: string): Promise<BulkPreviewResult> {
   try {
@@ -160,7 +160,7 @@ export async function previewBulkSendAction(pipeline: string): Promise<BulkPrevi
   }
 }
 
-export type BulkChunkActionResult = { ok: true; result: BulkChunkResult } | { ok: false; error: string };
+type BulkChunkActionResult = { ok: true; result: BulkChunkResult } | { ok: false; error: string };
 
 export async function sendBulkChunkAction(pipeline: string, leadIds: string[], consecutiveFailures = 0): Promise<BulkChunkActionResult> {
   let p: PipelineId;
@@ -186,7 +186,7 @@ export async function sendBulkChunkAction(pipeline: string, leadIds: string[], c
   }
 }
 
-export type BulkFindActionResult = { ok: true; result: BulkFindResult } | { ok: false; error: string };
+type BulkFindActionResult = { ok: true; result: BulkFindResult } | { ok: false; error: string };
 
 export async function findEmailsChunkAction(pipeline: string): Promise<BulkFindActionResult> {
   let p: PipelineId;

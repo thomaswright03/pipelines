@@ -7,7 +7,7 @@ import type { ActionResult } from "@/lib/outreach/lead-actions";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
-export type SuppressionRow = { email: string; since: string; why: string };
+type SuppressionRow = { email: string; since: string; why: string };
 
 /** The do-not-email list's rows with Remove, plus the "add an address" form. */
 export function DoNotEmailRows({ rows }: { rows: SuppressionRow[] }) {
