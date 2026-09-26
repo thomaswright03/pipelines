@@ -25,7 +25,7 @@ export default async function EditLead({ params }: PageProps<"/vault-pipeline/[i
       <Link href={`/vault-pipeline/${lead.id}`} className="text-sm font-medium text-indigo-700 hover:text-indigo-600 dark:text-indigo-300">
         ← Back to {lead.name}
       </Link>
-      <h1 className="accent-text mt-1 break-words text-2xl font-bold tracking-tight">Edit {lead.name}</h1>
+      <h1 className="accent-text-solid mt-1 break-words text-2xl font-bold tracking-tight">Edit {lead.name}</h1>
       <ColdOutreachLeadForm
         mode={{ kind: "edit", leadId: lead.id, emailLocked: locked }}
         initial={{

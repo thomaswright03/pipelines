@@ -87,17 +87,18 @@ export function bulkSendSummary(
   progress: BulkProgress,
   stopReason: string | null,
   preview: Pick<BulkPreview, "willSend" | "totalEligible" | "leadIds">,
+  noun: { one: string; many: string } = { one: "lead", many: "leads" },
 ): { summary: string; tone: "success" | "warning" | "error" } {
   const summary =
     `Sent ${progress.sent} of ${preview.willSend}.` +
-    (progress.skipped ? ` ${plural(progress.skipped, "lead")} skipped.` : "") +
+    (progress.skipped ? ` ${plural(progress.skipped, noun.one, noun.many)} skipped.` : "") +
     (progress.refused
-      ? ` ${plural(progress.refused, "address", "addresses")} refused by the recipient's mail server (flagged on ${progress.refused === 1 ? "its lead" : "their leads"}).`
+      ? ` ${plural(progress.refused, "address", "addresses")} refused by the recipient's mail server (flagged on ${progress.refused === 1 ? `its ${noun.one}` : `their ${noun.many}`}).`
       : "") +
     (progress.failed ? ` ${plural(progress.failed, "send")} failed.` : "") +
     (stopReason ? ` ${stopReason}` : "") +
     (!stopReason && preview.totalEligible > preview.leadIds.length
-      ? ` ${plural(preview.totalEligible - preview.leadIds.length, "more New lead")} can go in the next batch.`
+      ? ` ${plural(preview.totalEligible - preview.leadIds.length, `more New ${noun.one}`, `more New ${noun.many}`)} can go in the next batch.`
       : "");
   const tone = progress.failed || stopReason ? (progress.sent ? "warning" : "error") : progress.refused ? "warning" : "success";
   return { summary, tone };

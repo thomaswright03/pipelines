@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { previewBulkSendAction, sendBulkChunkAction } from "@/lib/actions/outreach";
 import type { BulkPreview } from "@/lib/outreach/send";
-import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { LEAD_NOUN, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { plural } from "@/lib/format";
 import { bulkSendSummary, runBulkSend, type BulkProgress } from "@/lib/bulk-send-run";
 
@@ -19,7 +19,7 @@ type Phase =
   | { kind: "error"; message: string };
 
 /**
- * "Send outreach to new leads": shows exactly who would be emailed (count,
+ * "Send outreach to new leads" ("…new agents" on the dataleadsell page): shows exactly who would be emailed (count,
  * distinct addresses, what's skipped and why, a sample) and sends only
  * after an explicit "Send to N leads". The send runs as one server call per
  * email, so progress is visible and Stop takes effect after the email in
@@ -31,6 +31,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
   const stopRequested = useRef(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const sendRef = useRef<HTMLButtonElement>(null);
+  const noun = LEAD_NOUN[pipeline];
 
   // Once the preview is shown, Enter sends (the button names exactly how many).
   useEffect(() => {
@@ -66,14 +67,14 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
         onProgress: (p) => setPhase((current) => (current.kind === "sending" ? { ...current, progress: p } : current)),
       },
     );
-    setPhase({ kind: "done", progress, ...bulkSendSummary(progress, stopReason, preview) });
+    setPhase({ kind: "done", progress, ...bulkSendSummary(progress, stopReason, preview, noun) });
     router.refresh();
   }
 
   return (
     <>
       <button type="button" onClick={open} disabled={disabled || phase.kind !== "idle"} className="btn-secondary">
-        Send outreach to new leads…
+        Send outreach to new {noun.many}…
       </button>
 
       <dialog
@@ -86,12 +87,12 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
         className="m-auto w-[min(34rem,calc(100vw-2rem))] rounded-xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
       >
         <h2 id={`bulk-title-${pipeline}`} className="text-base font-semibold">
-          Send outreach to new leads
+          Send outreach to new {noun.many}
         </h2>
         <div className="mt-3 flex flex-col gap-3 text-sm">
           {phase.kind === "loading" && <p className="muted">Working out who would be emailed…</p>}
           {phase.kind === "error" && <p className="notice-error">{phase.message}</p>}
-          {phase.kind === "preview" && <PreviewBody preview={phase.preview} />}
+          {phase.kind === "preview" && <PreviewBody preview={phase.preview} noun={noun} />}
           {phase.kind === "sending" && (
             <ProgressBody progress={phase.progress} willSend={phase.preview.willSend} stopping={phase.stopping} />
           )}
@@ -113,7 +114,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
               </button>
               {!phase.preview.paused && phase.preview.willSend > 0 && (
                 <button ref={sendRef} type="button" onClick={() => send(phase.preview)} className="btn-primary">
-                  Send to {plural(phase.preview.willSend, "lead")}
+                  Send to {plural(phase.preview.willSend, noun.one, noun.many)}
                 </button>
               )}
             </>
@@ -142,37 +143,37 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
   );
 }
 
-function PreviewBody({ preview }: { preview: BulkPreview }) {
+function PreviewBody({ preview, noun }: { preview: BulkPreview; noun: { one: string; many: string } }) {
+  const n = (count: number, prefix = "") => plural(count, `${prefix}${noun.one}`, `${prefix}${noun.many}`);
   if (preview.paused) {
     return <p className="notice-warning">Outbound email is paused, so nothing can be sent. Resume it on the Settings page first.</p>;
   }
   const skippedParts = [
-    preview.skipped.alreadyPitched && `${plural(preview.skipped.alreadyPitched, "lead")} whose address was already pitched`,
-    preview.skipped.duplicateInBatch &&
-      `${plural(preview.skipped.duplicateInBatch, "lead")} sharing an address with another lead in this batch`,
-    preview.skipped.suppressed && `${plural(preview.skipped.suppressed, "lead")} on the do-not-email list`,
+    preview.skipped.alreadyPitched && `${n(preview.skipped.alreadyPitched)} whose address was already pitched`,
+    preview.skipped.duplicateInBatch && `${n(preview.skipped.duplicateInBatch)} sharing an address with another ${noun.one} in this batch`,
+    preview.skipped.suppressed && `${n(preview.skipped.suppressed)} on the do-not-email list`,
   ].filter(Boolean);
   if (preview.willSend === 0) {
     return (
       <p className="notice-info">
         Nothing to send.{" "}
         {preview.totalEligible === 0
-          ? "No New leads have an email address."
-          : `All ${plural(preview.totalEligible, "New lead")} with an email would be skipped: ${skippedParts.join("; ")}.`}
+          ? `No New ${noun.many} have an email address.`
+          : `All ${n(preview.totalEligible, "New ")} with an email would be skipped: ${skippedParts.join("; ")}.`}
       </p>
     );
   }
   return (
     <>
       <p>
-        This sends the first outreach email to <strong>{plural(preview.willSend, "lead")}</strong> at{" "}
-        <strong>{plural(preview.distinctAddresses, "distinct address", "distinct addresses")}</strong>, about one per second. Each lead
-        moves to Contacted as it&apos;s emailed.
+        This sends the first outreach email to <strong>{n(preview.willSend)}</strong> at{" "}
+        <strong>{plural(preview.distinctAddresses, "distinct address", "distinct addresses")}</strong>, about one per second. Each{" "}
+        {noun.one} moves to Contacted as it&apos;s emailed.
       </p>
       {preview.totalEligible > preview.leadIds.length && (
         <p className="muted">
-          {plural(preview.totalEligible, "New lead")} have an email; one batch covers at most {preview.batchLimit}. Run it again afterwards
-          for the rest.
+          {n(preview.totalEligible, "New ")} have an email; one batch covers at most {preview.batchLimit}. Run it again afterwards for the
+          rest.
         </p>
       )}
       {skippedParts.length > 0 && <p className="muted">Skipped: {skippedParts.join("; ")}.</p>}

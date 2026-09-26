@@ -22,6 +22,21 @@ describe("Stats page numbers", () => {
     expect(s).toMatchObject({ emailsSentTotal: 12, leadsEmailed: 10, replied: 3, replyRate: 0.3 });
   });
 
+  it("labels leads with no state or source in plain words, and counts blank and missing together", async () => {
+    await makeColdLead({ state: "AZ", source: "Yelp" });
+    await makeColdLead({ state: null, source: null });
+    await makeColdLead({ state: "", source: "" });
+    const s = await getVaultStats();
+    expect(s.byLocation).toEqual(
+      expect.arrayContaining([
+        { label: "AZ", count: 1 },
+        { label: "No state recorded", count: 2 },
+      ]),
+    );
+    expect(s.bySource).toEqual(expect.arrayContaining([{ label: "No source recorded", count: 2 }]));
+    expect(JSON.stringify(s)).not.toContain("(unknown)");
+  });
+
   it("counts a 6 PM Arizona send toward that Arizona day", async () => {
     const lead = await makeColdLead();
     // 6:00 PM MST on Sep 24 is 01:00 UTC on Sep 25.

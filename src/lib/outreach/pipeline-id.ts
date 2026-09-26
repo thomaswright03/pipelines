@@ -8,6 +8,12 @@ export const PIPELINE_LABEL: Record<PipelineId, string> = {
   "cold-outreach": "Cold Outreach",
 };
 
+/** What each pipeline calls its records on screen ("3 agents ready to email"). */
+export const LEAD_NOUN: Record<PipelineId, { one: string; many: string }> = {
+  dataleadsell: { one: "agent", many: "agents" },
+  "cold-outreach": { one: "lead", many: "leads" },
+};
+
 export const PIPELINE_BASE_PATH: Record<PipelineId, string> = {
   dataleadsell: "/dataleadsell",
   "cold-outreach": "/vault-pipeline",

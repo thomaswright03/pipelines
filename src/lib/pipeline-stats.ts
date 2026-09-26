@@ -78,8 +78,14 @@ function rate(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
 }
 
-function toBreakdown(groups: { key: string | null; count: number }[], limit?: number): Breakdown {
-  const items = groups.map((g) => ({ label: g.key ?? "(unknown)", count: g.count })).sort((a, b) => b.count - a.count);
+/** Counts per value, largest first; leads with no value are counted under `missingLabel`. */
+function toBreakdown(groups: { key: string | null; count: number }[], missingLabel: string, limit?: number): Breakdown {
+  const counts = new Map<string, number>();
+  for (const g of groups) {
+    const label = g.key?.trim() ? g.key : missingLabel; // null and "" are both "not recorded"
+    counts.set(label, (counts.get(label) ?? 0) + g.count);
+  }
+  const items = [...counts].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
   return limit ? items.slice(0, limit) : items;
 }
 
@@ -258,9 +264,13 @@ async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()):
     autoReplied,
     weReplied,
     pastNew: total - (statusCounts.new ?? 0),
-    bySource: toBreakdown(sourceGroups.map((g) => ({ key: g.source ?? null, count: g._count }))),
+    bySource: toBreakdown(
+      sourceGroups.map((g) => ({ key: g.source ?? null, count: g._count })),
+      "No source recorded",
+    ),
     byLocation: toBreakdown(
       locationGroups.map((g) => ({ key: g[source.location] ?? null, count: g._count })),
+      `No ${source.location} recorded`,
       source.locationLimit,
     ),
     leadsPerDay: fillDays(leadsCreatedPerDay, TREND_DAYS, now),

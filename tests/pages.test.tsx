@@ -139,6 +139,14 @@ describe("a lead page", () => {
     expect(html.indexOf("Send outreach email")).toBeLessThan(html.indexOf("Outreach email preview"));
   });
 
+  it("shows a lead's name in a solid colour, so emoji in it keep their own colours", async () => {
+    const lead = await makeColdLead({ name: "Zoë’s Café 🍰" });
+    const page = await renderPage(VaultLead(pageProps({ id: lead.id })));
+    const heading = page.getByRole("heading", { name: "Zoë’s Café 🍰", level: 1 });
+    expect(heading.className).toContain("accent-text-solid");
+    expect(heading.className).not.toMatch(/\baccent-text\b(?!-)/);
+  });
+
   it("warns about a reply that needs a look and says the lead stays off the call deck", async () => {
     const lead = await makeAgentLead({
       status: "contacted",

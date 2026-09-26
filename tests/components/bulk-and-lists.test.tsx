@@ -62,6 +62,15 @@ describe("BulkSendButton", () => {
     expect(screen.getByRole("button", { name: "Send outreach to new leads…" })).toHaveProperty("disabled", true);
   });
 
+  it("calls the records agents on the dataleadsell page", async () => {
+    outreach.previewBulkSendAction.mockResolvedValue({ ok: true, preview: PREVIEW });
+    render(<BulkSendButton pipeline="dataleadsell" />);
+    fireEvent.click(screen.getByRole("button", { name: "Send outreach to new agents…" }));
+    expect(await screen.findByRole("button", { name: "Send to 3 agents" })).toBeTruthy();
+    expect(screen.getByText(/Each agent moves to Contacted/)).toBeTruthy();
+    expect(screen.queryByText(/\blead\b/)).toBeNull();
+  });
+
   it("previews who would be emailed, then sends and names refused addresses in the summary", async () => {
     outreach.previewBulkSendAction.mockResolvedValue({ ok: true, preview: PREVIEW });
     outreach.sendBulkChunkAction

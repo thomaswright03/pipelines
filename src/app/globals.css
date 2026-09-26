@@ -167,7 +167,14 @@ dialog::backdrop {
     @apply notice border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200;
   }
 
+  /* Gradient headings, for fixed wording only: the gradient fills every
+     glyph, so an emoji in user-entered text would render as a solid blob. */
   .accent-text {
     @apply bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-300;
+  }
+  /* The same accent as a solid colour, for headings that show user-entered
+     text (a lead's name), so emoji keep their own colours. */
+  .accent-text-solid {
+    @apply text-indigo-700 dark:text-indigo-300;
   }
 }

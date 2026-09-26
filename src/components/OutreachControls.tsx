@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { runPipelineScrapeAction, searchLeadsAction, type LeadSearchState } from "@/lib/actions/vault-pipeline";
 import { runAgentPipelineScrapeAction, searchAgentsAction, type AgentSearchState } from "@/lib/actions/dataleadsell";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
+import { LEAD_NOUN, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { US_STATE_OPTIONS } from "@/lib/us-states";
 import { SOLD_COUNTIES, citiesInCounty } from "@/lib/agent-cities";
 import BulkSendButton from "@/components/BulkSendButton";
@@ -51,7 +51,7 @@ export default function OutreachControls({
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [showSearch, setShowSearch] = useState(false);
   const isAgents = pipeline === "dataleadsell";
-  const noun = isAgents ? { one: "agent", many: "agents" } : { one: "lead", many: "leads" };
+  const noun = LEAD_NOUN[pipeline];
 
   const epochRef = useRef(0);
   const [epoch, setEpoch] = useState(0);
@@ -106,16 +106,18 @@ export default function OutreachControls({
             <>
               <strong>{plural(unsent, noun.one, noun.many)}</strong> ready to email.{" "}
               {dailyRunUnsent === null ? (
-                <span className="muted">They&apos;re only emailed when you press Send outreach to new leads.</span>
+                <span className="muted">They&apos;re only emailed when you press Send outreach to new {noun.many}.</span>
               ) : dailyRunUnsent >= unsent ? (
                 <span className="muted">The next daily run will email them, or send them now.</span>
               ) : dailyRunUnsent > 0 ? (
                 <span className="muted">
                   The next daily run will email the {dailyRunUnsent} it found; the other {unsent - dailyRunUnsent} (added by hand or by a
-                  search) need Send outreach to new leads.
+                  search) need Send outreach to new {noun.many}.
                 </span>
               ) : (
-                <span className="muted">The daily run only emails leads it found itself, so these need Send outreach to new leads.</span>
+                <span className="muted">
+                  The daily run only emails {noun.many} it found itself, so these need Send outreach to new {noun.many}.
+                </span>
               )}
             </>
           ) : (
