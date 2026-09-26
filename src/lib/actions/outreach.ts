@@ -4,6 +4,7 @@
 // input, calls the shared rules in src/lib/outreach/, refreshes the pages
 // that show the result, and turns unexpected failures into a plain message
 // (the technical detail goes to the server log with the lead id).
+import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
@@ -53,7 +54,7 @@ async function guarded(
     return result;
   } catch (err) {
     logError(`action.${scope}`, err, { pipeline, leadId });
-    return { ok: false, error: "Something went wrong saving that — nothing was changed. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Something went wrong saving that — nothing was changed. Try again in a moment.") };
   }
 }
 
@@ -154,7 +155,7 @@ export async function previewBulkSendAction(pipeline: string): Promise<BulkPrevi
     return { ok: true, preview: await previewBulkSend(parsePipelineId(pipeline)) };
   } catch (err) {
     logError("action.previewBulkSend", err, { pipeline });
-    return { ok: false, error: "Couldn't work out who would be emailed — nothing was sent. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't work out who would be emailed — nothing was sent. Try again in a moment.") };
   }
 }
 
@@ -175,7 +176,10 @@ export async function sendBulkChunkAction(pipeline: string, leadIds: string[], c
   } catch (err) {
     logError("action.sendBulkChunk", err, { pipeline });
     refresh(p);
-    return { ok: false, error: "The bulk send stopped because of an unexpected error. Leads already emailed are marked Contacted." };
+    return {
+      ok: false,
+      error: failureMessage(err, "The bulk send stopped because of an unexpected error. Leads already emailed are marked Contacted."),
+    };
   }
 }
 
@@ -194,7 +198,7 @@ export async function findEmailsChunkAction(pipeline: string): Promise<BulkFindA
     return { ok: true, result };
   } catch (err) {
     logError("action.findEmailsChunk", err, { pipeline });
-    return { ok: false, error: "The email search stopped because of an unexpected error. Progress so far is saved." };
+    return { ok: false, error: failureMessage(err, "The email search stopped because of an unexpected error. Progress so far is saved.") };
   }
 }
 

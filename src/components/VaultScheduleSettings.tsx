@@ -60,7 +60,9 @@ export default function VaultScheduleSettings({
   );
 
   const live = schedule.enabled && !paused;
-  const lastCounted = runs.find((r) => r.numbers !== null);
+  // The latest run, whatever its outcome — a failed run must not read like a quiet day.
+  const lastRun = runs[0] ?? null;
+  const lastStatus = lastRun ? (RUN_STATUS[lastRun.status] ?? { label: lastRun.status, className: RUN_STATUS.skipped!.className }) : null;
   const stateLine = paused
     ? "On hold: outbound email is paused, so the daily run skips itself (see Settings)."
     : schedule.enabled
@@ -135,15 +137,25 @@ export default function VaultScheduleSettings({
           Not every business has a findable email address — usually only about 1 in 5 do — and each run stops looking after about 25
           seconds, so expect far fewer emails than businesses checked.
         </p>
-        {lastCounted?.numbers ? (
+        {lastRun && lastStatus ? (
           <p>
-            <span className="font-medium">Last run ({lastCounted.startedAt}):</span> checked{" "}
-            {plural(lastCounted.numbers.businessesChecked, "business", "businesses")}, found{" "}
-            {plural(lastCounted.numbers.leadsFound, "address", "addresses")}, emailed{" "}
-            <strong>{plural(lastCounted.numbers.emailsSent, "lead", "leads")}</strong>.
+            <span className={`mr-1 rounded-full px-2 py-0.5 text-xs font-medium ${lastStatus.className}`}>{lastStatus.label}</span>
+            <span className="font-medium">Last run ({lastRun.startedAt}):</span>{" "}
+            {lastRun.numbers ? (
+              <>
+                checked {plural(lastRun.numbers.businessesChecked, "business", "businesses")}, found{" "}
+                {plural(lastRun.numbers.leadsFound, "address", "addresses")}, emailed{" "}
+                <strong>{plural(lastRun.numbers.emailsSent, "lead", "leads")}</strong>.
+              </>
+            ) : (
+              (lastRun.summary ?? "No details were recorded.")
+            )}
+            {(lastRun.status === "failed" || lastRun.status === "partial" || lastRun.status === "interrupted") && lastRun.errors[0] && (
+              <span className="block text-red-800 dark:text-red-300">First problem: {lastRun.errors[0]}</span>
+            )}
           </p>
         ) : (
-          <p className="muted">No daily run has searched yet, so there are no results to show.</p>
+          <p className="muted">No daily run has happened yet, so there are no results to show.</p>
         )}
       </div>
       <p className="text-sm muted">The daily run time is fixed; ask your developer to change it.</p>

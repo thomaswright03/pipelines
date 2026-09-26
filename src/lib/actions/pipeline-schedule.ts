@@ -1,5 +1,6 @@
 "use server";
 
+import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/log";
 import { savePipelineSchedule, scheduleSchema, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
@@ -26,7 +27,7 @@ export async function updateVaultScheduleAction(_prevState: UpdateScheduleState,
     await savePipelineSchedule(VAULT_SCHEDULE_ID, parsed.data);
   } catch (err) {
     logError("action.updateVaultSchedule", err);
-    return { error: "Couldn't save the schedule — nothing changed. Try again in a moment.", values };
+    return { error: failureMessage(err, "Couldn't save the schedule — nothing changed. Try again in a moment."), values };
   }
   revalidatePath("/vault-pipeline");
   return { saved: true, values };

@@ -53,7 +53,7 @@ test("a single send asks first, emails once and moves the lead to Contacted", as
 test("a bulk send shows who it will email, and Stop halts it after the email in progress", async ({ page }) => {
   await seedColdLeads(25);
   await page.goto("/vault-pipeline");
-  await expect(page.getByText("25 leads found but not yet emailed.")).toBeVisible();
+  await expect(page.getByText("25 leads ready to email.")).toBeVisible();
 
   await page.getByRole("button", { name: "Send outreach to new leads…" }).click();
   const dialog = page.getByRole("dialog");
@@ -69,7 +69,7 @@ test("a bulk send shows who it will email, and Stop halts it after the email in 
   expect(await outboxCount()).toBe(sent);
 
   await dialog.getByRole("button", { name: "Close" }).click();
-  await expect(page.getByText(`${25 - sent} leads found but not yet emailed.`)).toBeVisible();
+  await expect(page.getByText(`${25 - sent} leads ready to email.`)).toBeVisible();
 });
 
 test("pausing outbound email blocks sending everywhere until resumed", async ({ page }) => {

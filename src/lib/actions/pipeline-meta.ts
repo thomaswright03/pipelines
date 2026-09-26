@@ -1,5 +1,6 @@
 "use server";
 
+import { failureMessage } from "@/lib/db-health";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
@@ -31,7 +32,7 @@ export async function updatePipelineMetaAction(pipelineId: string, formData: For
     });
   } catch (err) {
     logError("action.updatePipelineMeta", err, { pipelineId });
-    return { error: "Couldn't save the card — nothing changed. Try again in a moment." };
+    return { error: failureMessage(err, "Couldn't save the card — nothing changed. Try again in a moment.") };
   }
 
   revalidatePath("/");

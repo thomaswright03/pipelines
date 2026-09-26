@@ -66,7 +66,7 @@ export default function SettingsControls({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {dialog}
       <section aria-labelledby="pause-heading" className="card flex flex-col gap-3 p-4">
         <h2 id="pause-heading" className="flex items-center gap-2 text-base font-semibold">

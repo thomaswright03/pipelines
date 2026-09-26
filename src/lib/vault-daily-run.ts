@@ -48,10 +48,17 @@ export type DailyRunOptions = {
 // lead changed meanwhile) — reported as skipped, never as a failure.
 const SEND_FAILURES = new Set(["send_failed", "delivery_unknown"]);
 
+const UNSENT_DAILY = { source: DAILY_RUN_SOURCE, status: "new", email: { not: null }, sendBlockedReason: null };
+
+/** How many sendable leads the next daily run will email (it only sends the ones daily runs found). */
+export function countUnsentDailyLeads(): Promise<number> {
+  return prisma.lead.count({ where: UNSENT_DAILY });
+}
+
 /** New, sendable leads found by daily runs, oldest first. */
 function listUnsentDailyLeads() {
   return prisma.lead.findMany({
-    where: { source: DAILY_RUN_SOURCE, status: "new", email: { not: null }, sendBlockedReason: null },
+    where: UNSENT_DAILY,
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true },
     take: MAX_SEND_QUEUE,

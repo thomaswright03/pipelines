@@ -202,14 +202,14 @@ function ProgressBody({ progress, willSend, stopping }: { progress: Progress; wi
         {stopping ? " · stopping…" : "…"}
       </p>
       <div
-        className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800"
+        className="h-2 w-full overflow-hidden rounded-full bg-zinc-200 ring-1 ring-inset ring-zinc-500 dark:bg-zinc-800 dark:ring-zinc-400"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
         aria-label="Send progress"
       >
-        <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${pct}%` }} />
+        <div className="h-full rounded-full bg-indigo-600 transition-all dark:bg-indigo-400" style={{ width: `${pct}%` }} />
       </div>
       <p className="text-sm muted">Keep this tab open until it finishes. Closing it stops the send after the current email.</p>
     </div>

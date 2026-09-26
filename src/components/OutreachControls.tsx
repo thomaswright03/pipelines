@@ -31,12 +31,18 @@ export default function OutreachControls({
   pipeline,
   paused,
   unsent,
+  dailyRunUnsent = null,
   blocked,
+  nextCity,
 }: {
   pipeline: PipelineId;
   paused: boolean;
   /** New leads with an address that haven't been emailed yet. */
   unsent: number;
+  /** Of those, the ones the daily run will email (it only sends leads daily runs found); null when there is no daily run. */
+  dailyRunUnsent?: number | null;
+  /** Where "Find … in the next city" will search. */
+  nextCity: string;
   /** New leads with an address that can't be sent (already pitched, opted out, unverified…). */
   blocked: number;
 }) {
@@ -77,6 +83,9 @@ export default function OutreachControls({
         <button type="button" disabled={isPending} onClick={runPipeline} className="btn-primary">
           {isPending ? "Searching… (up to a minute)" : isAgents ? "Find agents in the next city" : "Find leads in the next city"}
         </button>
+        <p className="self-center text-sm muted">
+          Next city: <strong className="font-medium text-zinc-800 dark:text-zinc-200">{nextCity}</strong>
+        </p>
         <button
           type="button"
           disabled={isPending}
@@ -95,7 +104,19 @@ export default function OutreachControls({
         <p className="flex-1 text-sm">
           {unsent > 0 ? (
             <>
-              <strong>{plural(unsent, noun.one, noun.many)}</strong> found but not yet emailed.
+              <strong>{plural(unsent, noun.one, noun.many)}</strong> ready to email.{" "}
+              {dailyRunUnsent === null ? (
+                <span className="muted">They&apos;re only emailed when you press Send outreach to new leads.</span>
+              ) : dailyRunUnsent >= unsent ? (
+                <span className="muted">The next daily run will email them, or send them now.</span>
+              ) : dailyRunUnsent > 0 ? (
+                <span className="muted">
+                  The next daily run will email the {dailyRunUnsent} it found; the other {unsent - dailyRunUnsent} (added by hand or by a
+                  search) need Send outreach to new leads.
+                </span>
+              ) : (
+                <span className="muted">The daily run only emails leads it found itself, so these need Send outreach to new leads.</span>
+              )}
             </>
           ) : (
             <span className="muted">No New {noun.many} are ready to email.</span>

@@ -123,7 +123,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
           Card {index + 1} of {leads.length}
         </p>
         <div
-          className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800"
+          className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-200 ring-1 ring-inset ring-zinc-500 dark:bg-zinc-800 dark:ring-zinc-400"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={leads.length}
@@ -131,7 +131,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
           aria-label="Calls worked through"
         >
           <div
-            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-300"
+            className="h-full rounded-full bg-indigo-600 transition-all dark:bg-indigo-400 duration-300"
             style={{ width: `${(index / leads.length) * 100}%` }}
           />
         </div>

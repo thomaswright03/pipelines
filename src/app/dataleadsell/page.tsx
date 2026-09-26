@@ -4,6 +4,7 @@ import HowThisWorks from "@/components/HowThisWorks";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
+import { peekNextAgentCity } from "@/lib/agent-city-picker";
 import ReplyStatus from "@/components/ReplyStatus";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import AdreImportPanel from "@/components/AdreImportPanel";
@@ -30,7 +31,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     ...searchWhere(params.q, ["name", "brokerage", "email", "city", "county"]),
   };
 
-  const [filteredTotal, total, withEmail, counts, settings, adre, unsent, blocked, replyHealth] = await Promise.all([
+  const [filteredTotal, total, withEmail, counts, settings, adre, unsent, blocked, replyHealth, nextCity] = await Promise.all([
     prisma.agentLead.count({ where }),
     prisma.agentLead.count(),
     prisma.agentLead.count({ where: { email: { not: null } } }),
@@ -40,6 +41,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     getPipeline("dataleadsell").countSendable(prisma),
     getPipeline("dataleadsell").countBlockedNew(prisma),
     getReplyHealth(),
+    peekNextAgentCity(prisma),
   ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.agentLead.findMany({
@@ -72,7 +74,13 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <Stat label="With email" value={withEmail} />
       </div>
 
-      <OutreachControls pipeline="dataleadsell" paused={settings.outboundPaused} unsent={unsent} blocked={blocked} />
+      <OutreachControls
+        pipeline="dataleadsell"
+        paused={settings.outboundPaused}
+        unsent={unsent}
+        blocked={blocked}
+        nextCity={`${nextCity.city} (${nextCity.county} County, ${nextCity.state})`}
+      />
       <ReplyStatus health={replyHealth} />
       <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/log";
 import { recordServiceCheck, setAllowCrossPipelineRepeats, setOutboundPaused } from "@/lib/outreach/settings";
@@ -21,7 +22,7 @@ export async function setOutboundPausedAction(paused: boolean): Promise<ActionRe
     };
   } catch (err) {
     logError("action.setOutboundPaused", err, { paused });
-    return { ok: false, error: "Couldn't save that — the setting didn't change. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't save that — the setting didn't change. Try again in a moment.") };
   }
 }
 
@@ -37,7 +38,7 @@ export async function setAllowCrossPipelineRepeatsAction(allow: boolean): Promis
     };
   } catch (err) {
     logError("action.setAllowCrossPipelineRepeats", err, { allow });
-    return { ok: false, error: "Couldn't save that — the setting didn't change. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't save that — the setting didn't change. Try again in a moment.") };
   }
 }
 
@@ -54,7 +55,7 @@ export async function addSuppressionAction(email: string, note: string): Promise
     return result;
   } catch (err) {
     logError("action.addSuppression", err);
-    return { ok: false, error: "Couldn't save that — the list didn't change. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't save that — the list didn't change. Try again in a moment.") };
   }
 }
 
@@ -65,7 +66,7 @@ export async function removeSuppressionByEmailAction(email: string): Promise<Act
     return result;
   } catch (err) {
     logError("action.removeSuppressionByEmail", err);
-    return { ok: false, error: "Couldn't save that — the list didn't change. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't save that — the list didn't change. Try again in a moment.") };
   }
 }
 

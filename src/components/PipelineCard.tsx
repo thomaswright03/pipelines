@@ -105,9 +105,9 @@ export default function PipelineCard({
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {rest.kind === "hosted" && (
-                <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Always-on
+                // Not a health indicator: this app doesn't check the hosted service.
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  Runs separately
                 </span>
               )}
               <button onClick={() => setEditing(true)} className="btn-ghost text-xs">

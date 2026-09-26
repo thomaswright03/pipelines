@@ -3,6 +3,7 @@
 // Cold Outreach–only server actions. Everything both pipelines share
 // (sending, email lookup, status changes, reply/bounce/opt-out) lives in
 // ./outreach.ts on top of src/lib/outreach/.
+import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -87,7 +88,7 @@ export async function createLeadAction(input: ColdOutreachLeadInput): Promise<Le
     return { ok: true, leadId: lead.id };
   } catch (err) {
     logError("action.createLead", err);
-    return { error: UNEXPECTED };
+    return { error: failureMessage(err, UNEXPECTED) };
   }
 }
 
@@ -112,7 +113,7 @@ export async function updateLeadAction(leadId: string, input: ColdOutreachLeadIn
     return { ok: true, leadId };
   } catch (err) {
     logError("action.updateLead", err, { leadId });
-    return { error: UNEXPECTED };
+    return { error: failureMessage(err, UNEXPECTED) };
   }
 }
 
@@ -160,7 +161,7 @@ export async function searchLeadsAction(_prev: LeadSearchState, formData: FormDa
   } catch (err) {
     if (err instanceof YelpError) return { error: err.message };
     logError("action.searchLeads", err);
-    return { error: "The search stopped because of an unexpected error. Any leads already added are saved." };
+    return { error: failureMessage(err, "The search stopped because of an unexpected error. Any leads already added are saved.") };
   }
 }
 
@@ -182,7 +183,7 @@ export async function runPipelineScrapeAction(): Promise<ActionResult> {
   } catch (err) {
     if (err instanceof YelpError) return { ok: false, error: err.message };
     logError("action.runPipelineScrape", err);
-    return { ok: false, error: "The run stopped because of an unexpected error. Any leads already added are saved." };
+    return { ok: false, error: failureMessage(err, "The run stopped because of an unexpected error. Any leads already added are saved.") };
   }
 }
 
@@ -206,7 +207,7 @@ export async function scheduleAppointmentAction(leadId: string, localDateTime: s
     return { ok: true, message: `Appointment with ${lead.name} set for ${formatDateTime(date)} — moved to Appointment set.` };
   } catch (err) {
     logError("action.scheduleAppointment", err, { leadId });
-    return { ok: false, error: UNEXPECTED };
+    return { ok: false, error: failureMessage(err, UNEXPECTED) };
   }
 }
 
@@ -227,7 +228,7 @@ export async function markLeadLostAction(leadId: string, reason: string): Promis
     return { ok: true, message: `Marked ${lead.name} as Lost (${CALL_OUTCOME_LABEL[reason] ?? reason}).` };
   } catch (err) {
     logError("action.markLeadLost", err, { leadId });
-    return { ok: false, error: UNEXPECTED };
+    return { ok: false, error: failureMessage(err, UNEXPECTED) };
   }
 }
 
@@ -253,6 +254,6 @@ export async function markResponseAsNonDeliveryAction(leadId: string): Promise<A
     };
   } catch (err) {
     logError("action.markResponseAsNonDelivery", err, { leadId });
-    return { ok: false, error: UNEXPECTED };
+    return { ok: false, error: failureMessage(err, UNEXPECTED) };
   }
 }

@@ -2,6 +2,7 @@
 
 // dataleadsell-only server actions (manual entry, Yelp search, the ADRE
 // import). Everything both pipelines share lives in ./outreach.ts.
+import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -88,7 +89,7 @@ export async function createAgentAction(input: AgentLeadInput): Promise<AgentFor
     return { ok: true, leadId: lead.id };
   } catch (err) {
     logError("action.createAgent", err);
-    return { error: UNEXPECTED };
+    return { error: failureMessage(err, UNEXPECTED) };
   }
 }
 
@@ -113,7 +114,7 @@ export async function updateAgentAction(leadId: string, input: AgentLeadInput): 
     return { ok: true, leadId };
   } catch (err) {
     logError("action.updateAgent", err, { leadId });
-    return { error: UNEXPECTED };
+    return { error: failureMessage(err, UNEXPECTED) };
   }
 }
 
@@ -154,7 +155,7 @@ export async function searchAgentsAction(_prev: AgentSearchState, formData: Form
   } catch (err) {
     if (err instanceof YelpError) return { error: err.message };
     logError("action.searchAgents", err);
-    return { error: "The search stopped because of an unexpected error. Any agents already added are saved." };
+    return { error: failureMessage(err, "The search stopped because of an unexpected error. Any agents already added are saved.") };
   }
 }
 
@@ -177,7 +178,7 @@ export async function runAgentPipelineScrapeAction(): Promise<ActionResult> {
   } catch (err) {
     if (err instanceof YelpError) return { ok: false, error: err.message };
     logError("action.runAgentPipelineScrape", err);
-    return { ok: false, error: "The run stopped because of an unexpected error. Any agents already added are saved." };
+    return { ok: false, error: failureMessage(err, "The run stopped because of an unexpected error. Any agents already added are saved.") };
   }
 }
 
@@ -221,6 +222,6 @@ export async function processAdreChunkAction(): Promise<AdreChunkActionResult> {
     return { ok: true, result };
   } catch (err) {
     logError("action.processAdreChunk", err);
-    return { ok: false, error: "The ADRE import stopped because of an unexpected error. Progress so far is saved." };
+    return { ok: false, error: failureMessage(err, "The ADRE import stopped because of an unexpected error. Progress so far is saved.") };
   }
 }

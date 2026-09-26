@@ -17,6 +17,18 @@ export function isDatabaseUnavailable(err: unknown): boolean {
   );
 }
 
+export const DATABASE_UNAVAILABLE_MESSAGE =
+  "Can't reach the database right now, so this didn't go through. Wait a minute and try again; if it keeps happening, check the database provider's status page (Neon) or ask your developer.";
+
+/**
+ * What a form or button shows when its action failed unexpectedly: the
+ * outage message when the database couldn't be reached (the same advice as
+ * the outage page), otherwise `fallback`.
+ */
+export function failureMessage(err: unknown, fallback: string): string {
+  return isDatabaseUnavailable(err) ? DATABASE_UNAVAILABLE_MESSAGE : fallback;
+}
+
 /** Whether a trivial query succeeds within a few seconds. Never throws. */
 export async function databaseReachable(): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;

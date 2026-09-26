@@ -16,6 +16,8 @@ import { COLD_OUTREACH_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
 import { formatDateTime } from "@/lib/time";
 import { getPipeline } from "@/lib/outreach/pipelines";
+import { peekNextCity } from "@/lib/vault-city-picker";
+import { countUnsentDailyLeads } from "@/lib/vault-daily-run";
 
 export const metadata: Metadata = { title: "Cold Outreach — Leads" };
 export const dynamic = "force-dynamic";
@@ -28,17 +30,20 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     ...searchWhere(params.q, ["name", "company", "email", "city"]),
   };
 
-  const [filteredTotal, total, counts, schedule, settings, runs, unsent, blocked, replyHealth] = await Promise.all([
-    prisma.lead.count({ where }),
-    prisma.lead.count(),
-    prisma.lead.groupBy({ by: ["status"], _count: true }),
-    getPipelineSchedule(VAULT_SCHEDULE_ID),
-    getAppSettings(),
-    recentRuns("cold-outreach", "daily", 5),
-    getPipeline("cold-outreach").countSendable(prisma),
-    getPipeline("cold-outreach").countBlockedNew(prisma),
-    getReplyHealth(),
-  ]);
+  const [filteredTotal, total, counts, schedule, settings, runs, unsent, dailyRunUnsent, blocked, replyHealth, nextCity] =
+    await Promise.all([
+      prisma.lead.count({ where }),
+      prisma.lead.count(),
+      prisma.lead.groupBy({ by: ["status"], _count: true }),
+      getPipelineSchedule(VAULT_SCHEDULE_ID),
+      getAppSettings(),
+      recentRuns("cold-outreach", "daily", 5),
+      getPipeline("cold-outreach").countSendable(prisma),
+      countUnsentDailyLeads(),
+      getPipeline("cold-outreach").countBlockedNew(prisma),
+      getReplyHealth(),
+      peekNextCity(prisma),
+    ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.lead.findMany({
     where,
@@ -81,7 +86,14 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         </div>
       </div>
 
-      <OutreachControls pipeline="cold-outreach" paused={settings.outboundPaused} unsent={unsent} blocked={blocked} />
+      <OutreachControls
+        pipeline="cold-outreach"
+        paused={settings.outboundPaused}
+        unsent={unsent}
+        dailyRunUnsent={dailyRunUnsent}
+        blocked={blocked}
+        nextCity={`${nextCity.city}, ${nextCity.state}`}
+      />
       <ReplyStatus health={replyHealth} />
       <VaultScheduleSettings
         schedule={schedule}

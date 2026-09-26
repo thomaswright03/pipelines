@@ -2,6 +2,7 @@
 
 // Unmatched replies: find the lead a reply belongs to, attach it (which
 // applies the normal reply rules to that lead), or dismiss it.
+import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
@@ -34,7 +35,7 @@ export async function searchLeadsForReplyAction(query: string): Promise<{ ok: tr
     return { ok: true, leads: results.flat() };
   } catch (err) {
     logError("action.searchLeadsForReply", err);
-    return { ok: false, error: "Couldn't search leads — try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't search leads — try again in a moment.") };
   }
 }
 
@@ -50,7 +51,7 @@ export async function attachReplyAction(replyId: string, pipeline: string, leadI
     return result;
   } catch (err) {
     logError("action.attachReply", err, { replyId, pipeline, leadId });
-    return { ok: false, error: "Couldn't attach the reply — nothing was changed. Try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't attach the reply — nothing was changed. Try again in a moment.") };
   }
 }
 
@@ -61,6 +62,6 @@ export async function dismissReplyAction(replyId: string): Promise<ActionResult>
     return result;
   } catch (err) {
     logError("action.dismissReply", err, { replyId });
-    return { ok: false, error: "Couldn't dismiss the reply — try again in a moment." };
+    return { ok: false, error: failureMessage(err, "Couldn't dismiss the reply — try again in a moment.") };
   }
 }

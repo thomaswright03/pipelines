@@ -2,6 +2,7 @@
 // pages call them: validation messages, the happy path, and what the
 // operator sees when the database or Yelp fails part-way. (next/cache is
 // mocked in tests/setup.ts; nothing reaches the network.)
+import { DATABASE_UNAVAILABLE_MESSAGE } from "@/lib/db-health";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import * as log from "@/lib/log";
@@ -67,12 +68,12 @@ type Model = "appSettings" | "suppressedEmail" | "pipelineMeta" | "pipelineSched
  * the test ends, and keeps the error log quiet. (Prisma's model delegates
  * are proxies, so the delegate is wrapped rather than spied on.)
  */
-function dbFails(model: Model, method: string) {
+function dbFails(model: Model, method: string, error: Error = DB_DOWN) {
   vi.spyOn(log, "logError").mockImplementation(() => {});
   const client = prisma as unknown as Record<string, object>;
   const original = client[model]!;
   client[model] = new Proxy(original, {
-    get: (target, prop) => (prop === method ? () => Promise.reject(DB_DOWN) : Reflect.get(target, prop)),
+    get: (target, prop) => (prop === method ? () => Promise.reject(error) : Reflect.get(target, prop)),
   });
   restorers.push(() => {
     client[model] = original;
@@ -127,7 +128,7 @@ describe("settings actions", () => {
     dbFails("appSettings", "upsert");
     expect(await setOutboundPausedAction(true)).toEqual({
       ok: false,
-      error: "Couldn't save that — the setting didn't change. Try again in a moment.",
+      error: DATABASE_UNAVAILABLE_MESSAGE,
     });
     expect(await setAllowCrossPipelineRepeatsAction(true)).toMatchObject({ ok: false });
   });
@@ -149,7 +150,7 @@ describe("settings actions", () => {
 
   it("says the list didn't change when the database fails", async () => {
     dbFails("suppressedEmail", "findUnique");
-    expect(await addSuppressionAction("a@b.test", "")).toMatchObject({ ok: false, error: expect.stringMatching(/list didn't change/) });
+    expect(await addSuppressionAction("a@b.test", "")).toMatchObject({ ok: false, error: DATABASE_UNAVAILABLE_MESSAGE });
     expect(await removeSuppressionByEmailAction("a@b.test")).toMatchObject({ ok: false });
   });
 });
@@ -167,7 +168,7 @@ describe("dashboard card and schedule actions", () => {
 
     dbFails("pipelineMeta", "upsert");
     expect(await updatePipelineMetaAction("vault-pipeline", form({ name: "Cold Outreach" }))).toEqual({
-      error: "Couldn't save the card — nothing changed. Try again in a moment.",
+      error: DATABASE_UNAVAILABLE_MESSAGE,
     });
   });
 
@@ -183,7 +184,7 @@ describe("dashboard card and schedule actions", () => {
     expect(await prisma.pipelineSchedule.findFirstOrThrow()).toMatchObject({ enabled: false, leadCount: 20 });
 
     dbFails("pipelineSchedule", "upsert");
-    expect((await updateVaultScheduleAction({}, form({ enabled: "on", businessesPerRun: "10" }))).error).toMatch(/nothing changed/);
+    expect((await updateVaultScheduleAction({}, form({ enabled: "on", businessesPerRun: "10" }))).error).toBe(DATABASE_UNAVAILABLE_MESSAGE);
   });
 });
 
@@ -196,7 +197,7 @@ describe("unmatched-reply actions", () => {
     expect(found.ok && found.leads.map((l) => l.name).sort()).toEqual(["Zed Agent", "Zeta Roofing"]);
 
     failing(getPipeline("cold-outreach"), "search");
-    expect(await searchLeadsForReplyAction("ze")).toEqual({ ok: false, error: "Couldn't search leads — try again in a moment." });
+    expect(await searchLeadsForReplyAction("ze")).toEqual({ ok: false, error: DATABASE_UNAVAILABLE_MESSAGE });
   });
 
   it("attaches or dismisses a reply, and reports failures plainly", async () => {
@@ -216,7 +217,7 @@ describe("unmatched-reply actions", () => {
     });
 
     dbFails("inboundReply", "updateMany");
-    expect(await dismissReplyAction(other.id)).toEqual({ ok: false, error: "Couldn't dismiss the reply — try again in a moment." });
+    expect(await dismissReplyAction(other.id)).toEqual({ ok: false, error: DATABASE_UNAVAILABLE_MESSAGE });
   });
 });
 
@@ -251,10 +252,17 @@ describe("Cold Outreach lead actions", () => {
     });
   });
 
-  it("reports an unexpected failure while saving", async () => {
-    dbFails("lead", "create");
+  it("reports any other failure while saving in general terms", async () => {
+    dbFails("lead", "create", new Error("unique constraint violated"));
     expect(await createLeadAction({ ...COLD_FORM, name: "Acme" })).toEqual({
       error: "Something went wrong saving that — nothing was changed. Try again in a moment.",
+    });
+  });
+
+  it("says the database can't be reached when that's why saving failed", async () => {
+    dbFails("lead", "create");
+    expect(await createLeadAction({ ...COLD_FORM, name: "Acme" })).toEqual({
+      error: DATABASE_UNAVAILABLE_MESSAGE,
     });
   });
 
@@ -368,7 +376,7 @@ describe("dataleadsell actions", () => {
     });
     expect(await processAdreChunkAction()).toMatchObject({ ok: true, result: { checked: 0 } });
     dbFails("adreLicensee", "findMany");
-    expect(await processAdreChunkAction()).toMatchObject({ ok: false, error: expect.stringMatching(/Progress so far is saved/) });
+    expect(await processAdreChunkAction()).toMatchObject({ ok: false, error: DATABASE_UNAVAILABLE_MESSAGE });
   });
 });
 
@@ -403,7 +411,7 @@ describe("shared lead actions", () => {
     failing(getPipeline("cold-outreach"), "findLead");
     expect(await setStarredAction("cold-outreach", lead.id, true)).toEqual({
       ok: false,
-      error: "Something went wrong saving that — nothing was changed. Try again in a moment.",
+      error: DATABASE_UNAVAILABLE_MESSAGE,
     });
   });
 

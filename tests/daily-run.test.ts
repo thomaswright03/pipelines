@@ -3,7 +3,9 @@
 // the next run.
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { runDailyColdOutreach } from "@/lib/vault-daily-run";
+import { countUnsentDailyLeads, runDailyColdOutreach } from "@/lib/vault-daily-run";
+import { markCityUsed, peekNextCity, pickNextCity } from "@/lib/vault-city-picker";
+import { markAgentCityUsed, peekNextAgentCity, pickNextAgentCity } from "@/lib/agent-city-picker";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { displayRunStatus } from "@/lib/outreach/runs";
 import { GET as dailyGET } from "@/app/api/cron/vault-daily/route";
@@ -57,6 +59,8 @@ describe("leads a daily run didn't get to", () => {
     expect(first.summary).toContain("6 left for the next run (out of time)");
     expect(mail.messages).toHaveLength(0);
     expect(await getPipeline("cold-outreach").countSendable(prisma)).toBe(7);
+    // The page tells the hand-added one apart: only the six are the daily run's to send.
+    expect(await countUnsentDailyLeads()).toBe(6);
 
     // Run 2 finds nothing new in its city but emails the six left over.
     stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
@@ -183,5 +187,21 @@ describe("the daily run's status", () => {
     expect(displayRunStatus({ status: "running", startedAt: new Date(now.getTime() - 10 * 60_000) }, now)).toBe("interrupted");
     expect(displayRunStatus({ status: "running", startedAt: new Date(now.getTime() - 30_000) }, now)).toBe("running");
     expect(displayRunStatus({ status: "failed", startedAt: new Date(0) }, now)).toBe("failed");
+  });
+});
+
+describe("the next city", () => {
+  it("is shown before searching, and is the one searched; a used city moves the preview on", async () => {
+    const shown = await peekNextCity(prisma);
+    const picked = await pickNextCity(prisma);
+    expect({ city: picked.city, state: picked.state }).toEqual(shown);
+    await markCityUsed(prisma, picked.city, picked.state);
+    expect(await peekNextCity(prisma)).not.toEqual(shown);
+
+    const agentShown = await peekNextAgentCity(prisma);
+    const agentPicked = await pickNextAgentCity(prisma);
+    expect({ city: agentPicked.city, county: agentPicked.county, state: agentPicked.state }).toEqual(agentShown);
+    await markAgentCityUsed(prisma, agentPicked.city, agentPicked.county, agentPicked.state);
+    expect(await peekNextAgentCity(prisma)).not.toEqual(agentShown);
   });
 });
