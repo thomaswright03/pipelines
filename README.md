@@ -51,6 +51,15 @@ the bulk send, and the daily cron.
   - By default an address gets one pitch across **both** pipelines. **Settings → Same address in both
     pipelines** allows one pitch per pipeline instead.
 - **First pitch only to New leads.** The server refuses a send for any other status and says why.
+- **Refused addresses leave the queue.** When the recipient's mail server refuses an address for good (a
+  5xx at RCPT TO, such as "550 5.1.1 User unknown", or a 5.1.x/5.2.x mailbox status), the ledger keeps the
+  address as `refused` so it is never tried again from any lead, and the lead is flagged **Address refused
+  by the mail server** with the server's reason; editing the address clears it. A temporary refusal (4xx)
+  is retried by later sends and treated the same way after 3 tries. Refusals don't count toward the bulk
+  send's "email service failed three times" stop, don't make a daily run partial and don't change
+  **Settings → Connections**; they are named in the bulk-send summary and the run summary. Every failed
+  or delivery-unknown attempt adds an entry to the lead's History and a **Last send failed** marker to its
+  row in the lead list, until a send succeeds.
 - **Only addresses tied to the lead.** Discovery guesses a website from the lead's name (Yelp and ADRE
   don't give one). An address found on a guessed site is saved only if that site also shows the lead's
   phone number or street address from Yelp/ADRE, or its city together with a second, independent sign
@@ -340,8 +349,10 @@ Vercel sends automatically when `CRON_SECRET` is set.
     still went out and **failed** only if nothing could be done. A failed or partial run shows its first
     error in its row on the Cold Outreach page.
   - Otherwise only real send failures (the email service refused or dropped the send) make a run **partial** or
-    **failed**. Leads the send rules skipped (address already pitched, opted out) are listed as skipped
-    and the run still **succeeded**.
+    **failed**. Leads the send rules skipped (address already pitched, opted out) and addresses the
+    recipient's server refused are listed separately and the run still **succeeded**.
+  - The stale-contacts job moves every due lead in two set-based updates per pipeline, so a backlog of
+    thousands finishes in seconds.
   - A run still marked running two minutes after it started was cut off before it could record its
     outcome, and shows as **Interrupted**.
 
@@ -413,8 +424,10 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
   own figures; **We replied back** is measured against genuine replies only.
 - A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Reply needs a
   look** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
-- A reply that may be a "no" or a complaint (see "Opt-outs" above) gets a reply time and the same flag,
-  with the reason, instead of moving the lead to Responded.
+- A reply that may be a "no" or a complaint ("no, thank you", "not for us", "we're all set", "who is this"
+  — see "Opt-outs" above) gets the same flag, with the reason, instead of moving the lead to Responded. It
+  gets no reply time, so it isn't counted in the reply rate and the lead still reaches the call deck, until
+  the operator presses **Mark replied**.
 - A genuine opt-out goes on the do-not-email list with its evidence, whatever the lead's status, and a lead
   that was being worked (Contacted, Responded, on the call deck) moves to Lost (Not interested in
   dataleadsell). Customers keep their status.
@@ -518,7 +531,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 1. **Apply the migrations** in this release to production before deploying it — including
    `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
    `20260928090000_inbound_kind`, `20260928100000_send_failure_status`, `20260929090000_rules_version`,
-   `20260929100000_connection_checks` (all additive) and `20260929110000_lead_status_check`. See "Deploying".
+   `20260929100000_connection_checks`, `20260930090000_send_attempts`, `20260930100000_send_log_lead_index`
+   (all additive) and `20260929110000_lead_status_check`. See "Deploying".
    The status check is added `NOT VALID`, so it can't fail on existing rows. Afterwards, check for rows it
    would reject and fix them (for example with the lead page's status control), then validate it:
 
