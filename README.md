@@ -45,8 +45,8 @@ hard-coded in the components and there is no translation layer. This is the deve
 **still needs the owner's sign-off** (see "Owner-only setup" item 9); until then the question is open.
 Spanish/French would mean moving every string into a translation layer with full catalogues, a persistent
 language switcher and localised dates and numbers. Replies are a separate matter:
-common Spanish and French opt-outs are honoured, and a reply mainly in another language that isn't
-understood is flagged **Reply needs a look** rather than counted as a positive reply.
+common Spanish, French, German, Portuguese, Italian and Dutch opt-outs are honoured, and a reply in another
+language that isn't understood is flagged **Reply needs a look** rather than counted as a positive reply.
 
 A third dashboard card, **AI Lead Responder**, links out to a separate Vercel project. It is not code in
 this repo.
@@ -106,15 +106,23 @@ the bulk send, and the daily cron.
   send checks that list. That covers "STOP"/"Unsubscribe", "remove me (from your list)", "take me off",
   "don't/do not email|contact|message|reach out to me/us" (with or without "again"), "quit/cease
   emailing", "delete my email address", "cease and desist", "leave me alone", "I don't want these/your/any
-  emails", "we don't want to receive your emails", "no longer wish to receive these messages" and
-  similar, plus common Spanish ("no me envíe más correos", "denme de baja") and French ("désabonnez-moi",
-  "ne m'envoyez plus") phrasings; negated phrasings ("please don't stop sending these", "I don't want
+  emails", "we don't want to receive your emails", "no longer wish to receive these messages", "I'd
+  rather not receive these", "refrain from contacting me", "lose my number", rude dismissals ("F off",
+  "get lost") and similar, plus common Spanish ("no me envíe más correos", "denme de baja"), French
+  ("désabonnez-moi", "ne m'envoyez plus"), German ("keine E-Mails mehr", "abmelden"), Portuguese, Italian
+  and Dutch phrasings; negated phrasings ("please don't stop sending these", "I don't want
   these emails to stop") don't count. The reply check reads only the new text of
   the reply: quoted history and signatures are ignored, so an interested reply that quotes our "Reply
   STOP" footer is not an opt-out.
-  - A reply that isn't an opt-out but reads like a "no" or a complaint ("not interested", "wrong person",
-    "how did you get my email", "spam"), or is mainly in another language, is not counted as a positive
-    response: the lead keeps its status and is flagged **Reply needs a look** with the reason, for the
+  - A stop request that isn't about email ("please stop calling my cell, email only") in a reply that also
+    sounds interested, and a question about unsubscribing later ("can I unsubscribe later if it doesn't work
+    out?"), are flagged **Reply needs a look** instead of suppressing the address. A stop request about
+    email ("stop emailing me") is always an opt-out.
+  - A reply counts as positive only when it shows a positive signal: a yes, interest, a question, or a
+    request (send details, call me, let's talk). A reply that isn't an opt-out but reads like a "no" or a
+    complaint ("not interested", "wrong person", "how did you get my email", "spam", "pass"), is in another
+    language, or that the rules can't place at all ("We'll stick with what we have", "Hmm.") is not counted
+    as a positive response: the lead keeps its status and is flagged **Reply needs a look** with the reason, for the
     operator to decide. While the flag is open, a Contacted lead is **not** moved to the call deck by the
     stale-contacts job, so nobody who complained or said no is cold-called by default. The operator
     resolves it on the lead page: **Mark opted out**, **Mark replied**, move the lead, or **Keep as
@@ -122,6 +130,9 @@ the bulk send, and the daily cron.
     usual if the week is up). A lead already on the call deck when such a reply arrives keeps its place, and
     its card shows the warning.
   - A reply of fewer than three words ("Y", "Si", "Oui") is never read as "written in another language".
+  - A reply the rules merely can't place is only flagged on a lead we were waiting to hear from (Contacted,
+    on the call deck). From a lead that already replied, or a customer, it's added to the History and
+    changes nothing.
   - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see "Reply
     tracking". An opt-out is still honoured even when it comes from an autoresponder.
   - The words that triggered an opt-out are stored and shown on the lead page.
@@ -301,10 +312,16 @@ and prints precision and recall, with every miss, for two splits:
   a fresh held-out batch for the same family is written *before* the rules change and scored before and
   after (both scores are in the corpus headers).
 
-Every held-out split has at least 50 cases (opt-outs 126, needs-a-look 78). Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
+The reply rules also have a **held-out, unlisted phrasings** split each (opt-outs 26, needs-a-look 44):
+declines, brush-offs and stop requests worded in ways no rule listed, which before round 9 were counted as
+positive replies. The other held-out splits have at least 50 cases (opt-outs 126, needs-a-look 78). A
+"needs a look" hit means *not counted as a positive reply* (flagged, or an opt-out). Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
 even when every unit test passes. CI also writes the scores to the run summary.
 
-Every set is **synthetic**, written to resemble real mail, sites and staff directories. To measure
+Every set is **synthetic**, written to resemble real mail, sites and staff directories, and the eval labels
+each score "synthetic". It also scores a **real replies** split (`tests/corpus/real-replies.ts`) on the three
+outcomes the app acts on (opt-out, needs a look, positive) and fails on any missed opt-out; that split is
+empty until the owner supplies data, and the run says so ("Real replies [held-out]: none yet"). To measure
 production traffic, export recent inbound mail with its anonymised text and the app's decision as a
 *suggested* label:
 
@@ -313,8 +330,10 @@ EVAL_EXPORT_DATABASE_URL="<read-only URL or a copy of production>" node scripts/
 ```
 
 The script runs one `SELECT` in a read-only transaction and replaces email addresses, phone numbers, URLs
-and long digit runs. It can't find people's or firms' names in free text: replace those by hand, read and
-correct each label, and add the cases to a **held-out** split. Never commit real addresses or names.
+and long digit runs. Each case comes out in the shape `real-replies.ts` takes (`text`, `subject`,
+`expected`), with `expected` set to what the app decided. It can't find people's or firms' names in free
+text: replace those by hand, read and correct each `expected`, drop the `suggested` details, and paste the
+cases into `REAL_REPLY_HELD_OUT` (aim for 50 or more). Never commit real addresses or names.
 
 **Rules version.** Every stored decision records which version of the rules made it:
 `InboundReply.rulesVersion` (the reply kind, opt-out and "needs a look" verdicts) and the leads'
@@ -451,10 +470,11 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
   own figures; **We replied back** is measured against genuine replies only.
 - A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Reply needs a
   look** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
-- A reply that may be a "no" or a complaint ("no, thank you", "not for us", "we're all set", "who is this"
-  — see "Opt-outs" above) gets the same flag, with the reason, instead of moving the lead to Responded. It
-  gets no reply time, so it isn't counted in the reply rate and the lead still reaches the call deck, until
-  the operator presses **Mark replied**.
+- A reply that may be a "no" or a complaint ("no, thank you", "not for us", "we're all set", "who is this"),
+  or that shows no positive signal at all (see "Opt-outs" above), gets the same flag, with the reason,
+  instead of moving the lead to Responded. It gets no reply time, so it isn't counted in the reply rate,
+  and a Contacted lead stays off the call deck until the operator decides (**Mark replied**, **Mark opted
+  out**, a move, or **Keep as Contacted**).
 - A genuine opt-out goes on the do-not-email list with its evidence, whatever the lead's status, and a lead
   that was being worked (Contacted, Responded, on the call deck) moves to Lost (Not interested in
   dataleadsell). Customers keep their status.

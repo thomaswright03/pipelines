@@ -47,6 +47,9 @@ try {
   const cases = rows.map((r) => ({
     subject: anonymise(r.subject),
     text: anonymise(r.text),
+    // The outcome the app chose, in the shape tests/corpus/real-replies.ts
+    // takes — a suggestion only: correct it before adding the case.
+    expected: r.optedOut ? "opt_out" : r.reviewReason !== null ? "needs_look" : r.kind === "reply" ? "positive" : r.kind,
     suggested: {
       optOut: r.optedOut,
       review: r.reviewReason !== null,

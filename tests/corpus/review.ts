@@ -26,6 +26,16 @@
 // those two no longer measure anything new. "Who is this?" in REVIEW_DEV
 // was relabelled to needs-a-look in the same round. Same-author caveat as
 // in replies.ts.
+// Round 9 (2026-09-26): the review found that any reply the rules couldn't
+// place counted as positive. The metric is now "not counted as a positive
+// reply" (flagged for a look, or an opt-out), and a positive reply needs a
+// positive signal. A fresh "none of the above" batch (REVIEW_UNLISTED_HELD_OUT,
+// 44 cases) was written before the change: precision 100%, recall 8.3%
+// before; 100% / 100% after. That batch was written by the same author in
+// the same session as the new rules, so treat its "after" score as
+// optimistic. On this split: the "spam folder" false flag was fixed by the
+// same change (a spam *folder* is no complaint), and "No rush, whenever you
+// can." is now flagged (no positive signal) — 97.8% / 100% on 78 cases.
 
 export type LabelledReview = { text: string; review: boolean };
 
@@ -61,6 +71,16 @@ export const REVIEW_DEV: LabelledReview[] = [
   { text: "y", review: false },
   { text: "Si", review: false },
   { text: "Oui", review: false },
+  // Round 9, from the reviewer's report: declines that match no listed
+  // phrase were counted as positive replies, and an interested reply that
+  // asks to stop phone calls was read as an opt-out. From round 9 a reply
+  // counts as positive only on a positive signal; these are the cases the
+  // rules were built from.
+  { text: "Pass.", review: true },
+  { text: "We are not the right business for this", review: true },
+  { text: "How much for a website? Also please stop calling my cell, email only.", review: true },
+  { text: "Nein danke.", review: true },
+  { text: "Yes, interested — what does it cost?", review: false },
 ];
 
 export const REVIEW_HELD_OUT: LabelledReview[] = [
@@ -147,4 +167,58 @@ export const REVIEW_HELD_OUT: LabelledReview[] = [
   { text: "Now's a good time, call me.", review: false },
   { text: "We already talked last week, send the sample.", review: false },
   { text: "No rush, whenever you can.", review: false },
+];
+
+// "None of the above": real-looking declines, brush-offs and unclear
+// replies that match no listed phrase, and ordinary positive replies — the
+// class the round-9 review found was silently counted as positive (before
+// round 9 anything the rules couldn't place counted as a yes). Written on
+// 2026-09-26 before the round-9 rule change and scored as-is; kept apart
+// so the eval reports it as its own split. Same held-out rules as above:
+// never edit the classifier against these.
+export const REVIEW_UNLISTED_HELD_OUT: LabelledReview[] = [
+  { text: "We'll stick with what we have.", review: true },
+  { text: "Not at this time.", review: true },
+  { text: "Maybe next year.", review: true },
+  { text: "Our budget is spent for the year.", review: true },
+  { text: "We handle all of that in-house.", review: true },
+  { text: "I'm happy with our current provider.", review: true },
+  { text: "Doesn't apply to us.", review: true },
+  { text: "Not relevant to our business.", review: true },
+  { text: "Can't justify the cost for a two-person shop.", review: true },
+  { text: "I think I'll skip this one.", review: true },
+  { text: "Thanks for reaching out.", review: true },
+  { text: "Hmm.", review: true },
+  { text: "We're closing the business at the end of the year.", review: true },
+  { text: "I don't do probate.", review: true },
+  { text: "We only work with referrals.", review: true },
+  { text: "Already got someone for that.", review: true },
+  { text: "Please don't bother.", review: true },
+  { text: "Why do you keep emailing me?", review: true },
+  { text: "Grazie, non siamo interessati.", review: true },
+  { text: "Obrigado, mas não temos interesse.", review: true },
+  { text: "Geen interesse, dank je.", review: true },
+  { text: "Wir haben kein Interesse.", review: true },
+  { text: "Спасибо, не интересно.", review: true },
+  { text: "不需要，谢谢。", review: true },
+  { text: "Yes please, send me the details.", review: false },
+  { text: "Interested. What's the price?", review: false },
+  { text: "Could you give me a call tomorrow?", review: false },
+  { text: "Sure, let's talk.", review: false },
+  { text: "Sounds great, what are the next steps?", review: false },
+  { text: "I'd like to see a sample.", review: false },
+  { text: "What would it cost for a five-page site?", review: false },
+  { text: "Please send more info.", review: false },
+  { text: "Count me in.", review: false },
+  { text: "Let's do it.", review: false },
+  { text: "Ok, send it over.", review: false },
+  { text: "Tell me more about the Maricopa list.", review: false },
+  { text: "I'm in. How do I pay?", review: false },
+  { text: "My partner handles this, cc'ing her here.", review: false },
+  { text: "Call me at 480-555-0199.", review: false },
+  { text: "Absolutely, when can we start?", review: false },
+  { text: "This could be useful for us. What's involved?", review: false },
+  { text: "Happy to chat next week.", review: false },
+  { text: "Good timing — we've been meaning to redo our site.", review: false },
+  { text: "Book me in for Tuesday.", review: false },
 ];

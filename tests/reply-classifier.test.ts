@@ -202,3 +202,88 @@ describe("classifyReply — replies that need a human look", () => {
     expect(classifyReply({ text: "Not interested, remove me." })).toMatchObject({ optOut: true, review: null });
   });
 });
+
+describe("classifyReply — a reply counts as positive only with a positive signal", () => {
+  it.each([
+    "I'd rather not receive these",
+    "Lose my number",
+    "F off",
+    "Bitte keine E-Mails mehr",
+    "Get lost.",
+    "Kindly refrain from contacting me.",
+  ])("reads the polite, rude or non-English stop request %j as an opt-out", (text) => {
+    expect(classifyReply({ text })).toMatchObject({ optOut: true, review: null });
+  });
+
+  it.each([
+    ["Pass.", /pass/],
+    ["We are not the right business for this", /isn't for them/],
+    ["We'll stick with what we have.", /no clear sign of interest/],
+    ["Hmm.", /no clear sign of interest/],
+    ["Nein danke.", /another language/],
+    ["Спасибо, не интересно.", /another language/],
+  ])("flags %j for a look instead of counting it as a yes", (text, reason) => {
+    const result = classifyReply({ text });
+    expect(result.optOut).toBe(false);
+    expect(result.review).toMatch(reason);
+  });
+
+  it("marks a reply it merely can't place as unclear, and a recognised brush-off as not", () => {
+    expect(classifyReply({ text: "We'll stick with what we have." }).unclear).toBe(true);
+    expect(classifyReply({ text: "Not interested." }).unclear).toBe(false);
+    expect(classifyReply({ text: "Yes, interested — what does it cost?" }).unclear).toBe(false);
+  });
+
+  it("flags a reply with no text of its own", () => {
+    expect(classifyReply({ text: "\n\nOn Thu … wrote:\n> Hi there" }).review).toMatch(/no text of its own/);
+  });
+
+  it.each([
+    "Yes, interested — what does it cost?",
+    "Tell me more.",
+    "Call me at 480-555-0199.",
+    "Sounds good, send me the details.",
+    "Great, thanks!",
+    "Remind me in two weeks.",
+    "Don't hesitate to email me the sample.",
+    "👍",
+  ])("counts %j as a positive reply", (text) => {
+    expect(classifyReply({ text })).toMatchObject({ optOut: false, review: null });
+  });
+
+  it("doesn't let a negated signal count ('not that interested')", () => {
+    expect(classifyReply({ text: "I'm not that interested." }).review).not.toBeNull();
+  });
+});
+
+describe("classifyReply — a stop word in an interested reply", () => {
+  it("flags 'stop calling my cell' in an interested reply for a look instead of opting out", () => {
+    const result = classifyReply({ text: "How much for a website? Also please stop calling my cell, email only." });
+    expect(result.optOut).toBe(false);
+    expect(result.review).toMatch(/stop phone calls/);
+  });
+
+  it("still opts out a stop request about email, even from someone who sounds interested", () => {
+    expect(classifyReply({ text: "Stop emailing me" }).optOut).toBe(true);
+    expect(classifyReply({ text: "Interesting product, but stop emailing me." }).optOut).toBe(true);
+  });
+
+  it("still opts out 'stop calling me' when nothing in the reply sounds interested", () => {
+    expect(classifyReply({ text: "Stop calling me." }).optOut).toBe(true);
+  });
+
+  it("flags a question about unsubscribing later for a look instead of opting out", () => {
+    const result = classifyReply({ text: "Can I unsubscribe later if it doesn't work out?" });
+    expect(result.optOut).toBe(false);
+    expect(result.review).toMatch(/asks about unsubscribing/);
+  });
+
+  it("treats 'Can I unsubscribe?' on its own as a request", () => {
+    expect(classifyReply({ text: "Can I unsubscribe?" }).optOut).toBe(true);
+  });
+
+  it("reads 'Please stop, not interested' as an opt-out but 'Stop, I'm interested' as needing a look", () => {
+    expect(classifyReply({ text: "Please stop, not interested." }).optOut).toBe(true);
+    expect(classifyReply({ text: "Stop, I'm interested — send pricing." })).toMatchObject({ optOut: false, review: expect.any(String) });
+  });
+});

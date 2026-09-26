@@ -87,6 +87,62 @@ describe("/api/email-inbound", () => {
     },
   );
 
+  // Round 9: replies that match no listed phrase used to count as positive.
+  it.each([
+    ["I'd rather not receive these", "opt-out"],
+    ["I would rather not receive these.", "opt-out"],
+    ["Lose my number", "opt-out"],
+    ["F off", "opt-out"],
+    ["Bitte keine E-Mails mehr", "opt-out"],
+    ["Pass.", "look"],
+    ["We are not the right business for this", "look"],
+  ] as const)("never counts %j as a positive reply (%s)", async (text, outcome) => {
+    const cold = await makeColdLead({ email: "decline@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const json = await (await inbound({ from: "decline@shop.test", messageId: `<${text}@test>`, text })).json();
+    const after = await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } });
+    const suppressed = await prisma.suppressedEmail.findUnique({ where: { email: "decline@shop.test" } });
+    expect(after.status).not.toBe("responded");
+    // An opt-out keeps its reply time (the Stats reply rate leaves opted-out
+    // addresses out); a reply flagged for a look gets none until the operator decides.
+    if (outcome === "opt-out") {
+      expect(json.optedOut).toBe(true);
+      expect(after.status).toBe("lost");
+      expect(suppressed).not.toBeNull();
+    } else {
+      expect(json.optedOut).toBe(false);
+      expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true, repliedAt: null });
+      expect(suppressed).toBeNull();
+    }
+  });
+
+  it("still moves an interested reply to Responded", async () => {
+    const cold = await makeColdLead({ email: "keen@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    await inbound({ from: "keen@shop.test", messageId: "<keen@test>", text: "Yes, interested — what does it cost?" });
+    const after = await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } });
+    expect(after).toMatchObject({ status: "responded", replyNeedsReview: false });
+    expect(after.repliedAt).not.toBeNull();
+  });
+
+  it("flags an interested reply that asks to stop phone calls, without suppressing it", async () => {
+    const cold = await makeColdLead({ email: "cell@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const json = await (
+      await inbound({ from: "cell@shop.test", text: "How much for a website? Also please stop calling my cell, email only." })
+    ).json();
+    expect(json.optedOut).toBe(false);
+    const after = await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } });
+    expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true, repliedAt: null });
+    expect(await prisma.suppressedEmail.count()).toBe(0);
+  });
+
+  it("records an unclear reply from a customer without flagging it", async () => {
+    const lead = await makeColdLead({ email: "client@shop.test", status: "paying_client", lastEmailedAt: new Date() });
+    await inbound({ from: "client@shop.test", text: "Thanks for the invoice." });
+    const after = await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
+    expect(after).toMatchObject({ status: "paying_client", replyNeedsReview: false });
+    const activity = await prisma.leadActivity.findFirstOrThrow({ where: { leadId: lead.id } });
+    expect(activity.notes).toContain("Not counted as a reply by itself");
+  });
+
   it("flags a Spanish reply it doesn't understand for a look instead of moving the lead to Responded", async () => {
     const cold = await makeColdLead({ email: "ana@panaderia.test", status: "contacted" });
     const json = await (await inbound({ from: "ana@panaderia.test", text: "Hola, ¿de dónde sacó mi correo? Gracias." })).json();

@@ -33,6 +33,18 @@
 // if it doesn't work out?". Caveat: the same author wrote this batch and
 // the rules, so it is less independent than real mail would be.
 //
+// Round 9 (2026-09-26): the review found polite, rude and non-English stop
+// requests ("I'd rather not receive these", "F off", "Bitte keine E-Mails
+// mehr") counted as positive replies, and an interested reply asking to
+// stop phone calls read as an email opt-out; those phrasings went to the
+// development set. A fresh "none of the above" batch (REPLY_UNLISTED_HELD_OUT,
+// 26 cases) was written before the rules changed: precision 50.0%, recall
+// 11.8% before; 94.4% / 100% after (same author and session as the rules,
+// so optimistic). The rule for questions about unsubscribing later, built
+// from the review's example, also fixed this split's one remaining miss
+// ("Can I unsubscribe later if it doesn't work out?"), so that case no
+// longer measures anything new: 100% / 100% on 126 cases.
+//
 // optOut: true  — the sender is asking not to be contacted (CAN-SPAM opt-out).
 // optOut: false — anything else, including "no thanks" and complaints that
 //                 don't ask to stop (those are flagged for a look instead).
@@ -121,6 +133,13 @@ export const REPLY_CORPUS: LabelledReply[] = [
   { text: "Not interested. Remove." + QUOTED_PITCH, optOut: true },
   { text: "Please take our office off your email list.", optOut: true },
   { text: "", subject: "unsubscribe me", optOut: true },
+  // Round 9, from the reviewer's report: polite, rude and non-English stop
+  // requests that were counted as positive replies.
+  { text: "I'd rather not receive these", optOut: true },
+  { text: "I would rather not receive these.", optOut: true },
+  { text: "Lose my number", optOut: true },
+  { text: "F off", optOut: true },
+  { text: "Bitte keine E-Mails mehr", optOut: true },
 
   // --- Not opt-outs -----------------------------------------------------
   { text: "Yes, interested! What does it cost?", optOut: false },
@@ -189,6 +208,9 @@ export const REPLY_CORPUS: LabelledReply[] = [
   { text: "Please email me the brochure.", optOut: false },
   { text: "Don't email me the PDF, just the link.", optOut: false },
   { text: "Stop sign on Main St is where our office is — come by.", optOut: false },
+  // Round 9, from the reviewer's report: an interested reply asking to stop
+  // phone calls is not an email opt-out (it is flagged for a look).
+  { text: "How much for a website? Also please stop calling my cell, email only.", optOut: false },
 ];
 
 // --- Held-out split ------------------------------------------------------
@@ -337,4 +359,38 @@ export const REPLY_HELD_OUT: LabelledReply[] = [
   { text: "Go ahead and send the details.", optOut: false },
   { text: "Cut to the chase: how much?", optOut: false },
   { text: "I don't want any of the Pinal leads, only Maricopa.", optOut: false },
+];
+
+// "None of the above": opt-outs phrased in ways the rules didn't list
+// (polite, rude, other languages) and look-alikes that aren't opt-outs.
+// Written on 2026-09-26 before the round-9 rule change and scored as-is;
+// the eval reports this as its own split. Never edit the classifier
+// against these.
+export const REPLY_UNLISTED_HELD_OUT: LabelledReply[] = [
+  { text: "I'd prefer not to get these emails.", optOut: true },
+  { text: "Please stop, not interested.", optOut: true },
+  { text: "Keine Werbung, bitte.", optOut: true },
+  { text: "Não me envie mais e-mails.", optOut: true },
+  { text: "Non inviatemi più email.", optOut: true },
+  { text: "Afmelden graag.", optOut: true },
+  { text: "Get lost.", optOut: true },
+  { text: "Piss off.", optOut: true },
+  { text: "Screw off with this spam.", optOut: true },
+  { text: "Bugger off.", optOut: true },
+  { text: "I'd rather you didn't email me.", optOut: true },
+  { text: "Kindly refrain from contacting me.", optOut: true },
+  { text: "Please discontinue these emails.", optOut: true },
+  { text: "Don't bother emailing me again.", optOut: true },
+  { text: "Delete me from your system.", optOut: true },
+  { text: "Stop. Not interested.", optOut: true },
+  { text: "Please don't send these anymore.", optOut: true },
+  { text: "Interested — but please don't call, I prefer email.", optOut: false },
+  { text: "I'd rather not get on a call; can you email the details?", optOut: false },
+  { text: "Can you remove the second agent from the sample list?", optOut: false },
+  { text: "Yes, and please stop calling the front desk, use my cell: 602-555-0100.", optOut: false },
+  { text: "Stop by Tuesday? We're interested.", optOut: false },
+  { text: "How do I get this started?", optOut: false },
+  { text: "We lost your number, can you call again?", optOut: false },
+  { text: "Is there a way to unsubscribe from the county alerts but keep the weekly list?", optOut: false },
+  { text: "Fantastic, sign us up.", optOut: false },
 ];

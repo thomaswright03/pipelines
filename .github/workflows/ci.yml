@@ -83,7 +83,7 @@ jobs:
           {
             echo "### Heuristics on the labelled sets (quote the held-out split)"
             echo
-            grep -E "precision|miss:" eval.log | sed 's/^/    /'
+            grep -E "precision|miss:|Real replies" eval.log | sed 's/^/    /'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Browser smoke tests against the production build: single send, bulk
