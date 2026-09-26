@@ -6,6 +6,7 @@ import ColdOutreachStagePanel from "@/components/ColdOutreachStagePanel";
 import { DetailField, LeadPageLayout } from "@/components/LeadDetailParts";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { loadLeadContext } from "@/lib/lead-page";
+import { templateVersionHistory } from "@/lib/template-versions";
 import { formatDate, formatDateTime, toZonedInputValue } from "@/lib/time";
 import { formatCents } from "@/lib/format";
 import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
@@ -30,7 +31,10 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
   });
   if (!lead) notFound();
 
-  const { suppression, paused, ledgerNote, latestReply } = await loadLeadContext("cold-outreach", lead.id, lead.email);
+  const [{ suppression, paused, ledgerNote, latestReply }, versionHistory] = await Promise.all([
+    loadLeadContext("cold-outreach", lead.id, lead.email),
+    templateVersionHistory("cold-outreach"),
+  ]);
   // Exactly what a send would use.
   const preview = getPipeline("cold-outreach").buildEmail({ name: lead.name, company: lead.company, county: null });
 
@@ -43,6 +47,7 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
       detailsLabel="Lead details"
       ledgerNote={ledgerNote}
       preview={preview}
+      versionHistory={versionHistory}
       sendLogs={lead.emailLogs}
       activities={lead.activities}
       details={

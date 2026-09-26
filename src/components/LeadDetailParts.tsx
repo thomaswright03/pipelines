@@ -6,6 +6,7 @@ import LeadActivityLog from "@/components/LeadActivityLog";
 import type { LedgerNote } from "@/lib/lead-page";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import { formatDateTime } from "@/lib/time";
+import { describeTemplateVersion, type VersionHistory } from "@/lib/template-versions";
 
 type SendLogRow = { id: string; sentAt: Date; bounced: boolean; subject: string | null; templateVersion: string | null };
 
@@ -26,6 +27,8 @@ export function LeadPageLayout(props: {
   details: ReactNode;
   ledgerNote: LedgerNote;
   preview: { subject: string; body: string; templateVersion: string };
+  /** The pipeline's pitch versions, for naming them in plain words (template-versions.ts). */
+  versionHistory: VersionHistory;
   sendLogs: SendLogRow[];
   activities: { id: string; type: string; notes: string; date: Date }[];
   /** The status and action panels. */
@@ -59,8 +62,11 @@ export function LeadPageLayout(props: {
             )}
           </section>
 
-          <EmailPreview {...props.preview} />
-          <SendHistory logs={props.sendLogs} currentVersion={props.preview.templateVersion} />
+          <EmailPreview
+            {...props.preview}
+            versionLabel={describeTemplateVersion(props.preview.templateVersion, props.versionHistory, props.preview.templateVersion)}
+          />
+          <SendHistory logs={props.sendLogs} currentVersion={props.preview.templateVersion} versionHistory={props.versionHistory} />
           <LeadActivityLog
             pipeline={pipeline}
             leadId={lead.id}
@@ -99,14 +105,14 @@ function LedgerNotice({ note }: { note: LedgerNote }) {
   return <p className={note.tone === "warning" ? "notice-warning" : "notice-info"}>{note.text}</p>;
 }
 
-function EmailPreview({ subject, body, templateVersion }: { subject: string; body: string; templateVersion: string }) {
+function EmailPreview({ subject, body, versionLabel }: { subject: string; body: string; versionLabel: string }) {
   return (
     <section aria-labelledby="preview-heading" className="card p-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3">
         <h2 id="preview-heading" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
           Outreach email preview
         </h2>
-        <span className="text-xs muted">Template {templateVersion}</span>
+        <span className="text-xs muted">{versionLabel}</span>
       </div>
       <p className="text-sm font-medium">{subject}</p>
       <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-sm muted">{body}</pre>
@@ -114,7 +120,15 @@ function EmailPreview({ subject, body, templateVersion }: { subject: string; bod
   );
 }
 
-function SendHistory({ logs, currentVersion }: { logs: SendLogRow[]; currentVersion: string }) {
+function SendHistory({
+  logs,
+  currentVersion,
+  versionHistory,
+}: {
+  logs: SendLogRow[];
+  currentVersion: string;
+  versionHistory: VersionHistory;
+}) {
   if (logs.length === 0) return null;
   return (
     <section aria-labelledby="history-heading" className="card p-4">
@@ -128,10 +142,7 @@ function SendHistory({ logs, currentVersion }: { logs: SendLogRow[]; currentVers
               {formatDateTime(log.sentAt)}
               {log.subject && <span className="block break-words text-xs muted">“{log.subject}”</span>}
               {log.templateVersion && (
-                <span className="block text-xs muted">
-                  Template {log.templateVersion}
-                  {log.templateVersion !== currentVersion && " (an earlier wording)"}
-                </span>
+                <span className="block text-xs muted">{describeTemplateVersion(log.templateVersion, versionHistory, currentVersion)}</span>
               )}
             </span>
             <span

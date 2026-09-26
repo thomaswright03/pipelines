@@ -132,7 +132,8 @@ describe("a lead page", () => {
     const page = await renderPage(VaultLead(pageProps({ id: lead.id })));
     expect(page.getByRole("heading", { name: "Pat Owner" })).toBeTruthy();
     expect(page.getByRole("button", { name: "Send outreach email" })).toBeTruthy();
-    expect(page.text).toContain(`Template ${COLD_OUTREACH_TEMPLATE_VERSION}`);
+    expect(page.text).toContain("Email version 1 (the current wording, not sent yet)");
+    expect(page.text).not.toContain(COLD_OUTREACH_TEMPLATE_VERSION); // no internal fingerprint on screen
     expect(page.text).toContain("I came across Bob's Bakery");
     // The actions come before the details in the page (first on a phone).
     const html = page.body.innerHTML;
@@ -177,7 +178,8 @@ describe("a lead page", () => {
     expect(page.text).toContain("How did you get my email?");
     expect(page.text).toContain("The reply sounds like a complaint.");
     expect(page.text).toContain("Until you choose, nothing is emailed to this address and the lead stays in Contacted, off the call deck.");
-    expect(page.text).toContain("Template old-v1 (an earlier wording)");
+    expect(page.text).toMatch(/Email version 1 \(an earlier wording, first sent \w{3} \d{1,2}, \d{4}\)/);
+    expect(page.text).not.toContain("old-v1");
     expect(page.text).toContain("how did you get my email?");
   });
 

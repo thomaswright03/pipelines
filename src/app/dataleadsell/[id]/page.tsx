@@ -5,6 +5,7 @@ import LeadActions from "@/components/LeadActions";
 import { DetailField, LeadPageLayout } from "@/components/LeadDetailParts";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { loadLeadContext } from "@/lib/lead-page";
+import { templateVersionHistory } from "@/lib/template-versions";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { CALL_OUTCOME_LABEL } from "@/lib/lead-status";
 
@@ -25,7 +26,10 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
   });
   if (!lead) notFound();
 
-  const { suppression, paused, ledgerNote, latestReply } = await loadLeadContext("dataleadsell", lead.id, lead.email);
+  const [{ suppression, paused, ledgerNote, latestReply }, versionHistory] = await Promise.all([
+    loadLeadContext("dataleadsell", lead.id, lead.email),
+    templateVersionHistory("dataleadsell"),
+  ]);
   // Exactly what a send would use.
   const preview = getPipeline("dataleadsell").buildEmail({ name: lead.name, company: null, county: lead.county });
 
@@ -38,6 +42,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
       detailsLabel="Agent details"
       ledgerNote={ledgerNote}
       preview={preview}
+      versionHistory={versionHistory}
       sendLogs={lead.emailLogs}
       activities={lead.activities}
       details={

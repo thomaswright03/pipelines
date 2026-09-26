@@ -5,6 +5,7 @@ import { sendFirstTouch } from "@/lib/outreach/send";
 import { COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-email-template";
 import { DATALEADSELL_TEMPLATE_VERSION } from "@/lib/dataleadsell-email-template";
 import { templateVersion } from "@/lib/email-template-version";
+import { describeTemplateVersion, numberVersions } from "@/lib/template-versions";
 import { captureMail, makeColdLead } from "./helpers";
 
 describe("Stats page numbers", () => {
@@ -69,8 +70,26 @@ describe("which version of the pitch each send used", () => {
 
       const { byTemplate } = await getVaultStats();
       expect(byTemplate).toEqual([
-        { version: COLD_OUTREACH_TEMPLATE_VERSION, subject: log.subject, sent: 1, leads: 1, replied: 0, replyRate: 0 },
-        { version: null, subject: null, sent: 1, leads: 1, replied: 1, replyRate: 1 },
+        {
+          version: COLD_OUTREACH_TEMPLATE_VERSION,
+          number: 1,
+          firstSent: log.sentAt,
+          subject: log.subject,
+          sent: 1,
+          leads: 1,
+          replied: 0,
+          replyRate: 0,
+        },
+        {
+          version: null,
+          number: null,
+          firstSent: new Date("2026-01-01T00:00:00Z"),
+          subject: null,
+          sent: 1,
+          leads: 1,
+          replied: 1,
+          replyRate: 1,
+        },
       ]);
     } finally {
       mail.restore();
@@ -83,5 +102,34 @@ describe("which version of the pitch each send used", () => {
     expect(templateVersion("x", [pitch])).not.toBe(templateVersion("x", [{ ...pitch, subject: "Hello!" }]));
     expect(templateVersion("x", [pitch])).not.toBe(templateVersion("x", [{ ...pitch, body: "Body." }]));
     expect(DATALEADSELL_TEMPLATE_VERSION).toMatch(/^dataleadsell-[0-9a-f]{8}$/);
+  });
+});
+
+describe("naming a version of the pitch in plain words (round-10 finding 13)", () => {
+  const history = numberVersions([
+    { version: "cold-outreach-bbbbbbbb", firstSent: new Date("2026-09-20T15:00:00Z") },
+    { version: "cold-outreach-aaaaaaaa", firstSent: new Date("2026-08-01T15:00:00Z") },
+    { version: null, firstSent: new Date("2026-01-01T15:00:00Z") },
+  ]);
+
+  it("numbers versions in the order each was first sent", () => {
+    expect(history.get("cold-outreach-aaaaaaaa")?.number).toBe(1);
+    expect(history.get("cold-outreach-bbbbbbbb")?.number).toBe(2);
+    expect(history.size).toBe(2);
+  });
+
+  it("never shows the fingerprint", () => {
+    const current = "cold-outreach-bbbbbbbb";
+    expect(describeTemplateVersion(current, history, current)).toBe("Email version 2 (in use since Sep 20, 2026)");
+    expect(describeTemplateVersion("cold-outreach-aaaaaaaa", history, current)).toBe(
+      "Email version 1 (an earlier wording, first sent Aug 1, 2026)",
+    );
+    expect(describeTemplateVersion("cold-outreach-cccccccc", history, "cold-outreach-cccccccc")).toBe(
+      "Email version 3 (the current wording, not sent yet)",
+    );
+    expect(describeTemplateVersion(null, history, current)).toBe("Sent before email versions were recorded");
+    for (const v of ["cold-outreach-aaaaaaaa", "cold-outreach-bbbbbbbb", "cold-outreach-cccccccc"]) {
+      expect(describeTemplateVersion(v, history, current)).not.toMatch(/[0-9a-f]{8}/);
+    }
   });
 });

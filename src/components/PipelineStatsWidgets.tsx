@@ -1,4 +1,5 @@
 import type { BaseStats, Breakdown, TemplateStats } from "@/lib/pipeline-stats";
+import { formatDate } from "@/lib/time";
 import { statusLabel } from "@/lib/lead-status";
 import { APP_TIME_ZONE_LABEL } from "@/lib/time";
 
@@ -195,7 +196,11 @@ export function TemplateBreakdown({ rows, noun }: { rows: TemplateStats[]; noun:
           <li key={row.version ?? "none"} className="flex flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
             <div className="min-w-0">
               <div className="break-words font-medium">{row.subject ? `“${row.subject}”` : "Subject not recorded"}</div>
-              <div className="text-xs muted">{row.version ? `Template ${row.version}` : "Sent before template versions were recorded"}</div>
+              <div className="text-xs muted">
+                {row.number && row.firstSent
+                  ? `Email version ${row.number} (first sent ${formatDate(row.firstSent)})`
+                  : "Sent before email versions were recorded"}
+              </div>
             </div>
             <div className="shrink-0 tabular-nums">{shareOf(row.replied, row.leads, `${noun} emailed replied`)}</div>
           </li>

@@ -4,6 +4,7 @@
 // follow the operator's time zone (src/lib/time.ts), not the server's UTC.
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { numberVersions } from "@/lib/template-versions";
 import { APP_TIME_ZONE, dayKey, startOfZoneDay } from "@/lib/time";
 import { DAILY_RUN_SOURCE } from "@/lib/vault-daily-run";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
@@ -46,6 +47,9 @@ export type BaseStats = {
 export type TemplateStats = {
   /** Null for sends made before versions were recorded. */
   version: string | null;
+  /** "Email version N" — numbered in the order versions were first sent; null with `version`. */
+  number: number | null;
+  firstSent: Date | null;
   subject: string | null;
   sent: number;
   /** Distinct leads emailed with this version. */
@@ -149,8 +153,11 @@ async function countAutoRepliedEmailed(pipelineId: PipelineId, logTable: string)
 
 /** Sends, leads and genuine replies per template version (see email-template-version.ts). */
 async function countByTemplate(logTable: string, leadTable: string): Promise<TemplateStats[]> {
-  const rows = await prisma.$queryRaw<{ version: string | null; subject: string | null; sent: bigint; leads: bigint; replied: bigint }[]>`
+  const rows = await prisma.$queryRaw<
+    { version: string | null; subject: string | null; firstSent: Date | null; sent: bigint; leads: bigint; replied: bigint }[]
+  >`
     SELECT l."templateVersion" AS version,
+           min(l."sentAt") AS "firstSent",
            max(l."subject") AS subject,
            COUNT(*)::bigint AS sent,
            COUNT(DISTINCT l."leadId")::bigint AS leads,
@@ -162,8 +169,11 @@ async function countByTemplate(logTable: string, leadTable: string): Promise<Tem
     LEFT JOIN ${Prisma.raw(`"${leadTable}"`)} d ON d."id" = l."leadId"
     GROUP BY 1
     ORDER BY min(l."sentAt") DESC`;
+  const numbers = numberVersions(rows);
   return rows.map((r) => ({
     version: r.version,
+    number: r.version ? (numbers.get(r.version)?.number ?? null) : null,
+    firstSent: r.firstSent,
     subject: r.subject,
     sent: Number(r.sent),
     leads: Number(r.leads),
