@@ -222,6 +222,8 @@ What's covered, by file:
 | `tests/cron.test.ts` | The cron routes, including a database outage answered with a code and no database error text |
 | `tests/daily-run.test.ts` | What "businesses to check per run" yields; leftovers emailed by the next run, including when Yelp fails (run "partial", city not used up); the 60 s budget (fake clock); skipped leads don't fail a run |
 | `tests/replies.test.ts` | Replies after the stale-contacts move, Lost-lead review flag, Mark replied, duplicate delivery, database outage and retry, stale-contacts race |
+| `tests/worker-contract.test.ts` | The reference Email Worker (`workers/email-inbound`) against the real route: MIME parsing, headers and `messageId` forwarded, bypass header, resend on 503/no response, none on 400/401, 72-hour give-up |
+| `tests/send-refusals.test.ts` | Addresses the recipient's server refuses (5xx, and repeated 4xx): the lead is flagged and leaves the queues, bulk sends and daily runs carry on, Connections stays "Working"; every failed attempt shows in History and on the list; a fresh send claim shows as "in progress" |
 | `tests/stats.test.ts` | Stats, including reply rate and Arizona days |
 | `tests/lead-actions.test.ts` | Stage rules, moves racing a reply, the Settings do-not-email list |
 | `tests/site-evidence.test.ts` | Guessed sites must show the lead's phone/street, or the city plus the name in the title; duplicate detection by name plus phone/address/city |
@@ -350,8 +352,14 @@ emailed" next to the bulk-send button.
 
 ## Reply tracking
 
-Replies to the sending address reach `/api/email-inbound` from a Cloudflare Email Worker. The Worker is not in
-this repo. It must send:
+Replies to the sending address reach `/api/email-inbound` from a Cloudflare Email Worker. A reference
+implementation lives in `workers/email-inbound/` (`src/index.ts`, with a small MIME reader in `src/mime.ts`
+and a `wrangler.toml.example` that says how to deploy it). It parses the message, sends the request below,
+queues anything the app didn't record on a Cloudflare Queue and resends it with backoff for 72 hours, and
+can also forward each reply to a mailbox (`FORWARD_TO`). `tests/worker-contract.test.ts` runs it against the
+real route in CI: headers and `messageId` forwarded, the bypass header sent, a resend on 503 or no response,
+none on 400/401, and an `ALERT:` log line after 72 hours. If production runs a different Worker, it must
+follow the same contract. It must send:
 
 ```
 POST /api/email-inbound
@@ -524,8 +532,11 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
      Bearer token.
    - Until then, Vercel's SSO wall answers the Worker with its own 401, and replies and opt-outs must be
      marked by hand.
-   - Update the Worker to send `messageId` and to follow the retry contract in "Reply tracking" (resend
-     any 5xx or failed request with backoff for at least 72 hours).
+   - Deploy `workers/email-inbound` (steps at the top of its `wrangler.toml.example`) in place of the current
+     Worker, or bring the current one up to the same contract: send `messageId` and follow the retry contract
+     in "Reply tracking" (resend any 5xx or failed request with backoff for at least 72 hours). Route the
+     outreach sender addresses to it in Cloudflare → Email Routing, and set up a notification on the Worker's
+     `ALERT:` log lines.
    - Update the Worker to forward the message's headers as `headers` (at least `Auto-Submitted`,
      `X-Autoreply`, `X-Autorespond`, `Precedence`, `X-Auto-Response-Suppress`, `X-Failed-Recipients`,
      `Content-Type`) and to forward delivery-failure notices too, so automatic replies and bounces are
