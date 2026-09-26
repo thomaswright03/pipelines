@@ -171,6 +171,12 @@ describe("classifyReply — replies that need a human look", () => {
     }
   });
 
+  it("a one- or two-word answer is never read as another language", () => {
+    for (const text of ["Y", "y", "Si", "Sí", "Oui", "Si, gracias"]) {
+      expect(classifyReply({ text }).review, text).toBeNull();
+    }
+  });
+
   it("an English reply that greets in Spanish needs no look", () => {
     expect(classifyReply({ text: "Hola Thomas, yes I'm interested — send the price." }).review).toBeNull();
   });

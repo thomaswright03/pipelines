@@ -1,7 +1,7 @@
 // What the daily Cold Outreach run actually does with its "businesses to
 // check per run" setting, and that leads it didn't get to are emailed by
 // the next run.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { countUnsentDailyLeads, runDailyColdOutreach } from "@/lib/vault-daily-run";
 import { markCityUsed, peekNextCity, pickNextCity } from "@/lib/vault-city-picker";
@@ -10,6 +10,8 @@ import { getPipeline } from "@/lib/outreach/pipelines";
 import { displayRunStatus } from "@/lib/outreach/runs";
 import { GET as dailyGET } from "@/app/api/cron/vault-daily/route";
 import { NextRequest } from "next/server";
+import { YELP_SHAPE_CHANGED } from "@/lib/yelp-discovery";
+import { getConnectionStatus } from "@/lib/integration-status";
 import { captureMail, makeColdLead, page, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -112,6 +114,24 @@ describe("a daily run whose Yelp search fails", () => {
     expect(run.status).toBe("partial");
     expect(run.errors).toMatch(/^Search of .+ failed: Yelp isn't responding right now/);
     // The city wasn't searched, so it stays available for a later run.
+    expect(await prisma.scrapedCity.count()).toBe(0);
+  });
+
+  it("names a change in Yelp's response shape in the run log and in Settings → Connections", async () => {
+    mail = captureMail();
+    stubFetch({ [YELP_PREFIX]: () => ({ contentType: "application/json", body: JSON.stringify({ businesses: {} }) }) });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await dailyGET(
+      new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }),
+    );
+
+    expect((await res.json()).status).toBe("failed");
+    const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
+    expect(run.errors).toContain(YELP_SHAPE_CHANGED);
+    const yelp = (await getConnectionStatus(process.env, new Date())).find((c) => c.key === "yelp");
+    expect(yelp).toMatchObject({ tone: "error", summary: expect.stringContaining("Yelp's response changed") });
+    expect(errors.mock.calls.some(([line]) => /\[yelp\.search\] .*Unexpected response shape — businesses:/.test(String(line)))).toBe(true);
     expect(await prisma.scrapedCity.count()).toBe(0);
   });
 

@@ -55,6 +55,12 @@ export const REVIEW_DEV: LabelledReview[] = [
   { text: "We're good to go, send the link.", review: false },
   { text: "Send pricing please", review: false },
   { text: "Received, will review.", review: false },
+  // Round 8, from the reviewer's report: one-word answers were read as
+  // "written in another language" ("y" is a Spanish stop word).
+  { text: "Y", review: false },
+  { text: "y", review: false },
+  { text: "Si", review: false },
+  { text: "Oui", review: false },
 ];
 
 export const REVIEW_HELD_OUT: LabelledReview[] = [

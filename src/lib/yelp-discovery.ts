@@ -6,6 +6,7 @@
 // business's own website, so the email lookup has to guess the site from
 // the name (see website-finder.ts). Leads without an email still have a
 // phone number for the cold-call deck.
+import { z } from "zod";
 import { logError } from "@/lib/log";
 import { recordServiceCheck } from "@/lib/outreach/settings";
 
@@ -16,16 +17,23 @@ export type YelpCandidate = {
   website: string | null;
 };
 
-type YelpBusiness = {
-  name?: string;
-  phone?: string | null;
-  location?: { display_address?: string[] };
-};
+// The fields this module reads from a successful search, validated so a
+// change on Yelp's side is reported as such instead of surfacing as an
+// unexplained crash or a silent "found nothing". Other fields are ignored.
+const yelpSearchSchema = z.object({
+  businesses: z.array(
+    z.object({
+      name: z.string().nullish(),
+      phone: z.string().nullish(),
+      location: z.object({ display_address: z.array(z.string()).nullish() }).nullish(),
+    }),
+  ),
+});
+type YelpErrorBody = { error?: { code?: string; description?: string } };
 
-type YelpSearchResponse = {
-  businesses?: YelpBusiness[];
-  error?: { code?: string; description?: string };
-};
+/** Shown (and kept in Settings → Connections and the run log) when Yelp's answer no longer has the expected shape. */
+export const YELP_SHAPE_CHANGED =
+  "Yelp's response changed, so the search results couldn't be read — nothing was added. Tell your developer.";
 
 const YELP_SEARCH_URL = "https://api.yelp.com/v3/businesses/search";
 const PAGE_LIMIT = 50; // Yelp's max per request — matches our own per-run cap anyway.
@@ -71,25 +79,33 @@ export async function findBusinessesViaYelp(term: string, location: string, opti
     clearTimeout(timer);
   }
 
-  let body: YelpSearchResponse | null = null;
+  let body: unknown = null;
   try {
-    body = JSON.parse(raw) as YelpSearchResponse;
+    body = JSON.parse(raw);
   } catch {
     body = null;
   }
 
-  if (!res.ok || !body) {
+  if (!res.ok || body === null || typeof body !== "object") {
     logError("yelp.search", new Error(`HTTP ${res.status}: ${raw.slice(0, 300)}`), { location });
-    const code = body?.error?.code;
+    const code = (body as YelpErrorBody | null)?.error?.code;
     const message = describeYelpFailure(res.status, code);
     // A location Yelp didn't recognise still proves the key and service work.
     await recordServiceCheck("yelp", isLocationProblem(code) ? null : message);
     throw new YelpError(message);
   }
 
+  const parsed = yelpSearchSchema.safeParse(body);
+  if (!parsed.success) {
+    const where = parsed.error.issues.map((i) => `${i.path.join(".") || "(body)"}: ${i.message}`).slice(0, 3);
+    logError("yelp.search", new Error(`Unexpected response shape — ${where.join("; ")}`), { location });
+    await recordServiceCheck("yelp", YELP_SHAPE_CHANGED);
+    throw new YelpError(YELP_SHAPE_CHANGED);
+  }
+
   await recordServiceCheck("yelp", null);
 
-  return (body.businesses ?? [])
+  return parsed.data.businesses
     .filter((b) => b.name?.trim())
     .map((b) => ({
       name: b.name!.trim(),

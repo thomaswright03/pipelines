@@ -301,9 +301,14 @@ const ENGLISH_WORDS = new Set(
   ).split(" "),
 );
 
+// Below this many words a stop-word count says nothing about the language:
+// "Y" (yes), "Si" or "Oui" is an answer, not a reply in another language.
+const MIN_WORDS_FOR_LANGUAGE = 3;
+
 /** True when the text reads as mainly Spanish or French rather than English. */
 function isMainlyForeign(text: string): boolean {
   const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  if (words.length < MIN_WORDS_FOR_LANGUAGE) return false;
   let foreign = 0;
   let english = 0;
   for (const word of words) {
@@ -371,7 +376,7 @@ function sentenceAround(text: string, index: number, length: number): string {
  * Bump the revision when the logic above changes without a pattern or word
  * list changing.
  */
-export const REPLY_RULES_VERSION = rulesVersion("reply", 1, [
+export const REPLY_RULES_VERSION = rulesVersion("reply", 2, [
   COMMAND_WORDS,
   FILLER_RE,
   OPT_OUT_PHRASES,
@@ -382,4 +387,5 @@ export const REPLY_RULES_VERSION = rulesVersion("reply", 1, [
   SIGNATURE_PATTERNS,
   FOREIGN_WORDS,
   ENGLISH_WORDS,
+  MIN_WORDS_FOR_LANGUAGE,
 ]);
