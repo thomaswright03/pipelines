@@ -56,7 +56,7 @@ export default function HeaderMenu({ children }: { children: React.ReactNode }) 
       </button>
       <div
         id="site-menu"
-        className={`${open ? "flex" : "hidden"} w-full flex-col gap-2 pb-2 sm:flex sm:w-auto sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:pb-0`}
+        className={`${open ? "flex" : "hidden"} w-full flex-col gap-2 pb-2 sm:flex sm:w-auto sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:pb-0 lg:flex-none lg:flex-nowrap`}
       >
         {children}
       </div>

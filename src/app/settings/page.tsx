@@ -59,7 +59,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       </div>
 
       <SettingsControls
-        paused={settings.outboundPaused}
+        paused={settings.switchPaused}
+        offByEnvironment={settings.pausedBy === "environment"}
         pausedSince={settings.pausedAt ? formatDateTime(settings.pausedAt) : null}
         allowCrossPipelineRepeats={settings.allowCrossPipelineRepeats}
       />

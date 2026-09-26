@@ -1,6 +1,7 @@
 // Reply tracking at a glance, on both pipeline pages and the Replies page:
 // when the last reply arrived, a warning if replies seem not to be
-// arriving, and how many replies are waiting to be matched to a lead.
+// arriving (also on the dashboard), and how many replies are waiting to be
+// matched to a lead.
 import Link from "next/link";
 import { plural } from "@/lib/format";
 import { formatDateTime } from "@/lib/time";
@@ -19,12 +20,7 @@ export default function ReplyStatus({
   return (
     <div className="flex flex-col gap-2">
       {health.warning ? (
-        <p className="notice-warning">
-          <strong>No replies recorded lately.</strong> {plural(health.sendsPastGrace, "email")} went out more than 2 days ago, but
-          {health.lastReplyAt ? ` the last reply arrived ${formatDateTime(health.lastReplyAt)}` : " no reply has ever been recorded"}.
-          Replies may not be reaching the app: mark replies by hand from each lead&apos;s page, and tell your developer that reply
-          forwarding needs checking.
-        </p>
+        <ReplyIntakeWarning health={health} />
       ) : (
         <p className="text-sm muted">
           {health.lastReplyAt
@@ -42,6 +38,33 @@ export default function ReplyStatus({
           )}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The warning that replies — opt-outs among them — aren't reaching the
+ * app, with what to do meanwhile. Shown on the dashboard, the pipeline pages
+ * and the Replies page; every page's header links here.
+ */
+export function ReplyIntakeWarning({ health }: { health: ReplyHealth }) {
+  const since =
+    health.reason === "never"
+      ? "no reply of any kind has ever been recorded"
+      : health.reason === "silent_sends"
+        ? `${plural(health.sendsSinceLastReply, "of them", "of them")} went out after the last reply arrived (${formatDateTime(health.lastReplyAt!)}) and nothing — not even an out-of-office or a bounce — has come back since`
+        : `the last reply arrived ${formatDateTime(health.lastReplyAt!)}`;
+  return (
+    <div role="alert" className="notice-error flex flex-col gap-1">
+      <p>
+        <strong>Replies don&apos;t seem to be reaching the app.</strong> {plural(health.sendsPastGrace, "email")} went out more than 2 days
+        ago, but {since}. Opt-outs sent meanwhile are not being recorded.
+      </p>
+      <p>
+        Until this is fixed: read the sending inbox by hand, use <strong>Mark opted out</strong> on each lead who asked to stop and{" "}
+        <strong>Mark replied</strong> on each who answered, and pause outbound email in Settings if you can&apos;t keep up. Tell your
+        developer that reply forwarding needs checking.
+      </p>
     </div>
   );
 }

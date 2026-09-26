@@ -231,14 +231,14 @@ test("starting another control clears the previous control's message", async ({ 
 test("every page has its own tab title", async ({ page }) => {
   const [id] = await seedColdLeads(1);
   const expected: [string, RegExp][] = [
-    ["/", /^Dashboard · Pipelines$/],
+    ["/", /^Cold email outreach · Dashboard$/],
     ["/vault-pipeline", /^Cold Outreach — Leads/],
     ["/vault-pipeline/cold-call", /^Cold Outreach — Call deck/],
     ["/dataleadsell/stats", /^dataleadsell — Stats/],
     ["/settings", /^Settings/],
     ["/help", /^Operator guide/],
     [`/vault-pipeline/${id}`, /^Test Business 1 — Cold Outreach/],
-    ["/nope", /^Page not found · Pipelines$/],
+    ["/nope", /^Page not found · Outreach$/],
   ];
   for (const [path, title] of expected) {
     await page.goto(path);
@@ -469,4 +469,74 @@ test("Settings shows whether each connection is working", async ({ page }) => {
   await connections.getByRole("button", { name: "Test connection: Sending email" }).click();
   await expect(connections.locator('[data-connection="mail"]').getByRole("status")).toContainText("No email was sent");
   await expect(connections.locator('[data-connection="mail"]')).toContainText("Connection test passed");
+});
+
+for (const width of [1024, 1280, 1440]) {
+  test(`at ${width}px the header is one row, even with every status pill showing`, async ({ page }) => {
+    // Sending paused, and a pitch 3 days old with no reply since: both pills show, next to the outbox badge.
+    await withDb(async (db) => {
+      await db.query(`INSERT INTO "AppSettings" (id, "outboundPaused", "pausedAt", "updatedAt") VALUES ('global', true, now(), now())`);
+      await db.query(
+        `INSERT INTO "OutreachRecipient" (id, pipeline, email, state, "claimedAt", "sentAt")
+         VALUES ('r1', 'cold-outreach', 'old@x.test', 'sent', now() - interval '3 days', now() - interval '3 days')`,
+      );
+    });
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    const header = page.locator("body > header");
+    await expect(header.getByRole("link", { name: "Outbound email paused" })).toBeVisible();
+    await expect(header.getByRole("link", { name: /Replies not arriving/ })).toBeVisible();
+    expect((await header.boundingBox())!.height).toBeLessThanOrEqual(72);
+    // Every page link and pill sits on the same line, each on one line of its own.
+    const tops = await header
+      .locator("nav a, a[href='/settings'], a[href='/replies']")
+      .evaluateAll((links) => links.filter((a) => (a as HTMLElement).offsetParent !== null).map((a) => a.getClientRects().length));
+    expect(tops.every((lines) => lines === 1)).toBe(true);
+    const rowTops = await header
+      .locator("nav a")
+      .evaluateAll((links) => new Set(links.map((a) => Math.round(a.getBoundingClientRect().top))).size);
+    expect(rowTops).toBe(1);
+    if (width >= 1440) {
+      // Wide enough that the paused and replies pills show their whole text.
+      const cut = await header
+        .locator("a[href='/settings'] .truncate, a[href='/replies'] .truncate")
+        .evaluateAll((spans) => spans.filter((s) => s.scrollWidth > s.clientWidth).map((s) => s.textContent));
+      expect(cut).toEqual([]);
+    }
+  });
+}
+
+test("at 375px the do-not-email list shows each address whole, with its date, reason and a 44px Remove", async ({ page }) => {
+  const long = "accounts.receivable.department@very-long-business-name-example.test";
+  await withDb(async (db) => {
+    await db.query(
+      `INSERT INTO "SuppressedEmail" (email, source, reason) VALUES ($1, 'manual', 'Asked by phone'), ('stop@x.test', 'inbound_reply', NULL)`,
+      [long],
+    );
+  });
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("/settings");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+
+  const row = page.getByRole("listitem").filter({ hasText: "accounts.receivable" });
+  await expect(row).toContainText(/Why: \S/);
+  await expect(row).toContainText(/Since /);
+  const box = (await row.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  // The address wraps only after the @ or a hyphen, or before a dot: no piece of it is split across lines.
+  const splitPieces = await row.locator("span.font-medium > span").evaluateAll((pieces) =>
+    pieces
+      .filter((piece) => {
+        const range = document.createRange();
+        range.selectNodeContents(piece);
+        // A break right after a piece leaves an empty box on the next line; only drawn text counts.
+        const drawn = Array.from(range.getClientRects()).filter((r) => r.width > 0);
+        return new Set(drawn.map((r) => Math.round(r.top))).size > 1;
+      })
+      .map((piece) => piece.textContent),
+  );
+  expect(splitPieces).toEqual([]);
+  const remove = row.getByRole("button", { name: `Remove ${long} from the list` });
+  expect((await remove.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 });

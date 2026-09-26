@@ -9,10 +9,14 @@ import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function SettingsControls({
   paused,
+  offByEnvironment = false,
   pausedSince,
   allowCrossPipelineRepeats,
 }: {
+  /** The pause switch below. */
   paused: boolean;
+  /** OUTBOUND_EMAIL_DISABLED is set on the server: nothing is sent whatever the switch says. */
+  offByEnvironment?: boolean;
   pausedSince: string | null;
   allowCrossPipelineRepeats: boolean;
 }) {
@@ -70,13 +74,19 @@ export default function SettingsControls({
       {dialog}
       <section aria-labelledby="pause-heading" className="card flex flex-col gap-3 p-4">
         <h2 id="pause-heading" className="flex items-center gap-2 text-base font-semibold">
-          <span className={`h-2 w-2 rounded-full ${paused ? "bg-red-500" : "bg-emerald-500"}`} aria-hidden />
-          Outbound email: {paused ? "paused" : "on"}
+          <span className={`h-2 w-2 rounded-full ${paused || offByEnvironment ? "bg-red-500" : "bg-emerald-500"}`} aria-hidden />
+          Outbound email: {offByEnvironment ? "off (server setting)" : paused ? "paused" : "on"}
         </h2>
+        {offByEnvironment && (
+          <p className="notice-warning">
+            <strong>Switched off on the server.</strong> OUTBOUND_EMAIL_DISABLED is set in the hosting environment, so nothing is sent from
+            either pipeline whatever the switch below says. Sending comes back only when that variable is removed and the app redeployed.
+          </p>
+        )}
         <p className="text-sm muted">
           {paused
             ? `Paused${pausedSince ? ` since ${pausedSince}` : ""}. Nothing is sent from either pipeline — manual, bulk or the daily run — until you resume.`
-            : "The emergency stop. Pausing takes effect on the very next send, including one in the middle of a bulk send."}
+            : "The emergency stop. Pausing takes effect on the very next send, including one in the middle of a bulk send. If this page can't be reached, set OUTBOUND_EMAIL_DISABLED=1 in the hosting dashboard instead (see the operator guide)."}
         </p>
         <button
           type="button"

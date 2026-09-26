@@ -62,7 +62,7 @@ beforeEach(() => {
 describe("the dashboard", () => {
   it("says what the tool does, with zeros on a fresh install", async () => {
     const page = await renderPage(Dashboard());
-    expect(page.getByRole("heading", { name: "Marketing Pipelines" })).toBeTruthy();
+    expect(page.getByRole("heading", { name: "Cold email outreach" })).toBeTruthy();
     expect(page.text).toContain("Finds leads, emails each address one pitch, tracks the replies");
     expect(page.getByRole("heading", { name: "Runs elsewhere" })).toBeTruthy();
     expect(page.queryByText(/need a look|needs a look/)).toBeNull();
@@ -80,6 +80,18 @@ describe("the dashboard", () => {
     expect(links).toContainEqual(["/vault-pipeline/cold-call", "To call: 1"]);
     expect(links).toContainEqual(["/dataleadsell?status=responded", "Replied: 1"]);
     expect(page.getByText(/1 reply needs a look/)).toBeTruthy();
+    expect(page.queryByRole("alert")).toBeNull();
+  });
+
+  it("warns at the top when no reply has come back 48 hours after a send", async () => {
+    await prisma.outreachRecipient.create({
+      data: { pipeline: "cold-outreach", email: "a@x.test", state: "sent", sentAt: new Date(Date.now() - 3 * 86_400_000) },
+    });
+    const page = await renderPage(Dashboard());
+    const alert = page.getByRole("alert");
+    expect(alert.textContent).toMatch(/Replies don.t seem to be reaching the app/);
+    expect(alert.textContent).toMatch(/Opt-outs sent meanwhile are not being recorded/);
+    expect(alert.textContent).toMatch(/Mark opted out/);
   });
 });
 
@@ -89,8 +101,25 @@ describe("the root layout", () => {
     const page = await renderPage(RootLayout({ children: <p>Page body</p>, params: Promise.resolve({}) } as never));
     expect(page.getByText("Page body")).toBeTruthy();
     expect(page.getByRole("link", { name: /Outbound email paused/ })).toBeTruthy();
+    expect(page.getByText("Sending paused")).toBeTruthy();
     expect(page.getByRole("link", { name: "Operator guide" })).toBeTruthy();
     expect(page.getByText("Skip to content")).toBeTruthy();
+    expect(page.queryByText("Replies not arriving")).toBeNull();
+  });
+
+  it("says when sending is switched off on the server, even with the Settings switch on", async () => {
+    vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
+    const page = await renderPage(RootLayout({ children: <p>Page body</p>, params: Promise.resolve({}) } as never));
+    expect(page.getByRole("link", { name: /switched off on the server/ })).toBeTruthy();
+    expect(page.getByText("Sending off (server)")).toBeTruthy();
+  });
+
+  it("warns in the header when replies have stopped arriving", async () => {
+    await prisma.outreachRecipient.create({
+      data: { pipeline: "cold-outreach", email: "a@x.test", state: "sent", sentAt: new Date(Date.now() - 3 * 86_400_000) },
+    });
+    const page = await renderPage(RootLayout({ children: <p>Page body</p>, params: Promise.resolve({}) } as never));
+    expect(page.getByRole("link", { name: /Replies not arriving/ }).getAttribute("href")).toBe("/replies");
   });
 
   it("shows the outage page instead of the page when the database is down", async () => {
@@ -285,5 +314,12 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     await setOutboundPaused(true);
     const settings = await renderPage(Settings(pageProps()));
     expect(settings.getByRole("heading", { name: "Outbound email: paused" })).toBeTruthy();
+  });
+
+  it("show Settings with outbound email switched off on the server", async () => {
+    vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
+    const settings = await renderPage(Settings(pageProps()));
+    expect(settings.getByRole("heading", { name: "Outbound email: off (server setting)" })).toBeTruthy();
+    expect(settings.text).toMatch(/OUTBOUND_EMAIL_DISABLED is set in the hosting environment/);
   });
 });

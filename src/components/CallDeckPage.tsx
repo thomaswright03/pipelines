@@ -7,7 +7,11 @@ export default async function CallDeckPage({ pipeline, title, after }: { pipelin
   const deck = await loadCallDeck(pipeline, { afterId: typeof after === "string" && after ? after : undefined });
   return (
     <div>
-      <h1 className="accent-text mb-4 text-center text-xl font-bold tracking-tight">{title}</h1>
+      <h1 className="accent-text text-center text-xl font-bold tracking-tight">{title}</h1>
+      <p className="mx-auto mb-4 mt-1 max-w-xl text-center text-sm muted">
+        Everyone who didn&apos;t reply within a week of their email and has a phone number, one card at a time. Call, then record how it
+        went.
+      </p>
       {/* Keyed by batch so loading the next batch starts a fresh card index. */}
       <ColdCallFlashcards key={deck.offset} pipeline={pipeline} deck={deck} />
     </div>

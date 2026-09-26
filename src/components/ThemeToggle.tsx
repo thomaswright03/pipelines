@@ -49,8 +49,9 @@ export default function ThemeToggle() {
   }
 
   return (
-    <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
-      <span className="sr-only sm:not-sr-only">Theme</span>
+    <label className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+      {/* Named on the phone menu, where it stands alone; beside the nav the select speaks for itself. */}
+      <span className="sm:sr-only">Theme</span>
       <select
         value={theme}
         onChange={(e) => choose(e.target.value as Theme)}

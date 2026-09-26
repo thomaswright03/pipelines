@@ -45,6 +45,21 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   lost: "Lost",
 };
 
+/** One line on what each status means, shown as the status badge's tooltip and in the glossary on /help. */
+export const STATUS_HELP: Record<LeadStatus, string> = {
+  new: "Not emailed yet. Gets the first (and only) outreach email.",
+  contacted: "Emailed; waiting for a reply. After a week without one it moves to the call deck.",
+  responded: "Replied with interest (or you marked the reply). Follow up yourself.",
+  appointment_set: "A meeting is booked.",
+  working_for: "Doing work for them.",
+  paying_client: "Pays for the service.",
+  subscribed: "Subscribed to dataleadsell.com.",
+  not_interested: "Said no, by reply or on a call.",
+  cold_call_list: "Didn't reply within a week and has a phone number: on the call deck.",
+  contactless_list: "Didn't reply within a week and has no phone number to call.",
+  lost: "Closed: said no, opted out, the email bounced, or you marked it lost.",
+};
+
 export const STATUS_COLOR: Record<LeadStatus, string> = {
   new: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
   contacted: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",

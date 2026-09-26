@@ -114,6 +114,7 @@ export default function AdreImportPanel({ initial }: { initial: AdreStatusView }
           ? `Roster loaded ${status.loadedAtLabel ?? ""}: ${status.total.toLocaleString("en-US")} active licensees, ${status.checked.toLocaleString("en-US")} checked, ${status.created.toLocaleString("en-US")} added as agents.${status.retryLater > 0 ? ` ${status.retryLater.toLocaleString("en-US")} whose website couldn't be reached will be checked again within the hour.` : ""}`
           : "Not loaded yet. The first click downloads ADRE's public license roster (it can take up to a minute), then starts checking licensees for an email of their own."}
       </p>
+      <p className="text-xs muted">ADRE is the Arizona Department of Real Estate; its public roster lists every licensed agent.</p>
       {status.total > 0 && (
         <div
           className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800"
