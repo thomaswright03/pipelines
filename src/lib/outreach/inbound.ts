@@ -65,7 +65,7 @@ export type InboundEmail = {
   headers?: MailHeaders | null;
 };
 
-export type InboundKind = "reply" | "auto_reply" | "bounce";
+type InboundKind = "reply" | "auto_reply" | "bounce";
 
 export type InboundResult = {
   /** A reply a person wrote, an automatic reply, or a bounce notice. */

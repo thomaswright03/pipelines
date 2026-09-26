@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { updatePipelineMetaAction } from "@/lib/actions/pipeline-meta";
 import type { PipelineMetaFields } from "@/lib/pipeline-meta-defaults";
+import type { DashboardNumbers } from "@/lib/dashboard";
 
 type InternalProps = {
   kind: "internal";
   href: string;
+  numbers: DashboardNumbers;
 };
 
 type HostedProps = {
@@ -46,7 +48,7 @@ export default function PipelineCard({
   }
 
   return (
-    <div className="card card-hover flex flex-col gap-3 p-5">
+    <div className={rest.kind === "internal" ? "card card-hover flex flex-col gap-3 p-5" : "card flex flex-col gap-3 p-4 text-sm"}>
       {editing ? (
         <form action={save} className="flex flex-col gap-2">
           <EditField label="Pipeline name" name="name" maxLength={80} value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -128,6 +130,7 @@ export default function PipelineCard({
               <p className="break-words text-sm muted">{meta.pipelineDescription}</p>
             </div>
           )}
+          {rest.kind === "internal" && <KeyNumbers href={rest.href} numbers={rest.numbers} />}
         </>
       )}
 
@@ -139,13 +142,10 @@ export default function PipelineCard({
             </Link>
           ) : (
             <div className="flex flex-col items-start gap-1">
-              <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-                Open developer console (Vercel) ↗
+              <p className="text-sm muted">Answers new GoHighLevel leads on its own — there is nothing to operate here.</p>
+              <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost -ml-2 text-xs">
+                Check that it&apos;s running ↗
               </a>
-              <p className="text-sm muted">
-                Runs on its own, answering new GoHighLevel leads. The console shows whether it&apos;s deployed and its logs; there is
-                nothing to operate here.
-              </p>
             </div>
           )}
         </div>
@@ -178,5 +178,38 @@ function EditField({
         <input name={name} value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} className="input" />
       )}
     </label>
+  );
+}
+
+/** What is waiting on the operator in this pipeline, each linking to where it's handled. */
+function KeyNumbers({ href, numbers }: { href: string; numbers: DashboardNumbers }) {
+  const items = [
+    { label: "Ready to email", value: numbers.readyToEmail, to: `${href}?status=new` },
+    { label: "Waiting on a reply", value: numbers.waitingOnReply, to: `${href}?status=contacted` },
+    { label: "Replied", value: numbers.replied, to: `${href}?status=responded` },
+    { label: "To call", value: numbers.onCallDeck, to: `${href}/cold-call` },
+  ];
+  return (
+    <div className="flex flex-col gap-2">
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
+            <dt className="text-xs muted">{item.label}</dt>
+            <dd>
+              <Link href={item.to} className="text-lg font-semibold tabular-nums hover:underline">
+                {item.value.toLocaleString("en-US")}
+                <span className="sr-only"> — open</span>
+              </Link>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {numbers.needsALook > 0 && (
+        <p className="notice-warning">
+          {numbers.needsALook === 1 ? "1 reply needs" : `${numbers.needsALook.toLocaleString("en-US")} replies need`} a look — open the
+          pipeline to see {numbers.needsALook === 1 ? "it" : "them"}.
+        </p>
+      )}
+    </div>
   );
 }

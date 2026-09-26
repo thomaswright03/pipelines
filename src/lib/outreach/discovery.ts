@@ -24,7 +24,7 @@ import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id"
  * - `unreachable`: the lead's site (or a candidate site) couldn't be read —
  *   timeout, connection error, 5xx — so "no address" isn't a verdict.
  */
-export type EmailLookup = {
+type EmailLookup = {
   website: string | null;
   email: string | null;
   evidence: string | null;

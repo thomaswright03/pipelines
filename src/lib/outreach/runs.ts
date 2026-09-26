@@ -5,9 +5,9 @@ import { logError, logInfo } from "@/lib/log";
 import { isDatabaseUnavailable } from "@/lib/db-health";
 import { YelpError } from "@/lib/yelp-discovery";
 
-export type RunStatus = "succeeded" | "partial" | "failed" | "skipped";
+type RunStatus = "succeeded" | "partial" | "failed" | "skipped";
 /** What a daily discovery-and-send run actually did, as numbers. */
-export type RunNumbers = { businessesChecked: number; leadsFound: number; emailsSent: number };
+type RunNumbers = { businessesChecked: number; leadsFound: number; emailsSent: number };
 export type RunOutcome = { status: RunStatus; summary: string; errors?: string[]; numbers?: RunNumbers };
 
 export type RecordedRun = RunOutcome & { runId: string };

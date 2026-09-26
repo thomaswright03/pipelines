@@ -5,7 +5,7 @@ export const PAGE_SIZE = 50;
 
 const SORT_KEYS = ["created", "name", "emailed"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
-export type SortDir = "asc" | "desc";
+type SortDir = "asc" | "desc";
 
 export type ListParams = {
   status: string | null;

@@ -95,7 +95,7 @@ async function checkCandidate(url: string, significantWord: string, outer?: Abor
  * name. Callers use `basedOn` to avoid pitching an individual agent through
  * their brokerage's shared inbox.
  */
-export type WebsiteGuess = { url: string; basedOn: "brokerage" | "name" };
+type WebsiteGuess = { url: string; basedOn: "brokerage" | "name" };
 
 /**
  * The outcome of guessing: the site found, or none — and when none, whether

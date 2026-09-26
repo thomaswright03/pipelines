@@ -22,15 +22,29 @@ when one isn't, and a **Test connection** button for email and Yelp) and the sea
 day-to-day operation: the emergency stop, the daily checks, marking replies by hand, held-back leads and
 reading Connections.
 
+The **dashboard** (`/`) says what the tool does and shows, for each pipeline, how many leads are ready to
+email, waiting on a reply, in Responded and on the call deck (each a link), plus how many replies need a
+look.
+
 Each call-deck card shows the lead's company or brokerage, city/state with the local time, when the pitch
 was emailed (or "Never emailed"), the latest history entry, and a link that opens the lead page in a new
-tab. The deck keeps its place when the page is refreshed (per browser tab); **Start over** reloads the
-current call list.
+tab. A lead whose reply is flagged **Reply needs a look** (for example a complaint that reached a lead
+already on the list) carries that warning and its reason at the top of its card. The deck keeps its place
+when the page is refreshed (per browser tab); **Start over** reloads the current call list. A deck holds
+200 cards; the counter shows the true size of the list ("Card 1 of 340"), and the end of a deck offers
+**Load the next cards**, which continues after the last card (`?after=<lead id>`), so a list of any length
+can be worked through.
+
+On a lead page, the status and action panels (Move to…, Send outreach email, Mark opted out, Edit, Delete)
+come first on a phone, straight under the name; from the `md` breakpoint up they sit in the right-hand
+column beside the details. Both pipelines' lead pages and Stats pages share one layout each
+(`LeadPageLayout` in `src/components/LeadDetailParts.tsx`, `src/components/PipelineStatsPage.tsx`).
 
 The interface is English-only: the one operator and every recipient are in the US, so all strings are
 hard-coded in the components and there is no translation layer. This is the developer's recommendation and
-still needs the owner's sign-off (see "Owner-only setup"); Spanish/French would mean moving every string
-into a translation layer with full catalogues and a language switcher. Replies are a separate matter:
+**still needs the owner's sign-off** (see "Owner-only setup" item 9); until then the question is open.
+Spanish/French would mean moving every string into a translation layer with full catalogues, a persistent
+language switcher and localised dates and numbers. Replies are a separate matter:
 common Spanish and French opt-outs are honoured, and a reply mainly in another language that isn't
 understood is flagged **Reply needs a look** rather than counted as a positive reply.
 
@@ -101,7 +115,13 @@ the bulk send, and the daily cron.
   - A reply that isn't an opt-out but reads like a "no" or a complaint ("not interested", "wrong person",
     "how did you get my email", "spam"), or is mainly in another language, is not counted as a positive
     response: the lead keeps its status and is flagged **Reply needs a look** with the reason, for the
-    operator to decide.
+    operator to decide. While the flag is open, a Contacted lead is **not** moved to the call deck by the
+    stale-contacts job, so nobody who complained or said no is cold-called by default. The operator
+    resolves it on the lead page: **Mark opted out**, **Mark replied**, move the lead, or **Keep as
+    Contacted** (which clears the flag; the next stale-contacts run then moves the lead to the call deck as
+    usual if the week is up). A lead already on the call deck when such a reply arrives keeps its place, and
+    its card shows the warning.
+  - A reply of fewer than three words ("Y", "Si", "Oui") is never read as "written in another language".
   - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see "Reply
     tracking". An opt-out is still honoured even when it comes from an autoresponder.
   - The words that triggered an opt-out are stored and shown on the lead page.
@@ -335,7 +355,7 @@ Vercel sends automatically when `CRON_SECRET` is set.
 | Route | Schedule (UTC) | Arizona time | What it does |
 | --- | --- | --- | --- |
 | `/api/cron/vault-daily` | `33 15 * * *` | 8:33 AM | Cold Outreach: searches one new city, saves businesses with a findable email, pitches them and any leads earlier daily runs found but didn't email |
-| `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Both pipelines: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone) |
+| `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Both pipelines: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone), each with a History entry; leads with an unresolved "needs a look" reply stay in Contacted |
 
 - **Settings.** The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
@@ -351,8 +371,11 @@ Vercel sends automatically when `CRON_SECRET` is set.
   - Otherwise only real send failures (the email service refused or dropped the send) make a run **partial** or
     **failed**. Leads the send rules skipped (address already pitched, opted out) and addresses the
     recipient's server refused are listed separately and the run still **succeeded**.
-  - The stale-contacts job moves every due lead in two set-based updates per pipeline, so a backlog of
-    thousands finishes in seconds.
+  - The stale-contacts job moves every due lead, and writes its History entry ("Moved to the call deck — no
+    reply 7 days after the pitch sent Sep 17, 2026."), in one set-based statement per pipeline, so a backlog
+    of thousands finishes in seconds.
+  - A Yelp response that no longer has the expected shape is reported as "Yelp's response changed…" in the
+    run log and Settings → Connections, rather than as an unexplained error or zero finds.
   - A run still marked running two minutes after it started was cut off before it could record its
     outcome, and shows as **Interrupted**.
 
@@ -451,7 +474,7 @@ nothing half-recorded.
 | Status | Meaning | Worker must |
 |---|---|---|
 | `200` | Recorded, or already recorded (`"duplicate": true`) | Stop. |
-| `400` | The body isn't `{ from, subject, text, messageId, headers }` | Not retry; log it. |
+| `400` | The body isn't `{ from, subject, text, messageId, headers }`. The `error` names each failing field ("subject is too long (at most 2000 characters)"), and the app logs an `api.email-inbound` warning with the field names (never the content) | Not retry; log it. |
 | `401` | Wrong or missing token | Not retry; fix the secret. |
 | `503` (or any other 5xx, or no response) | Nothing was recorded. The body is `{ "error", "code", "retry": true }` with `code` `db_unavailable` (the database couldn't be reached) or `internal`; the cause is only in the server log | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
 
@@ -529,6 +552,7 @@ entered leads are not affected.
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
 
 1. **Apply the migrations** in this release to production before deploying it — including
+   `20261001090000_send_log_template_version` (additive: the subject and template version of each send),
    `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
    `20260928090000_inbound_kind`, `20260928100000_send_failure_status`, `20260929090000_rules_version`,
    `20260929100000_connection_checks`, `20260930090000_send_attempts`, `20260930100000_send_log_lead_index`
@@ -577,6 +601,10 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
    tool (and note it here), or commission Spanish/French.
 10. **Grow the evaluation sets with real, anonymised replies and agent addresses** (see "Measuring the
    reply and address rules"). Only the owner can read the production replies.
+11. **Approve the Cold Outreach subject line.** The subject (`src/lib/vault-email-template.ts`) is the
+   owner's own wording and was left as is; a reviewer flagged "I probably shouldn't have sent this 😂" as not
+   describing the offer. Every send now records its subject and template version, and each pipeline's
+   Stats page shows the reply rate per version, so a new subject can be compared with the current one.
 
 ## Known limitations
 

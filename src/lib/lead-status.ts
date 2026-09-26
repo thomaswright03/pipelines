@@ -27,8 +27,8 @@ export const DATALEADSELL_STATUSES = [
   "lost",
 ] as const;
 
-export type ColdOutreachStatus = (typeof COLD_OUTREACH_STATUSES)[number];
-export type DataleadsellStatus = (typeof DATALEADSELL_STATUSES)[number];
+type ColdOutreachStatus = (typeof COLD_OUTREACH_STATUSES)[number];
+type DataleadsellStatus = (typeof DATALEADSELL_STATUSES)[number];
 export type LeadStatus = ColdOutreachStatus | DataleadsellStatus;
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
