@@ -2,7 +2,11 @@
 // jsdom`): the parts of the browser jsdom lacks, and a promise the test
 // resolves by hand so a control's pending state can be observed.
 import { afterEach } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
+
+// findBy*/waitFor give up after 1 s by default; a loaded CI runner can take
+// longer than that to render a dialog, which failed tests at random.
+configure({ asyncUtilTimeout: 3000 });
 
 // jsdom has <dialog> but not its modal methods.
 if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {

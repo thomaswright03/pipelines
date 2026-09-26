@@ -278,16 +278,18 @@ What's covered, by file:
 | `tests/review-findings.test.ts` | Plain opt-out phrasings end to end, "needs a look" replies, reply/call history vs. the notes limit, unreachable websites, Find email guards, bouncing after the stale-contacts move, correction counts |
 | `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
 | `tests/heuristics-eval.test.ts` | Precision/recall of every heuristic (opt-outs, needs-a-look, automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
+| `tests/contact-card.test.ts` | The call deck's "Add to Contacts" vCard: escaping, file name, no phone, unknown pipeline or lead |
+| `tests/components/operator-controls.test.tsx` | The email lookup sweep, the ADRE import, the city searches, the Cold Outreach stage panel and both error pages: progress, Stop, success, refusal, lost connection, database outage |
 | `tests/pages.test.tsx` | Every page rendered with representative data: the dashboard's numbers, lists, lead pages (send offered, needs-a-look warning, do-not-email, 404), forms, Stats, call decks, Replies, Settings, Help, the root layout and the database-outage page |
 
 **Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines,
-`src/lib/actions` below 85%, `src/components` below 70% or `src/app` (the pages) below 75%
+`src/lib/actions` below 85%, `src/components` below 85% or `src/app` (the pages) below 75%
 (`vitest.config.ts`); CI's summary prints lines covered per area. Every page is rendered with
 representative data — empty, normal, a flagged or opted-out lead, outbound email paused, a missing lead —
 by `tests/pages.test.tsx` (`tests/render-page.tsx` awaits the server components and renders their HTML).
 Components are tested in jsdom with Testing Library (`tests/components/*.test.tsx`: the lead page's email
-controls, the bulk-send dialog, the do-not-email list, unmatched replies, the pipeline controls, the call
-deck, the dashboard cards, the theme switch, the last-run line and the lead list's markers — pending,
+controls, the bulk-send dialog, the do-not-email list, unmatched replies, the pipeline controls, the email lookup
+sweep, the ADRE import, the city searches, the stage panel, the error pages, the call deck, the dashboard cards, the theme switch, the last-run line and the lead list's markers — pending,
 success, refusal and network-failure states) and end to end by the browser tests; the logic inside the more
 involved client components (the bulk-send loop, the call deck's saved place) lives in `src/lib/` where it is
 unit-tested. The confirm dialog's focus and Escape handling need a real browser and are covered by the browser tests.
@@ -359,7 +361,10 @@ unmatched reply, stale messages clearing, per-page tab titles (including "Page n
 unsaved-changes prompt on the lead form, reading a
 Stats bar's date and count by keyboard focus, the lead list at 375–2560 px, the call-deck card's context
 and its place surviving a refresh, the single empty-list message, the sender address never breaking
-inside itself (375–2560 px), and Settings → Connections including Test connection. The server uses
+inside itself (375–2560 px), marking a lead Lost (one control, reason required), and Settings →
+Connections including Test connection. On CI a failed browser test is run once more so the report shows
+whether it is flaky, but a test that only passes on the retry still fails the run (`failOnFlakyTests`).
+The server uses
 `EMAIL_TRANSPORT=outbox` (mail is written to `test-results/e2e-outbox`, never delivered) and its own
 database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelines_e2e`), which
 `e2e/prepare-db.mjs` creates and migrates. It refuses non-local hosts.

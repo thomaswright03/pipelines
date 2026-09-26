@@ -33,7 +33,9 @@ export default defineConfig({
       thresholds: {
         "src/lib/outreach/**": { lines: 90 },
         "src/lib/actions/**": { lines: 85 },
-        "src/components/**": { lines: 70 },
+        // Raised from 70 in round 9 (measured 88.9% once the long-running
+        // controls and the error pages were tested).
+        "src/components/**": { lines: 85 },
         "src/app/**": { lines: 75 },
       },
     },

@@ -15,7 +15,11 @@ export default defineConfig({
   fullyParallel: false,
   timeout: 90_000,
   expect: { timeout: 15_000 },
+  // On CI a failed test is run once more so the report can say whether it
+  // is flaky (passed on retry) or broken, but a flaky test still fails the
+  // run: a pass on retry is never silently counted as a pass.
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: `http://127.0.0.1:${PORT}`, trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

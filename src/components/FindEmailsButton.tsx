@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { findEmailsChunkAction } from "@/lib/actions/outreach";
-import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { LEAD_NOUN, type PipelineId } from "@/lib/outreach/pipeline-id";
+import { plural } from "@/lib/format";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 
 type Progress = { checked: number; found: number; unreachable: number; remaining: number };
@@ -31,6 +32,7 @@ export default function FindEmailsButton({
   const [stopping, setStopping] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [startedEpoch, setStartedEpoch] = useState<number | undefined>(undefined);
+  const noun = LEAD_NOUN[pipeline];
 
   async function run() {
     setStartedEpoch(startControl?.());
@@ -64,15 +66,15 @@ export default function FindEmailsButton({
 
     setProgress(null);
     const unreachable = totals.unreachable
-      ? ` ${totals.unreachable} website${totals.unreachable === 1 ? "" : "s"} couldn't be reached — those leads were left as they are and will be tried again in an hour.`
+      ? ` ${plural(totals.unreachable, "website")} couldn't be reached — those ${noun.many} were left as they are and will be tried again in an hour.`
       : "";
-    const summary = `Checked ${totals.checked} lead${totals.checked === 1 ? "" : "s"}, found ${totals.found} email${totals.found === 1 ? "" : "s"}. Leads with none were moved to the phone lists.${unreachable}`;
+    const summary = `Checked ${plural(totals.checked, noun.one, noun.many)}, found ${plural(totals.found, "email")}. ${noun.many[0]!.toUpperCase()}${noun.many.slice(1)} with none were moved to the phone lists.${unreachable}`;
     if (error) setFeedback({ ok: false, text: `${error} ${summary}` });
     else if (stopRequested.current) setFeedback({ ok: true, text: `Stopped. ${summary} ${totals.remaining} still to check.` });
     else
       setFeedback({
         ok: true,
-        text: totals.checked + totals.unreachable === 0 ? "Every lead has already been checked for an email." : summary,
+        text: totals.checked + totals.unreachable === 0 ? `Every ${noun.one} has already been checked for an email.` : summary,
       });
     router.refresh();
   }
@@ -118,7 +120,7 @@ export default function FindEmailsButton({
         </div>
       ) : (
         <button type="button" onClick={run} disabled={disabled} className="btn-secondary self-start">
-          Look up emails for leads without one
+          Look up emails for {noun.many} without one
         </button>
       )}
       <ActionMessage feedback={startedEpoch === epoch ? feedback : null} />
