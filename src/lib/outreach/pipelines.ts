@@ -119,7 +119,14 @@ export type PipelineAdapter = {
   countSendable(db: Db): Promise<number>;
   /** New leads with an address that can't be sent (flagged), for the "why nothing to send" hint. */
   countBlockedNew(db: Db): Promise<number>;
-  listStaleContacted(db: Db, cutoff: Date): Promise<OutreachLead[]>;
+  /**
+   * Moves every lead still Contacted and last emailed at or before `cutoff`
+   * to phone outreach — the cold-call list, or the contactless list when it
+   * has no phone number — in two set-based updates, so the job's time
+   * doesn't grow with the backlog. Each row is only moved if it is still
+   * Contacted at that moment, so a reply that landed first wins.
+   */
+  routeStaleContacted(db: Db, cutoff: Date): Promise<{ coldCall: number; contactless: number }>;
   /**
    * Leads with no address that were never checked, leaving out any whose
    * site was unreachable at or after `retryBefore` (they're retried later).
@@ -326,9 +333,17 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     },
     countSendable: (db) => leads(db).count({ where: SENDABLE }),
     countBlockedNew: (db) => leads(db).count({ where: BLOCKED_NEW }),
-    async listStaleContacted(db, cutoff) {
-      const rows = await leads(db).findMany({ where: { status: "contacted", lastEmailedAt: { lte: cutoff } } });
-      return rows.map(toOutreach);
+    async routeStaleContacted(db, cutoff) {
+      const due = { status: "contacted", lastEmailedAt: { lte: cutoff } };
+      const coldCall = await leads(db).updateMany({
+        where: { ...due, phone: { not: null }, NOT: { phone: "" } },
+        data: { status: "cold_call_list" },
+      });
+      const contactless = await leads(db).updateMany({
+        where: { ...due, OR: [{ phone: null }, { phone: "" }] },
+        data: { status: "contactless_list" },
+      });
+      return { coldCall: coldCall.count, contactless: contactless.count };
     },
     async listNeedingEmailLookup(db, limit, retryBefore) {
       const rows = await leads(db).findMany({ where: needsLookup(retryBefore), orderBy: { createdAt: "asc" }, take: limit });

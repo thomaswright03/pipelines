@@ -1,7 +1,7 @@
 // Every date the operator sees is in the operator's time zone — Arizona —
 // not the server's (UTC on Vercel). Arizona doesn't observe DST, but the
 // helpers below work for any IANA zone.
-const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/Phoenix";
+export const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/Phoenix";
 /** How the zone is named next to times and date inputs. */
 export const APP_TIME_ZONE_LABEL = APP_TIME_ZONE === "America/Phoenix" ? "Arizona time" : APP_TIME_ZONE;
 

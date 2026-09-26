@@ -284,6 +284,8 @@ model EmailSendLog {
   // return its own tracking id, so bounces are recorded with the manual
   // "Mark bounced" button rather than a webhook.
   providerMessageId String?    @unique
+
+  @@index([leadId])
 }
 
 // Tracks which (city, county) targets the Yelp search has already covered,
@@ -408,6 +410,8 @@ model LeadEmailSendLog {
   bouncedAt         DateTime?
   // See EmailSendLog.providerMessageId above.
   providerMessageId String?   @unique
+
+  @@index([leadId])
 }
 
 // Tracks which "city, state" pairs the Yelp search has already used for the

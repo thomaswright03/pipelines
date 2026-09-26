@@ -3,7 +3,6 @@
 // number) instead of sitting in "Contacted" forever. Same rule for both
 // pipelines; run daily by /api/cron/stale-contacts.
 import { prisma } from "@/lib/db";
-import { routeToPhoneOutreach } from "@/lib/outreach/discovery";
 import { ALL_PIPELINES } from "@/lib/outreach/pipelines";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 
@@ -15,15 +14,10 @@ export async function routeStaleContacts(now: Date = new Date()): Promise<StaleC
   const cutoff = new Date(now.getTime() - STALE_CONTACT_DAYS * 24 * 60 * 60 * 1000);
   const result = {} as StaleContactResult;
   for (const pipeline of ALL_PIPELINES) {
-    const counts = { coldCall: 0, contactless: 0 };
-    for (const lead of await pipeline.listStaleContacted(prisma, cutoff)) {
-      // Conditional on the lead still being Contacted: one that replied or
-      // was moved by hand since the list was read is left alone.
-      const status = await routeToPhoneOutreach(pipeline.id, lead);
-      if (status === "cold_call_list") counts.coldCall++;
-      else if (status === "contactless_list") counts.contactless++;
-    }
-    result[pipeline.id] = counts;
+    // Set-based and conditional on the lead still being Contacted, so it
+    // finishes in a couple of queries at any backlog, and a lead that
+    // replied or was moved by hand a moment earlier is left alone.
+    result[pipeline.id] = await pipeline.routeStaleContacted(prisma, cutoff);
   }
   return result;
 }

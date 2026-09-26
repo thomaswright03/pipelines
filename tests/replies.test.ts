@@ -217,21 +217,38 @@ describe("a reply that arrives while the database is down", () => {
   });
 });
 
-describe("stale-contacts routing races", () => {
-  it("leaves a lead alone if it replied between being listed and being moved", async () => {
-    const lead = await makeColdLead({ status: "contacted", lastEmailedAt: new Date(Date.now() - EIGHT_DAYS_MS), phone: "(480) 555-0120" });
-    const adapter = getPipeline("cold-outreach");
-    const original = adapter.listStaleContacted.bind(adapter);
-    vi.spyOn(adapter, "listStaleContacted").mockImplementation(async (db, cutoff) => {
-      const listed = await original(db, cutoff);
-      // The reply lands after the job read its list.
-      await prisma.lead.update({ where: { id: lead.id }, data: { status: "responded", repliedAt: new Date() } });
-      return listed;
-    });
+describe("stale-contacts routing", () => {
+  it("moves only leads still Contacted: one that replied first is left alone", async () => {
+    const old = new Date(Date.now() - EIGHT_DAYS_MS);
+    const replied = await makeColdLead({ status: "responded", repliedAt: new Date(), lastEmailedAt: old, phone: "(480) 555-0120" });
+    const withPhone = await makeColdLead({ status: "contacted", lastEmailedAt: old, phone: "(480) 555-0121" });
+    const blankPhone = await makeColdLead({ status: "contacted", lastEmailedAt: old, phone: "" });
+    const recent = await makeColdLead({ status: "contacted", lastEmailedAt: new Date() });
 
     const result = await routeStaleContacts();
 
-    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("responded");
-    expect(result["cold-outreach"]).toEqual({ coldCall: 0, contactless: 0 });
+    expect(result["cold-outreach"]).toEqual({ coldCall: 1, contactless: 1 });
+    const status = async (id: string) => (await prisma.lead.findUniqueOrThrow({ where: { id } })).status;
+    expect(await status(replied.id)).toBe("responded");
+    expect(await status(withPhone.id)).toBe("cold_call_list");
+    expect(await status(blankPhone.id)).toBe("contactless_list");
+    expect(await status(recent.id)).toBe("contacted");
+  });
+
+  it("clears a backlog of 10,000 due leads in a few seconds", async () => {
+    const old = new Date(Date.now() - EIGHT_DAYS_MS);
+    await prisma.lead.createMany({
+      data: Array.from({ length: 10_000 }, (_, i) => ({
+        name: `Backlog ${i}`,
+        status: "contacted",
+        lastEmailedAt: old,
+        phone: i % 2 ? "(480) 555-0100" : null,
+      })),
+    });
+    const started = Date.now();
+    const result = await routeStaleContacts();
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(result["cold-outreach"]).toEqual({ coldCall: 5_000, contactless: 5_000 });
+    expect(await prisma.lead.count({ where: { status: "contacted" } })).toBe(0);
   });
 });
