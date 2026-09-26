@@ -134,6 +134,12 @@ the bulk send, and the daily cron.
   - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see "Reply
     tracking". An opt-out is still honoured even when it comes from an autoresponder, and a message worded
     like an out-of-office that also says yes or "interested" is treated as a reply that needs a look.
+- **Unsubscribe header.** Every pitch carries `Reply-To:` the sending address (the inbox the reply Worker
+  reads) and `List-Unsubscribe: <mailto:…?subject=unsubscribe>` (`src/lib/send-email.ts`), so mail clients
+  can show their own unsubscribe button. Pressing it emails the reply inbox with the subject
+  "unsubscribe", which the reply rules read as an opt-out. One-click HTTPS unsubscribe (RFC 8058,
+  `List-Unsubscribe-Post`) is not offered: it needs a public endpoint outside Vercel Deployment
+  Protection (see "Owner-only setup").
 - **Kill switch.** **Settings → Pause all outbound email** stops every send path at its next send. That
   includes a bulk send already in progress. A header pill shows while outbound email is paused.
 - **Bulk sends need confirmation.** The confirmation shows how many leads will be emailed, the number of

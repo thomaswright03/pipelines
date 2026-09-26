@@ -18,7 +18,28 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveTransportKind, type TransportKind } from "@/lib/mail-transport-kind";
 
-export type MailMessage = { from: string; to: string; subject: string; text: string };
+export type MailMessage = {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  /** Where replies go: the sending address, whose inbox the reply-tracking Worker reads. */
+  replyTo?: string;
+  headers?: Record<string, string>;
+};
+
+/**
+ * The subject of the unsubscribe email a recipient's mail client sends from
+ * the List-Unsubscribe header. It lands on the reply inbox like any reply,
+ * and the reply classifier reads a subject of just "unsubscribe" as an
+ * opt-out (STOP_COMMANDS in reply-classifier.ts).
+ */
+export const LIST_UNSUBSCRIBE_SUBJECT = "unsubscribe";
+
+/** The List-Unsubscribe header for mail sent from `from` (RFC 2369): a mailto back to the reply inbox. */
+export function listUnsubscribeHeader(from: string): string {
+  return `<mailto:${from}?subject=${LIST_UNSUBSCRIBE_SUBJECT}>`;
+}
 export type MailTransport = {
   sendMail(message: MailMessage): Promise<{ messageId: string }>;
   /** Connects, upgrades to TLS and logs in without sending anything (SMTP transports). */
@@ -129,7 +150,17 @@ export function describeConnectionTestError(err: unknown): string {
 }
 
 export async function sendOutreachEmail(from: string, to: string, subject: string, body: string): Promise<{ providerMessageId: string }> {
-  const info = await getTransport().sendMail({ from, to, subject, text: body });
+  // Replies go explicitly to the sending address (the inbox the reply
+  // Worker reads), and mail clients can offer their own unsubscribe button,
+  // which emails that inbox with the subject "unsubscribe".
+  const info = await getTransport().sendMail({
+    from,
+    to,
+    subject,
+    text: body,
+    replyTo: from,
+    headers: { "List-Unsubscribe": listUnsubscribeHeader(from) },
+  });
   // messageId is the locally generated Message-ID header. ZeptoMail's SMTP
   // relay doesn't hand back a tracking id of its own, so this is only a
   // unique reference for the send log, not something a bounce webhook
