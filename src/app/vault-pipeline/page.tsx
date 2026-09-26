@@ -5,6 +5,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
 import ReplyStatus from "@/components/ReplyStatus";
+import PipelineAlerts from "@/components/PipelineAlerts";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import VaultScheduleSettings, { type RunView } from "@/components/VaultScheduleSettings";
 import LeadTable from "@/components/LeadTable";
@@ -84,30 +85,17 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
             </p>
           </HowThisWorks>
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/vault-pipeline/new" className="btn-secondary">
+            + Add lead by hand
+          </Link>
+          <a href="#tools" className="btn-ghost">
+            Find, bulk send and daily run ↓
+          </a>
+        </div>
       </div>
 
-      <OutreachControls
-        pipeline="cold-outreach"
-        paused={settings.outboundPaused}
-        unsent={unsent}
-        dailyRunUnsent={dailyRunUnsent}
-        blocked={blocked}
-        nextCity={`${nextCity.city}, ${nextCity.state}`}
-      />
-      <ReplyStatus health={replyHealth} />
-      <VaultScheduleSettings
-        schedule={schedule}
-        runTimeLabel={VAULT_DAILY_RUN_TIME_LABEL}
-        paused={settings.outboundPaused}
-        runs={runViews}
-        staleWarning={staleWarning}
-      />
-
-      <div>
-        <Link href="/vault-pipeline/new" className="btn-secondary">
-          + Add lead by hand
-        </Link>
-      </div>
+      <PipelineAlerts replyHealth={replyHealth} staleWarning={staleWarning} />
 
       <LeadTable
         pipeline="cold-outreach"
@@ -135,6 +123,33 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         locationLabel="Location"
         noun={{ one: "lead", many: "leads" }}
       />
+
+      <section
+        id="tools"
+        aria-labelledby="tools-heading"
+        className="flex scroll-mt-20 flex-col gap-4 border-t border-zinc-200 pt-6 dark:border-zinc-800"
+      >
+        <h2 id="tools-heading" className="text-lg font-semibold">
+          Find and email businesses
+        </h2>
+        <OutreachControls
+          pipeline="cold-outreach"
+          paused={settings.outboundPaused}
+          unsent={unsent}
+          dailyRunUnsent={dailyRunUnsent}
+          blocked={blocked}
+          nextCity={`${nextCity.city}, ${nextCity.state}`}
+        />
+        <ReplyStatus health={replyHealth} showUnmatched={false} />
+        {/* A stale-run warning is shown above the list (PipelineAlerts). */}
+        <VaultScheduleSettings
+          schedule={schedule}
+          runTimeLabel={VAULT_DAILY_RUN_TIME_LABEL}
+          paused={settings.outboundPaused}
+          runs={runViews}
+          staleWarning={null}
+        />
+      </section>
     </div>
   );
 }

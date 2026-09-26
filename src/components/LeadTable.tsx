@@ -123,7 +123,13 @@ export default function LeadTable({
       {rows.length === 0 ? (
         total === 0 ? (
           <div className="card flex flex-col items-center gap-3 px-4 py-10 text-center text-sm">
-            <p className="muted">No {noun.many} yet — run the pipeline above, or add one by hand.</p>
+            <p className="muted">
+              No {noun.many} yet — search for some with the tools{" "}
+              <a href="#tools" className="underline underline-offset-2">
+                below the list
+              </a>
+              , or add one by hand.
+            </p>
             <Link href={`${basePath}/new`} className="btn-secondary">
               Add {noun.one === "agent" ? "an agent" : `a ${noun.one}`}
             </Link>
@@ -151,7 +157,7 @@ export default function LeadTable({
                     <Link
                       href={`${basePath}/${row.id}`}
                       title={row.name}
-                      className="line-clamp-2 min-w-0 break-words font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
+                      className="-my-3 line-clamp-2 min-w-0 break-words py-3 font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
                     >
                       {row.name}
                     </Link>
@@ -171,7 +177,8 @@ export default function LeadTable({
           {/* Tablets and up: a fixed-layout table that fits the page width; long values are cut short with the full text on hover. */}
           <div className="card hidden md:block">
             <table className="w-full table-fixed text-sm">
-              <thead className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+              {/* From lg up the column headers stay in view under the sticky site header while the list scrolls. */}
+              <thead className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-600 dark:border-zinc-800 dark:text-zinc-400 lg:[&_th]:sticky lg:[&_th]:top-[var(--site-header-h,57px)] lg:[&_th]:z-[5] lg:[&_th]:bg-white lg:[&_th]:shadow-[inset_0_-1px_0_var(--color-zinc-200)] dark:lg:[&_th]:bg-zinc-900 dark:lg:[&_th]:shadow-[inset_0_-1px_0_var(--color-zinc-800)]">
                 <tr>
                   <th className="w-11 px-1 py-3">
                     <span className="sr-only">Starred</span>

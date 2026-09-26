@@ -108,7 +108,7 @@ describe("the root layout", () => {
 describe("the lead lists", () => {
   it("show a first-run message when empty", async () => {
     for (const page of [await renderPage(VaultList(pageProps())), await renderPage(AgentList(pageProps()))]) {
-      expect(page.text).toMatch(/yet — run the pipeline above, or add one by hand\./);
+      expect(page.text).toMatch(/yet — search for some with the tools below the list, or add one by hand\./);
     }
   });
 

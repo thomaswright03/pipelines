@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import OutreachControls from "@/components/OutreachControls";
 import { peekNextAgentCity } from "@/lib/agent-city-picker";
 import ReplyStatus from "@/components/ReplyStatus";
+import PipelineAlerts from "@/components/PipelineAlerts";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import AdreImportPanel from "@/components/AdreImportPanel";
 import LeadTable from "@/components/LeadTable";
@@ -67,28 +68,17 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
             </p>
           </HowThisWorks>
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/dataleadsell/new" className="btn-secondary">
+            + Add agent by hand
+          </Link>
+          <a href="#tools" className="btn-ghost">
+            Find, bulk send and ADRE import ↓
+          </a>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Stat label="Total agents" value={total} />
-        <Stat label="With email" value={withEmail} />
-      </div>
-
-      <OutreachControls
-        pipeline="dataleadsell"
-        paused={settings.outboundPaused}
-        unsent={unsent}
-        blocked={blocked}
-        nextCity={`${nextCity.city} (${nextCity.county} County, ${nextCity.state})`}
-      />
-      <ReplyStatus health={replyHealth} />
-      <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
-
-      <div>
-        <Link href="/dataleadsell/new" className="btn-secondary">
-          + Add agent by hand
-        </Link>
-      </div>
+      <PipelineAlerts replyHealth={replyHealth} />
 
       <LeadTable
         pipeline="dataleadsell"
@@ -116,6 +106,29 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         locationLabel="City / county"
         noun={{ one: "agent", many: "agents" }}
       />
+
+      <section
+        id="tools"
+        aria-labelledby="tools-heading"
+        className="flex scroll-mt-20 flex-col gap-4 border-t border-zinc-200 pt-6 dark:border-zinc-800"
+      >
+        <h2 id="tools-heading" className="text-lg font-semibold">
+          Find and email agents
+        </h2>
+        <div className="grid grid-cols-2 gap-4">
+          <Stat label="Total agents" value={total} />
+          <Stat label="With email" value={withEmail} />
+        </div>
+        <OutreachControls
+          pipeline="dataleadsell"
+          paused={settings.outboundPaused}
+          unsent={unsent}
+          blocked={blocked}
+          nextCity={`${nextCity.city} (${nextCity.county} County, ${nextCity.state})`}
+        />
+        <ReplyStatus health={replyHealth} showUnmatched={false} />
+        <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
+      </section>
     </div>
   );
 }

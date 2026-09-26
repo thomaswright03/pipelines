@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { connection } from "next/server";
 import SiteNav from "@/components/SiteNav";
+import HeaderMenu from "@/components/HeaderMenu";
 import ThemeToggle from "@/components/ThemeToggle";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { getAppSettings } from "@/lib/outreach/settings";
@@ -43,21 +44,26 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to content
         </a>
         <header className="z-10 sm:sticky sm:top-0 border-b border-zinc-200/70 bg-white/80 backdrop-blur-md dark:border-zinc-800/70 dark:bg-zinc-950/80">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 px-4 py-2 sm:gap-x-6 sm:gap-y-2 sm:px-6 sm:py-3">
             <Link href="/" className="flex min-h-11 items-center gap-2 text-lg font-semibold tracking-tight sm:min-h-8">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-sm shadow-indigo-600/30">
                 P
               </span>
               <span className="hidden sm:inline">Pipelines</span>
             </Link>
-            <NavWithCounts />
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/* Always visible, on a phone too: paused, and where "sent" mail goes. */}
+            <div className="ml-auto flex min-w-0 items-center gap-2 sm:order-last sm:ml-0">
               <OutboundStatus />
-              <ThemeToggle />
             </div>
+            <HeaderMenu>
+              <NavWithCounts />
+              <div className="sm:ml-auto">
+                <ThemeToggle />
+              </div>
+            </HeaderMenu>
           </div>
         </header>
-        <main id="main" className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-8 sm:px-6">
+        <main id="main" className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 pb-8 pt-4 sm:px-6 sm:pt-8">
           <UnlessDatabaseDown>{children}</UnlessDatabaseDown>
         </main>
         <footer className="border-t border-zinc-200/70 px-6 py-4 text-center text-xs text-zinc-600 dark:border-zinc-800/70 dark:text-zinc-400">
@@ -113,11 +119,12 @@ async function OutboundStatus() {
     <>
       {mail.badge && (
         <span
-          className={
+          title={mail.badge}
+          className={`max-w-[11rem] truncate rounded-full px-2.5 py-1 text-xs font-medium sm:max-w-none ${
             mail.delivers
-              ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
-              : "rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200"
-          }
+              ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
+              : "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200"
+          }`}
         >
           {mail.badge}
         </span>

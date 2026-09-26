@@ -281,6 +281,70 @@ for (const width of [375, 768, 1280, 1440, 2560]) {
   });
 }
 
+test("on a phone the header is one short row, and the menu holds the pages and the theme", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("/vault-pipeline");
+  const header = page.locator("body > header");
+  expect((await header.boundingBox())!.height).toBeLessThanOrEqual(64);
+  expect((await page.getByRole("heading", { name: "Cold Outreach", level: 1 }).boundingBox())!.y).toBeLessThan(150);
+
+  const menu = page.getByRole("button", { name: "Menu" });
+  await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden();
+  await menu.click();
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("combobox", { name: "Theme" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden();
+  await menu.click();
+  await page
+    .getByRole("navigation", { name: "Main" })
+    .getByRole("link", { name: /^Settings/ })
+    .click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden(); // closed after following a link
+
+  // From the sm breakpoint up the pages sit in the header, with no Menu button.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  await expect(menu).toBeHidden();
+});
+
+test("at 1440×900 the lead list is on the first screen, and its column headers stay pinned while scrolling", async ({ page }) => {
+  await seedColdLeads(50, { status: "contacted" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/vault-pipeline");
+  const list = page.getByRole("region", { name: "leads list" });
+  await expect(list.getByRole("navigation", { name: "Filter by status" })).toBeInViewport();
+  const firstRow = list.locator("tbody tr").first();
+  expect((await firstRow.boundingBox())!.y + 20).toBeLessThan(900);
+
+  const headerRow = list.locator("thead th").nth(1);
+  await list.locator("tbody tr").nth(40).scrollIntoViewIfNeeded();
+  const siteHeader = (await page.locator("body > header").boundingBox())!;
+  const pinned = (await headerRow.boundingBox())!;
+  expect(pinned.y).toBeGreaterThanOrEqual(siteHeader.y + siteHeader.height - 1);
+  expect(pinned.y).toBeLessThan(siteHeader.y + siteHeader.height + 4);
+  await expect(list.getByRole("link", { name: /Emailed/ })).toBeInViewport();
+});
+
+test("on a phone the row links, filter chips and page links are at least 44px tall", async ({ page }) => {
+  await seedColdLeads(60, { status: "contacted" });
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("/vault-pipeline");
+  const list = page.getByRole("region", { name: "leads list" });
+  const targets = [
+    ...(await list.getByRole("navigation", { name: "Filter by status" }).getByRole("link").all()),
+    ...(await list.locator("ul").getByRole("link").all()),
+    ...(await list.getByRole("navigation", { name: "Pages" }).getByRole("link").all()),
+    page.getByRole("button", { name: "Menu" }),
+  ];
+  expect(targets.length).toBeGreaterThan(30);
+  for (const target of targets) {
+    const box = (await target.boundingBox())!;
+    expect(box.height, (await target.textContent()) ?? "").toBeGreaterThanOrEqual(44);
+  }
+});
+
 for (const pipeline of ["vault-pipeline", "dataleadsell"] as const) {
   test(`on a phone, a ${pipeline} lead's status and Send come before the email preview`, async ({ page }) => {
     const id = pipeline === "vault-pipeline" ? (await seedColdLeads(1))[0]! : await seedAgentLead();
@@ -353,7 +417,7 @@ test("an empty lead list shows one first-run message; a search with no hits show
   for (const path of ["/vault-pipeline", "/dataleadsell"]) {
     await page.goto(path);
     const list = page.getByRole("region", { name: /list$/ });
-    await expect(list.getByText(/yet — run the pipeline above, or add one by hand\./)).toBeVisible();
+    await expect(list.getByText(/yet — search for some with the tools below the list, or add one by hand\./)).toBeVisible();
     await expect(list.getByText(/match/)).toHaveCount(0);
   }
 

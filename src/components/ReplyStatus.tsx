@@ -6,7 +6,16 @@ import { plural } from "@/lib/format";
 import { formatDateTime } from "@/lib/time";
 import type { ReplyHealth } from "@/lib/outreach/reply-health";
 
-export default function ReplyStatus({ health, showLink = true }: { health: ReplyHealth; showLink?: boolean }) {
+/** `showUnmatched: false` where PipelineAlerts already reports replies waiting to be matched. */
+export default function ReplyStatus({
+  health,
+  showLink = true,
+  showUnmatched = true,
+}: {
+  health: ReplyHealth;
+  showLink?: boolean;
+  showUnmatched?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-2">
       {health.warning ? (
@@ -23,7 +32,7 @@ export default function ReplyStatus({ health, showLink = true }: { health: Reply
             : "No replies received yet, so reply tracking isn't confirmed — until the first one arrives, mark replies by hand from the lead's page."}
         </p>
       )}
-      {health.unmatched > 0 && (
+      {showUnmatched && health.unmatched > 0 && (
         <p className="notice-info">
           {plural(health.unmatched, "reply", "replies")} came from an address that isn&apos;t on any lead.{" "}
           {showLink && (
