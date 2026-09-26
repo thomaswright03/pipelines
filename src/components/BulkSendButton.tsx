@@ -56,7 +56,7 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
 
   async function send(preview: BulkPreview) {
     stopRequested.current = false;
-    const initial: Progress = { sent: 0, skipped: 0, failed: 0, processed: 0, total: preview.leadIds.length, messages: [] };
+    const initial: Progress = { sent: 0, skipped: 0, failed: 0, refused: 0, processed: 0, total: preview.leadIds.length, messages: [] };
     setPhase({ kind: "sending", preview, progress: initial, stopping: false });
     const { progress, stopReason } = await runBulkSend(
       preview.leadIds,
@@ -197,6 +197,7 @@ function ProgressBody({ progress, willSend, stopping }: { progress: Progress; wi
       <p>
         Sent {progress.sent} of {willSend}
         {progress.skipped ? ` · ${progress.skipped} skipped` : ""}
+        {progress.refused ? ` · ${progress.refused} refused` : ""}
         {progress.failed ? ` · ${progress.failed} failed` : ""}
         {stopping ? " · stopping…" : "…"}
       </p>

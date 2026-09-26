@@ -102,6 +102,7 @@ export async function runDailyColdOutreach(
 
   let sent = 0;
   let failed = 0;
+  let refused = 0;
   let skipped = 0;
   let deferred = 0;
   const errors: string[] = discoveryError ? [`Search of ${target.city}, ${target.state} failed: ${discoveryError}`] : [];
@@ -118,6 +119,11 @@ export async function runDailyColdOutreach(
       errors.push(`${lead.name}: ${outcome.message}`);
       deferred = queue.length - index;
       break;
+    } else if (outcome.reason === "address_refused") {
+      // One bad address, not a failure of the run: the lead is flagged (or,
+      // after a temporary refusal, tried again by a later run).
+      refused++;
+      errors.push(`${lead.name}: ${outcome.message}`);
     } else if (SEND_FAILURES.has(outcome.reason)) {
       failed++;
       errors.push(`${lead.name}: ${outcome.message}`);
@@ -142,11 +148,13 @@ export async function runDailyColdOutreach(
   if (carriedOver) parts.push(`${carriedOver} left over from earlier runs`);
   parts.push(`emailed ${sent}`);
   if (skipped) parts.push(`${skipped} skipped by the send rules`);
+  if (refused) parts.push(`${refused} ${refused === 1 ? "address" : "addresses"} refused by the recipient's mail server`);
   if (failed) parts.push(`${failed} failed to send`);
   if (deferred) parts.push(`${deferred} left for the next run (out of time)`);
   const summary = `${parts.join(", ")}.`;
 
-  // Send refusals are the rules working; only a failed search or a failed
+  // Send refusals are the rules working, and a refused address is that
+  // lead's problem (flagged on it); only a failed search or a failed
   // send makes a run partial, and it is "failed" only when nothing got done.
   const problems = failed > 0 || discoveryError !== null;
   const status = !problems ? "succeeded" : sent > 0 ? "partial" : "failed";

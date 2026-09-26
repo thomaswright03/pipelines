@@ -27,10 +27,27 @@ export const DUPLICATE_BLOCK_PREFIX = "Duplicate address";
 export const OPTED_OUT_BLOCK_PREFIX = "Opted out";
 /** Set by the migration on addresses the old, unchecked website guess found. */
 export const UNVERIFIED_BLOCK_PREFIX = "Unverified address";
+/** The recipient's mail server refused the address for good (e.g. 550 user unknown). */
+export const REFUSED_BLOCK_PREFIX = "Address refused by the mail server";
 /** Blocks that are about the lead's current address, so they end when the address changes. */
-export const ADDRESS_BLOCK_PREFIXES = [DUPLICATE_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX, UNVERIFIED_BLOCK_PREFIX];
+export const ADDRESS_BLOCK_PREFIXES = [DUPLICATE_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX, UNVERIFIED_BLOCK_PREFIX, REFUSED_BLOCK_PREFIX];
+/**
+ * Temporary refusals (4xx: mailbox full, greylisting) of one address after
+ * which it is treated like a permanent refusal, so it can't hold up every
+ * send and daily run indefinitely.
+ */
+export const MAX_TEMPORARY_REFUSALS = 3;
 
-export type SendRefusal = "paused" | "not_found" | "no_email" | "not_new" | "blocked" | "suppressed" | "duplicate_address";
+export type SendRefusal =
+  | "paused"
+  | "not_found"
+  | "no_email"
+  | "not_new"
+  | "blocked"
+  | "suppressed"
+  | "duplicate_address"
+  /** The recipient's mail server refused the address (now, or on an earlier send). */
+  | "address_refused";
 
 export type SendOutcome =
   | { ok: true; leadId: string; leadName: string; email: string; message: string; warning?: string }
@@ -57,7 +74,7 @@ export async function findExistingPitch(
   pipeline: PipelineId,
   email: string,
   allowCrossPipelineRepeats: boolean,
-): Promise<{ pipeline: PipelineId; leadId: string | null; leadName: string | null } | null> {
+): Promise<{ pipeline: PipelineId; leadId: string | null; leadName: string | null; refused: boolean } | null> {
   const row = await db.outreachRecipient.findFirst({
     where: { email, ...(allowCrossPipelineRepeats ? { pipeline } : {}) },
     orderBy: { claimedAt: "asc" },
@@ -65,7 +82,7 @@ export async function findExistingPitch(
   if (!row) return null;
   const other = row.pipeline as PipelineId;
   const lead = row.leadId ? await getPipeline(other).findLead(db, row.leadId) : null;
-  return { pipeline: other, leadId: row.leadId, leadName: lead?.name ?? null };
+  return { pipeline: other, leadId: row.leadId, leadName: lead?.name ?? null, refused: row.state === "refused" };
 }
 
 function describeExistingPitch(existing: { pipeline: PipelineId; leadName: string | null }, self: PipelineId): string {
@@ -117,6 +134,12 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
       }
 
       const existing = await findExistingPitch(tx, pipelineId, email, settings.allowCrossPipelineRepeats);
+      if (existing?.refused) {
+        throw new Refusal(
+          "address_refused",
+          `The mail server refused ${email} on an earlier send — nothing was sent, and ${lead.name} won't be auto-sent.`,
+        );
+      }
       if (existing && existing.pipeline === pipelineId && existing.leadId === leadId) {
         const current = await pipeline.findLead(tx, leadId);
         if (current && current.status !== "new") {
@@ -159,20 +182,55 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
     ({ providerMessageId } = await sendOutreachEmail(pipeline.senderEmail, email, subject, body));
   } catch (err) {
     const failure = classifySendError(err);
-    logError("outreach.send", err, { pipeline: pipelineId, leadId, delivery: failure.delivery });
-    await recordSendFailure(failure.message);
-    if (failure.delivery === "not_sent") {
+    logError("outreach.send", err, { pipeline: pipelineId, leadId, delivery: failure.delivery, scope: failure.scope });
+    // Settings → Connections reports the email service itself; a refusal of
+    // one recipient says nothing about it and is shown on that lead instead.
+    if (failure.scope === "service") await recordSendFailure(failure.message);
+    const failedAt = new Date();
+
+    if (failure.delivery === "unknown") {
+      await prisma.outreachRecipient.update({
+        where: { id: recipientId },
+        data: { state: "unknown", lastError: failure.message },
+      });
+      await recordAttempt(pipelineId, leadId, failedAt, failure.message, {});
+      return fail("delivery_unknown", failure.message);
+    }
+
+    if (failure.scope === "service") {
       await prisma.$transaction(async (tx) => {
         await tx.outreachRecipient.delete({ where: { id: recipientId } });
         await pipeline.releaseClaim(tx, leadId, claimedAt, { lastEmailedAt: lead.lastEmailedAt, repliedAt: lead.repliedAt });
       });
+      await recordAttempt(pipelineId, leadId, failedAt, failure.message, {});
       return fail("send_failed", failure.message);
     }
-    await prisma.outreachRecipient.update({
-      where: { id: recipientId },
-      data: { state: "unknown", lastError: failure.message },
+
+    // The recipient's server refused the address. A permanent refusal, or
+    // the last of a few temporary ones, keeps the ledger entry (as
+    // "refused", so the address is never tried again, from any lead) and
+    // flags the lead; otherwise the lead stays sendable for a later try.
+    const refusals = lead.sendRefusalCount + 1;
+    const giveUp = failure.permanent || refusals >= MAX_TEMPORARY_REFUSALS;
+    const message = giveUp
+      ? `${failure.message} ${lead.name} won't be emailed at ${email}.`
+      : `${failure.message} It will be tried again on a later send (${refusals} of ${MAX_TEMPORARY_REFUSALS} tries).`;
+    const blockReason = giveUp
+      ? `${REFUSED_BLOCK_PREFIX} — ${email} ${failure.permanent ? "can't receive email" : `was turned away ${refusals} times`}, so this lead is never auto-sent. Change the address to try another.`
+      : null;
+    await prisma.$transaction(async (tx) => {
+      if (giveUp) {
+        await tx.outreachRecipient.update({ where: { id: recipientId }, data: { state: "refused", lastError: failure.message } });
+      } else {
+        await tx.outreachRecipient.delete({ where: { id: recipientId } });
+      }
+      await pipeline.releaseClaim(tx, leadId, claimedAt, { lastEmailedAt: lead.lastEmailedAt, repliedAt: lead.repliedAt });
     });
-    return fail("delivery_unknown", failure.message);
+    await recordAttempt(pipelineId, leadId, failedAt, message, {
+      sendRefusalCount: refusals,
+      ...(blockReason ? { sendBlockedReason: blockReason } : {}),
+    });
+    return fail("address_refused", message);
   }
 
   const sentAt = new Date();
@@ -200,6 +258,30 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
   return { ok: true, leadId, leadName: lead.name, email, message: `Sent the pitch to ${lead.name} (${email}) — moved to Contacted.` };
 }
 
+/**
+ * Leaves a trace of a failed send attempt on the lead: an entry in its
+ * History and the "last send failed" marker on the lead list. Best-effort
+ * (the lead may have been deleted meanwhile): the send's outcome stands
+ * either way.
+ */
+async function recordAttempt(
+  pipelineId: PipelineId,
+  leadId: string,
+  at: Date,
+  message: string,
+  extra: { sendRefusalCount?: number; sendBlockedReason?: string },
+): Promise<void> {
+  const pipeline = getPipeline(pipelineId);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await pipeline.update(tx, leadId, { lastSendFailedAt: at, lastSendFailure: message.slice(0, 500), ...extra });
+      await pipeline.addActivity(tx, leadId, { type: "email", notes: `Send attempt failed: ${message}`, date: at });
+    });
+  } catch (err) {
+    logWarn("outreach.send.attempt", `couldn't record the failed attempt: ${String(err)}`, { pipeline: pipelineId, leadId });
+  }
+}
+
 async function flagIfPermanent(pipelineId: PipelineId, lead: OutreachLead, refusal: Refusal): Promise<void> {
   const email = lead.email?.toLowerCase();
   let reason: string | null = null;
@@ -207,6 +289,8 @@ async function flagIfPermanent(pipelineId: PipelineId, lead: OutreachLead, refus
     reason = `${DUPLICATE_BLOCK_PREFIX} — ${email} was already pitched, so this lead is never auto-sent.`;
   } else if (refusal.reason === "suppressed") {
     reason = `${OPTED_OUT_BLOCK_PREFIX} — ${email} is on the suppression list.`;
+  } else if (refusal.reason === "address_refused") {
+    reason = `${REFUSED_BLOCK_PREFIX} — the mail server refused ${email} on an earlier send, so this lead is never auto-sent. Change the address to try another.`;
   }
   if (!reason) return;
   try {
@@ -297,6 +381,8 @@ export type BulkChunkResult = {
   sent: number;
   skipped: number;
   failed: number;
+  /** Addresses the recipient's mail server refused (the service itself is fine). */
+  refused: number;
   messages: string[];
   stop: null | "paused" | "email_service_down";
   /** Failed sends in a row at the end of this call; pass back into the next call. */
@@ -320,6 +406,7 @@ export async function sendBulkChunk(
     sent: 0,
     skipped: 0,
     failed: 0,
+    refused: 0,
     messages: [],
     stop: null,
     consecutiveFailures: 0,
@@ -341,6 +428,11 @@ export async function sendBulkChunk(
       result.sent++;
       consecutiveFailures = 0;
       if (outcome.warning) result.messages.push(`${outcome.leadName}: ${outcome.warning}`);
+    } else if (outcome.reason === "address_refused") {
+      // The email service answered — it's this address that's bad — so
+      // this neither counts toward nor breaks a run of service failures.
+      result.refused++;
+      result.messages.push(`${outcome.leadName ?? leadId}: ${outcome.message}`);
     } else if (outcome.reason === "send_failed" || outcome.reason === "delivery_unknown") {
       result.failed++;
       consecutiveFailures++;

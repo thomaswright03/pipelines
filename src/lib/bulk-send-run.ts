@@ -5,7 +5,16 @@
 import { plural } from "@/lib/format";
 import type { BulkChunkResult, BulkPreview } from "@/lib/outreach/send";
 
-export type BulkProgress = { sent: number; skipped: number; failed: number; processed: number; total: number; messages: string[] };
+export type BulkProgress = {
+  sent: number;
+  skipped: number;
+  failed: number;
+  /** Addresses the recipients' mail servers refused; those leads are flagged. */
+  refused: number;
+  processed: number;
+  total: number;
+  messages: string[];
+};
 
 export type SendChunk = (
   leadIds: string[],
@@ -28,7 +37,7 @@ export async function runBulkSend(
   options: { shouldStop: () => boolean; onProgress?: (progress: BulkProgress) => void },
 ): Promise<{ progress: BulkProgress; stopReason: string | null }> {
   let remaining = leadIds;
-  const progress: BulkProgress = { sent: 0, skipped: 0, failed: 0, processed: 0, total: leadIds.length, messages: [] };
+  const progress: BulkProgress = { sent: 0, skipped: 0, failed: 0, refused: 0, processed: 0, total: leadIds.length, messages: [] };
   let stopReason: string | null = null;
   let consecutiveFailures = 0;
 
@@ -53,6 +62,7 @@ export async function runBulkSend(
     progress.sent += r.sent;
     progress.skipped += r.skipped;
     progress.failed += r.failed;
+    progress.refused += r.refused;
     progress.processed += r.processedIds.length;
     progress.messages.push(...r.messages);
     const done = new Set(r.processedIds);
@@ -81,11 +91,14 @@ export function bulkSendSummary(
   const summary =
     `Sent ${progress.sent} of ${preview.willSend}.` +
     (progress.skipped ? ` ${plural(progress.skipped, "lead")} skipped.` : "") +
+    (progress.refused
+      ? ` ${plural(progress.refused, "address", "addresses")} refused by the recipient's mail server (flagged on ${progress.refused === 1 ? "its lead" : "their leads"}).`
+      : "") +
     (progress.failed ? ` ${plural(progress.failed, "send")} failed.` : "") +
     (stopReason ? ` ${stopReason}` : "") +
     (!stopReason && preview.totalEligible > preview.leadIds.length
       ? ` ${plural(preview.totalEligible - preview.leadIds.length, "more New lead")} can go in the next batch.`
       : "");
-  const tone = progress.failed || stopReason ? (progress.sent ? "warning" : "error") : "success";
+  const tone = progress.failed || stopReason ? (progress.sent ? "warning" : "error") : progress.refused ? "warning" : "success";
   return { summary, tone };
 }

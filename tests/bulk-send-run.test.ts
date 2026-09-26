@@ -26,7 +26,17 @@ function server(results: Partial<BulkChunkResult>[]): { chunk: SendChunk; calls:
       const r = results[n++] ?? {};
       return {
         ok: true,
-        result: { processedIds: [leadIds[0]!], sent: 1, skipped: 0, failed: 0, messages: [], stop: null, consecutiveFailures: 0, ...r },
+        result: {
+          processedIds: [leadIds[0]!],
+          sent: 1,
+          skipped: 0,
+          failed: 0,
+          refused: 0,
+          messages: [],
+          stop: null,
+          consecutiveFailures: 0,
+          ...r,
+        },
       };
     },
   };
@@ -89,7 +99,7 @@ describe("runBulkSend", () => {
 });
 
 describe("bulkSendSummary", () => {
-  const base: BulkProgress = { sent: 0, skipped: 0, failed: 0, processed: 0, total: 3, messages: [] };
+  const base: BulkProgress = { sent: 0, skipped: 0, failed: 0, refused: 0, processed: 0, total: 3, messages: [] };
   const preview = { willSend: 3, totalEligible: 3, leadIds: ["a", "b", "c"] };
 
   it("a clean run is a success", () => {
@@ -101,6 +111,14 @@ describe("bulkSendSummary", () => {
       summary: `Sent 1 of 3. ${STOPPED_BY_USER}`,
     });
     expect(bulkSendSummary({ ...base, failed: 3 }, STOPPED_SERVICE_DOWN, preview).tone).toBe("error");
+  });
+  it("names refused addresses without blaming the email service", () => {
+    const result = bulkSendSummary({ ...base, sent: 2, refused: 1 }, null, preview);
+    expect(result).toEqual({
+      summary: "Sent 2 of 3. 1 address refused by the recipient's mail server (flagged on its lead).",
+      tone: "warning",
+    });
+    expect(result.summary).not.toMatch(/email service/);
   });
   it("mentions the next batch when more leads are waiting", () => {
     expect(bulkSendSummary({ ...base, sent: 3 }, null, { ...preview, totalEligible: 5 }).summary).toBe(

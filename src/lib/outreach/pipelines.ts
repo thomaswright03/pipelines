@@ -32,6 +32,8 @@ export type OutreachLead = {
   city: string | null;
   state: string | null;
   sendBlockedReason: string | null;
+  /** Temporary refusals of this address by the recipient's mail server so far. */
+  sendRefusalCount: number;
   lastEmailedAt: Date | null;
   repliedAt: Date | null;
   notes: string | null;
@@ -52,6 +54,9 @@ export type LeadUpdate = {
   emailCheckedAt?: Date | null;
   emailLookupFailedAt?: Date | null;
   sendBlockedReason?: string | null;
+  lastSendFailedAt?: Date | null;
+  lastSendFailure?: string | null;
+  sendRefusalCount?: number;
   lastEmailedAt?: Date | null;
   repliedAt?: Date | null;
   ourReplyAt?: Date | null;
@@ -219,6 +224,7 @@ function toOutreach(row: Row): OutreachLead {
     city: row.city,
     state: row.state,
     sendBlockedReason: row.sendBlockedReason,
+    sendRefusalCount: row.sendRefusalCount,
     lastEmailedAt: row.lastEmailedAt,
     repliedAt: row.repliedAt,
     notes: row.notes,
@@ -300,6 +306,10 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     },
     async recordSend(db, leadId, email, providerMessageId, sentAt) {
       await sendLogs(db).create({ data: { leadId, email, providerMessageId, sentAt } });
+      await leads(db).updateMany({
+        where: { id: leadId },
+        data: { lastSendFailedAt: null, lastSendFailure: null, sendRefusalCount: 0 },
+      });
     },
     async markLatestSendBounced(db, leadId, at) {
       const log = await sendLogs(db).findFirst({ where: { leadId, bounced: false }, orderBy: { sentAt: "desc" } });

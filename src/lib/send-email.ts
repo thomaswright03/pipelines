@@ -149,27 +149,44 @@ export type SendFailure = {
   /**
    * "not_sent": the failure happened before the provider could have accepted
    * the message (couldn't connect, auth failed, recipient or message
-   * rejected), so it is safe to try again later.
+   * rejected), so nothing went out.
    * "unknown": the connection dropped mid-conversation; the provider may
    * have accepted it, so it must not be retried automatically.
    */
   delivery: "not_sent" | "unknown";
+  /**
+   * "service": the email service itself failed (unreachable, login, TLS,
+   * refused our message) — every send would fail the same way.
+   * "recipient": the recipient's address was refused; other sends are fine.
+   */
+  scope: "service" | "recipient";
+  /** For a recipient refusal: a 5xx (never retry) rather than a 4xx (may work later). */
+  permanent: boolean;
   /** Plain-language message for the operator. */
   message: string;
 };
 
-type SmtpishError = Error & { code?: string; command?: string; responseCode?: number; syscall?: string };
+type SmtpishError = Error & { code?: string; command?: string; responseCode?: number; response?: string; syscall?: string };
 
-const NOT_SENT_CODES = new Set(["EAUTH", "EENVELOPE", "EDNS", "ETLS", "ECONFIG", "EREQUIRETLS", "EMESSAGE"]);
+const SERVICE_NOT_SENT_CODES = new Set(["EAUTH", "EDNS", "ETLS", "ECONFIG", "EREQUIRETLS", "EMESSAGE"]);
+
+// RFC 3463 enhanced status codes about the destination mailbox or address
+// (5.1.x bad address/mailbox, 5.2.x mailbox disabled/unavailable) — a
+// refusal of this recipient, even when it comes back at the DATA stage.
+const MAILBOX_STATUS_RE = /\b[45]\.[12]\.\d{1,3}\b/;
+
+/** The server's short reason ("550 5.1.1 User unknown"), for the operator. */
+function serverReply(e: SmtpishError): string {
+  const text = (e.response ?? "").replace(/\s+/g, " ").trim();
+  return text ? ` The mail server said: "${text.slice(0, 160)}".` : "";
+}
 
 /** Classifies a transport error for the operator and the send ledger. */
 export function classifySendError(err: unknown): SendFailure {
+  const service = (message: string): SendFailure => ({ delivery: "not_sent", scope: "service", permanent: false, message });
   if (err instanceof MailConfigError) {
     // The technical detail (which setting is missing) is in the server log.
-    return {
-      delivery: "not_sent",
-      message: "Email sending isn't set up yet — nothing was sent. Ask your developer to finish the email setup.",
-    };
+    return service("Email sending isn't set up yet — nothing was sent. Ask your developer to finish the email setup.");
   }
   const e = (err ?? {}) as SmtpishError;
   const code = e.code ?? "";
@@ -178,26 +195,42 @@ export function classifySendError(err: unknown): SendFailure {
     e.syscall === "getaddrinfo" ||
     (code === "ETIMEDOUT" && /Connection timeout|Greeting never received/i.test(e.message ?? ""));
 
-  if (unreachable) {
-    return {
-      delivery: "not_sent",
-      message: "Couldn't reach the email service — nothing was sent. Try again in a few minutes.",
-    };
-  }
+  if (unreachable) return service("Couldn't reach the email service — nothing was sent. Try again in a few minutes.");
   if (code === "EAUTH") {
+    return service("The email service rejected our login — nothing was sent. Ask your developer to check the email password.");
+  }
+
+  // The recipient was refused: at RCPT TO (nodemailer's EENVELOPE), or with
+  // a mailbox status code at any stage. Nothing went out, and it's about
+  // this one address — the service itself is working.
+  // (A refusal of our own sender address at MAIL FROM is the service's.)
+  const command = e.command ?? "";
+  const recipientRefused =
+    !/^MAIL\b/i.test(command) &&
+    (code === "EENVELOPE" || /^RCPT/i.test(command) || MAILBOX_STATUS_RE.test(`${e.response ?? ""} ${e.message ?? ""}`));
+  if (recipientRefused) {
+    // A 4xx is temporary (mailbox full, greylisting); no code at all means
+    // the address itself couldn't be used (nodemailer refused it).
+    const permanent = !(e.responseCode && e.responseCode >= 400 && e.responseCode < 500);
     return {
       delivery: "not_sent",
-      message: "The email service rejected our login — nothing was sent. Ask your developer to check the email password.",
+      scope: "recipient",
+      permanent,
+      message: permanent
+        ? `The recipient's mail server refused this address — nothing was sent.${serverReply(e)} Check the address or find a new one.`
+        : `The recipient's mail server turned this address away for now — nothing was sent.${serverReply(e)}`,
     };
   }
-  if (NOT_SENT_CODES.has(code) || (e.responseCode && e.responseCode >= 400)) {
-    return {
-      delivery: "not_sent",
-      message: "The email service refused this message — nothing was sent. Check the address, or try again later.",
-    };
+
+  if (SERVICE_NOT_SENT_CODES.has(code) || (e.responseCode && e.responseCode >= 400)) {
+    return service(
+      "The email service refused this message — nothing was sent. Try again later; if it keeps happening, tell your developer.",
+    );
   }
   return {
     delivery: "unknown",
+    scope: "service",
+    permanent: false,
     message:
       "The connection to the email service dropped mid-send, so we can't tell whether this email went out. " +
       "The lead is marked Contacted so it won't be pitched twice — check ZeptoMail's sent log before doing anything else.",

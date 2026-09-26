@@ -85,6 +85,8 @@ model OutreachRecipient {
   // claimed: reserved, SMTP call in flight (or the process died mid-send)
   // sent: the provider accepted the message
   // unknown: the connection dropped mid-send; delivery can't be confirmed
+  // refused: the recipient's mail server permanently refused the address
+  //          (e.g. 550 user unknown); kept so the address is never retried
   state             String    @default("claimed")
   claimedAt         DateTime  @default(now())
   sentAt            DateTime?
@@ -225,6 +227,13 @@ model AgentLead {
   // Set when this lead must never be auto-sent (e.g. its address is
   // already held by another lead). Shown on the lead page.
   sendBlockedReason   String?
+  // The latest send attempt that failed or was refused (cleared by a
+  // successful send), shown on the lead list and page. sendRefusalCount
+  // counts temporary refusals of this address by the recipient's mail
+  // server; after a few the address is treated as refused for good.
+  lastSendFailedAt    DateTime?
+  lastSendFailure     String?
+  sendRefusalCount    Int       @default(0)
   lastEmailedAt       DateTime?
   lastTextedAt        DateTime? // unused (SMS was never built) — drop in a follow-up migration, see README
   repliedAt           DateTime?
@@ -347,6 +356,9 @@ model Lead {
   emailRulesVersion   String? // see AgentLead.emailRulesVersion
   // See AgentLead.sendBlockedReason.
   sendBlockedReason   String?
+  lastSendFailedAt    DateTime? // see AgentLead.lastSendFailedAt
+  lastSendFailure     String?
+  sendRefusalCount    Int       @default(0)
   lastEmailedAt       DateTime?
   repliedAt           DateTime? // a real reply was detected (inbound webhook or "Mark replied")
   ourReplyAt          DateTime? // we replied back — always manual

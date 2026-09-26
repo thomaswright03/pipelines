@@ -101,7 +101,13 @@ async function lookupEmail(
   return { ...NO_LOOKUP, website, email, evidence };
 }
 
-export type AddressConflict = { message: string; href: string | null; leadName: string | null };
+export type AddressConflict = {
+  message: string;
+  href: string | null;
+  leadName: string | null;
+  /** The address is taken because the recipient's mail server refused it, not because it was pitched. */
+  refused?: boolean;
+};
 
 /** Who else already uses this address (another lead here, or an earlier pitch), with a link to them. */
 export async function findAddressConflict(pipelineId: PipelineId, email: string, excludeLeadId?: string): Promise<AddressConflict | null> {
@@ -114,7 +120,10 @@ export async function findAddressConflict(pipelineId: PipelineId, email: string,
   const pitched = await findExistingPitch(prisma, pipelineId, email, settings.allowCrossPipelineRepeats);
   if (pitched && !(pitched.pipeline === pipelineId && pitched.leadId === excludeLeadId)) {
     return {
-      message: `${email} was already pitched${pitched.leadName ? ` via ${pitched.leadName}` : ""}`,
+      message: pitched.refused
+        ? `${email} was refused by the recipient's mail server${pitched.leadName ? ` when emailing ${pitched.leadName}` : ""}`
+        : `${email} was already pitched${pitched.leadName ? ` via ${pitched.leadName}` : ""}`,
+      refused: pitched.refused,
       href: pitched.leadId && pitched.leadName ? `${PIPELINE_BASE_PATH[pitched.pipeline]}/${pitched.leadId}` : null,
       leadName: pitched.leadName,
     };

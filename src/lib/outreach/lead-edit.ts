@@ -24,7 +24,7 @@ export async function checkAddressForLead(pipelineId: PipelineId, email: string,
   const conflict = await findAddressConflict(pipelineId, email, leadId);
   if (conflict) {
     return {
-      message: `${conflict.message} — each address gets one pitch.`,
+      message: conflict.refused ? `${conflict.message}, so it can't be used.` : `${conflict.message} — each address gets one pitch.`,
       link: conflict.href ? { href: conflict.href, label: `Open ${conflict.leadName ?? "that lead"}` } : null,
     };
   }
@@ -38,7 +38,9 @@ export async function checkAddressForLead(pipelineId: PipelineId, email: string,
 export async function wasPitched(pipelineId: PipelineId, leadId: string, lastEmailedAt: Date | null): Promise<boolean> {
   if (lastEmailedAt) return true;
   if (await getPipeline(pipelineId).hasBeenEmailed(prisma, leadId)) return true;
-  return (await prisma.outreachRecipient.count({ where: { pipeline: pipelineId, leadId } })) > 0;
+  // A "refused" ledger entry means the mail server turned the address away:
+  // nothing was delivered, so the address may still be corrected.
+  return (await prisma.outreachRecipient.count({ where: { pipeline: pipelineId, leadId, state: { not: "refused" } } })) > 0;
 }
 
 export type EditOutcome = { ok: true } | { ok: false; error: string; field?: "email"; link?: { href: string; label: string } | null };
@@ -74,6 +76,10 @@ export async function editLead(
     data.email = newEmail;
     data.emailEvidence = newEmail ? enteredByHandEvidence() : null;
     data.emailRulesVersion = null;
+    // Failed attempts at the old address say nothing about the new one.
+    data.lastSendFailedAt = null;
+    data.lastSendFailure = null;
+    data.sendRefusalCount = 0;
     // A block about the old address doesn't apply to the new one.
     if (lead.sendBlockedReason && ADDRESS_BLOCK_PREFIXES.some((p) => lead.sendBlockedReason!.startsWith(p))) {
       data.sendBlockedReason = null;

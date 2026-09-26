@@ -22,15 +22,22 @@ export type LeadRow = {
   starred: boolean;
   /** New, but will never be auto-sent (duplicate or opted-out address). */
   flagged: boolean;
+  /** Why the latest send attempt failed or was refused (null once a send succeeds). */
+  lastSendFailure: string | null;
   /** A reply arrived while the lead was Lost / Not interested. */
   needsReview: boolean;
 };
 
 function RowFlags({ row }: { row: LeadRow }) {
-  if (!row.flagged && !row.needsReview) return null;
+  if (!row.flagged && !row.needsReview && !row.lastSendFailure) return null;
   return (
     <div className="flex flex-wrap gap-x-2 text-xs font-medium">
       {row.needsReview && <span className="text-amber-800 dark:text-amber-300">Reply needs a look</span>}
+      {row.lastSendFailure && (
+        <span className="text-red-700 dark:text-red-300" title={row.lastSendFailure}>
+          Last send failed
+        </span>
+      )}
       {row.flagged && <span className="text-amber-800 dark:text-amber-300">Won&apos;t be auto-sent</span>}
     </div>
   );

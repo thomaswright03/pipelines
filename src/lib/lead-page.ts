@@ -10,7 +10,14 @@ import type { LeadSuppression } from "@/components/LeadActions";
 
 export type LedgerNote = { tone: "warning" | "info"; text: string } | null;
 
-export async function loadLeadContext(pipeline: PipelineId, leadId: string, email: string | null) {
+/**
+ * A send's SMTP call takes at most ~20 s (see send-email.ts timeouts), so a
+ * claim older than this never finished recording; a younger one is a send
+ * still in progress.
+ */
+const STALE_CLAIM_MS = 2 * 60_000;
+
+export async function loadLeadContext(pipeline: PipelineId, leadId: string, email: string | null, now: Date = new Date()) {
   const [suppression, settings, ledger] = await Promise.all([
     email ? getSuppression(email) : null,
     getAppSettings(),
@@ -34,6 +41,17 @@ export async function loadLeadContext(pipeline: PipelineId, leadId: string, emai
       tone: "warning",
       text: `The connection to the email service dropped while sending on ${formatDateTime(own.claimedAt)}, so it's unknown whether the email arrived. It won't be sent again automatically.`,
     };
+  } else if (own?.state === "refused") {
+    // The lead's own block reason already says so.
+    ledgerNote = null;
+  } else if (!own && other?.state === "refused") {
+    ledgerNote = {
+      tone: "warning",
+      text: `The recipient's mail server refused this address on ${formatDate(other.claimedAt)}, so it won't be emailed.`,
+    };
+  } else if (own?.state === "claimed" && now.getTime() - own.claimedAt.getTime() < STALE_CLAIM_MS) {
+    // Most likely a send still in progress in another tab or a bulk run.
+    ledgerNote = { tone: "info", text: `A send to this address started at ${formatDateTime(own.claimedAt)} and is still in progress.` };
   } else if (own?.state === "claimed") {
     ledgerNote = {
       tone: "warning",

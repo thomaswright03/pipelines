@@ -10,7 +10,7 @@ export async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
 }
 
-type Failure = Error & { code?: string; syscall?: string; responseCode?: number };
+type Failure = Error & { code?: string; syscall?: string; responseCode?: number; command?: string; response?: string };
 
 /**
  * Installs a capturing mail transport. `fail(err)` makes following sends
@@ -20,6 +20,7 @@ type Failure = Error & { code?: string; syscall?: string; responseCode?: number 
 export function captureMail(options: { delayMs?: number } = {}) {
   const messages: MailMessage[] = [];
   let failure: { err: Failure; remaining: number } | null = null;
+  const refusals = new Map<string, Failure>();
   let counter = 0;
   setMailTransportForTesting({
     async sendMail(message) {
@@ -28,6 +29,8 @@ export function captureMail(options: { delayMs?: number } = {}) {
         failure.remaining--;
         throw failure.err;
       }
+      const refusal = refusals.get(message.to.toLowerCase());
+      if (refusal) throw refusal;
       messages.push(message);
       counter++;
       return { messageId: `<test-${counter}-${Date.now()}@pipelines.test>` };
@@ -43,10 +46,30 @@ export function captureMail(options: { delayMs?: number } = {}) {
     fail(err: Failure, times = Number.POSITIVE_INFINITY) {
       failure = { err, remaining: times };
     },
+    /** Every send to `email` throws `err` (default: a permanent "550 user unknown" at RCPT TO). */
+    refuse(email: string, err: Failure = recipientRefusal(email)) {
+      refusals.set(email.toLowerCase(), err);
+    },
+    /** Stops refusing `email`. */
+    accept(email: string) {
+      refusals.delete(email.toLowerCase());
+    },
     restore() {
       setMailTransportForTesting(null);
     },
   };
+}
+
+/** What nodemailer throws when the server refuses the recipient at RCPT TO. */
+export function recipientRefusal(email: string, responseCode = 550): Failure {
+  const response =
+    responseCode >= 500 ? `${responseCode} 5.1.1 <${email}>: User unknown` : `${responseCode} 4.2.2 <${email}>: Mailbox full, try later`;
+  return smtpError(`Can't send mail - all recipients were rejected: ${response}`, {
+    code: "EENVELOPE",
+    command: "RCPT TO",
+    responseCode,
+    response,
+  });
 }
 
 export function smtpError(message: string, fields: Partial<Failure>): Failure {

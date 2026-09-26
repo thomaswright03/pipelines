@@ -204,6 +204,8 @@ describe("send error classification", () => {
     const refused = classifySendError(smtpError("connect ECONNREFUSED 127.0.0.1:587", { code: "ESOCKET", syscall: "connect" }));
     expect(refused).toEqual({
       delivery: "not_sent",
+      scope: "service",
+      permanent: false,
       message: "Couldn't reach the email service — nothing was sent. Try again in a few minutes.",
     });
     expect(classifySendError(smtpError("Connection timeout", { code: "ETIMEDOUT" })).delivery).toBe("not_sent");
