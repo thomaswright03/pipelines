@@ -27,12 +27,14 @@ export default defineConfig({
       // The code that decides who is emailed, and the actions behind every
       // button, must stay well covered; `npm run test:coverage` fails below
       // these. Components are exercised in jsdom (tests/components/: each
-      // control's pending, success, refusal and network-failure states) and
-      // end to end by the browser tests; pages only by the browser tests.
+      // control's pending, success, refusal and network-failure states);
+      // every page is rendered with representative data by
+      // tests/pages.test.tsx; the browser tests cover them end to end.
       thresholds: {
         "src/lib/outreach/**": { lines: 90 },
         "src/lib/actions/**": { lines: 85 },
-        "src/components/**": { lines: 35 },
+        "src/components/**": { lines: 70 },
+        "src/app/**": { lines: 75 },
       },
     },
     hookTimeout: 60_000,

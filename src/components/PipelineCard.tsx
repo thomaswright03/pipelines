@@ -196,9 +196,12 @@ function KeyNumbers({ href, numbers }: { href: string; numbers: DashboardNumbers
           <div key={item.label} className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
             <dt className="text-xs muted">{item.label}</dt>
             <dd>
-              <Link href={item.to} className="text-lg font-semibold tabular-nums hover:underline">
+              <Link
+                href={item.to}
+                aria-label={`${item.label}: ${item.value.toLocaleString("en-US")}`}
+                className="text-lg font-semibold tabular-nums hover:underline"
+              >
                 {item.value.toLocaleString("en-US")}
-                <span className="sr-only"> — open</span>
               </Link>
             </dd>
           </div>
