@@ -38,7 +38,7 @@ export const ADDRESS_BLOCK_PREFIXES = [DUPLICATE_BLOCK_PREFIX, OPTED_OUT_BLOCK_P
  */
 export const MAX_TEMPORARY_REFUSALS = 3;
 
-export type SendRefusal =
+type SendRefusal =
   | "paused"
   | "not_found"
   | "no_email"
@@ -176,7 +176,8 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
     throw err;
   }
 
-  const { subject, body } = pipeline.buildEmail(lead);
+  const pitch = pipeline.buildEmail(lead);
+  const { subject, body } = pitch;
   let providerMessageId: string;
   try {
     ({ providerMessageId } = await sendOutreachEmail(pipeline.senderEmail, email, subject, body));
@@ -240,7 +241,7 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
         where: { id: recipientId },
         data: { state: "sent", sentAt, providerMessageId },
       });
-      await pipeline.recordSend(tx, leadId, email, providerMessageId, sentAt);
+      await pipeline.recordSend(tx, leadId, email, providerMessageId, sentAt, pitch);
     });
   } catch (err) {
     // The email went out and the claim stands, so the lead can't be

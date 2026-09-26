@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { isAuthorizedBearer } from "@/lib/auth-header";
-import { logError } from "@/lib/log";
+import { logError, logWarn } from "@/lib/log";
 import { isDatabaseUnavailable } from "@/lib/db-health";
 import { handleInboundReply } from "@/lib/outreach/inbound";
 
@@ -35,7 +35,31 @@ const inboundSchema = z.object({
     .nullable(),
 });
 
-const BAD_BODY = "Body must be JSON: { from, subject, text, messageId, headers }";
+const EXPECTED_BODY = "{ from, subject, text, messageId, headers }";
+
+/** What was wrong with a rejected payload, by field name only — never its content. */
+function describeIssues(error: z.ZodError): { fields: string[]; message: string } {
+  const problems = new Map<string, string>();
+  for (const issue of error.issues) {
+    const field = issue.path.length > 0 ? String(issue.path[0]) : "(body)";
+    if (problems.has(field)) continue;
+    const limit = "maximum" in issue ? ` (at most ${String(issue.maximum)}${issue.origin === "string" ? " characters" : ""})` : "";
+    const problem =
+      issue.code === "too_big"
+        ? `is too long${limit}`
+        : issue.code === "too_small"
+          ? "is empty or too short"
+          : `is invalid (${issue.message})`;
+    problems.set(field, `${field} ${problem}`);
+  }
+  return { fields: [...problems.keys()], message: `Rejected: ${[...problems.values()].join("; ")}. Expected ${EXPECTED_BODY}.` };
+}
+
+/** A 400 that is also logged, so a Worker dropping replies (a missed opt-out, perhaps) shows up in the server log. */
+function rejected(reason: string, message: string, context: Record<string, string>) {
+  logWarn("api.email-inbound", `Rejected an inbound reply: ${reason}`, context);
+  return Response.json({ error: message, retry: false }, { status: 400 });
+}
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedBearer(request.headers.get("authorization"), process.env.EMAIL_INBOUND_SECRET)) {
@@ -46,11 +70,12 @@ export async function POST(request: NextRequest) {
   try {
     payload = await request.json();
   } catch {
-    return Response.json({ error: BAD_BODY, retry: false }, { status: 400 });
+    return rejected("body isn't JSON", `Body must be JSON: ${EXPECTED_BODY}`, {});
   }
   const parsed = inboundSchema.safeParse(payload);
   if (!parsed.success) {
-    return Response.json({ error: BAD_BODY, retry: false }, { status: 400 });
+    const { fields, message } = describeIssues(parsed.error);
+    return rejected("invalid fields", message, { fields: fields.join(",") });
   }
 
   try {

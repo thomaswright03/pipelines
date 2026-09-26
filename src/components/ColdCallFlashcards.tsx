@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { confirmColdCallAction } from "@/lib/actions/outreach";
 import { COLD_CALL_OUTCOMES, COLD_CALL_OUTCOME_LABEL, type ColdCallOutcome } from "@/lib/lead-status";
 import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { getTimezoneForState, formatLocalTime } from "@/lib/us-timezones";
-import type { CallDeckCard } from "@/lib/call-deck";
+import type { CallDeck } from "@/lib/call-deck";
 import { firstUnhandled, readSavedDeck, recordCall, sessionDeckStorage, writeSavedDeck, type LoggedCall } from "@/lib/call-deck-session";
 
 const CLOCK_TICK_MS = 30_000;
@@ -27,8 +28,6 @@ function useNow(intervalMs: number): Date | null {
   return now;
 }
 
-export type ColdCallLead = CallDeckCard;
-
 const OUTCOME_STYLE: Record<ColdCallOutcome, string> = {
   no_answer: "border-zinc-600 bg-zinc-600 text-white",
   invalid_number: "border-zinc-600 bg-zinc-600 text-white",
@@ -40,9 +39,11 @@ type Logged = LoggedCall;
 
 // One card at a time. The deck is a snapshot taken when the page loaded, so
 // confirming a call (which may move the lead off the list) never shifts
-// which card comes next; the summary at the end shows what was recorded.
-export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { pipeline: PipelineId; leads: ColdCallLead[] }) {
-  const [leads] = useState(initialLeads);
+// which card comes next; the summary at the end shows what was recorded,
+// and offers the next batch when the list is longer than one deck.
+export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: PipelineId; deck: CallDeck }) {
+  const [leads] = useState(deck.cards);
+  const { total, offset, nextAfter } = deck;
   const [index, setIndex] = useState(0);
   const [outcome, setOutcome] = useState<ColdCallOutcome | null>(null);
   const [notes, setNotes] = useState("");
@@ -50,6 +51,7 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<Logged[]>([]);
   const now = useNow(CLOCK_TICK_MS);
+  const router = useRouter();
   const basePath = PIPELINE_BASE_PATH[pipeline];
 
   const current = leads[index];
@@ -77,10 +79,13 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
     setError(null);
   }
 
-  /** Forgets this session's progress and reloads, so the deck is the current call list. */
+  /** Forgets this session's progress and reloads the first batch, so the deck is the current call list. */
   function startOver() {
     writeSavedDeck(sessionDeckStorage(), pipeline, null);
-    window.location.reload();
+    // The first batch reloads in place; a later batch goes back to the first,
+    // which (being a different batch) remounts the deck with fresh cards.
+    if (offset === 0) window.location.reload();
+    else router.push(`${basePath}/cold-call`);
   }
 
   async function confirm() {
@@ -102,6 +107,19 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
     }
   }
 
+  if (leads.length === 0 && total > 0) {
+    return (
+      <div className="card p-8 text-center">
+        <p className="text-sm muted">
+          No cards left after this point — {total} {total === 1 ? "lead is" : "leads are"} on the call list.
+        </p>
+        <button type="button" onClick={startOver} className="btn-secondary mt-3">
+          Start from the top
+        </button>
+      </div>
+    );
+  }
+
   if (leads.length === 0) {
     return (
       <div className="card p-8 text-center">
@@ -111,7 +129,12 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
     );
   }
 
-  if (!current) return <Summary log={log} basePath={basePath} onStartOver={startOver} />;
+  if (!current) {
+    const more = nextAfter
+      ? { href: `${basePath}/cold-call?after=${encodeURIComponent(nextAfter)}`, count: total - offset - leads.length }
+      : null;
+    return <Summary log={log} basePath={basePath} onStartOver={startOver} more={more} />;
+  }
 
   const timezone = getTimezoneForState(current.state);
   const localTimeLabel = timezone && now ? formatLocalTime(now, timezone) : null;
@@ -120,19 +143,19 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
     <div className="flex flex-col items-center gap-4">
       <div className="flex items-center gap-3">
         <p className="text-xs font-medium muted">
-          Card {index + 1} of {leads.length}
+          Card {offset + index + 1} of {total}
         </p>
         <div
           className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-200 ring-1 ring-inset ring-zinc-500 dark:bg-zinc-800 dark:ring-zinc-400"
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={leads.length}
-          aria-valuenow={index}
+          aria-valuemax={total}
+          aria-valuenow={offset + index}
           aria-label="Calls worked through"
         >
           <div
             className="h-full rounded-full bg-indigo-600 transition-all dark:bg-indigo-400 duration-300"
-            style={{ width: `${(index / leads.length) * 100}%` }}
+            style={{ width: `${((offset + index) / Math.max(total, 1)) * 100}%` }}
           />
         </div>
         {log.length > 0 && (
@@ -142,7 +165,21 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
         )}
       </div>
 
+      {total > leads.length && (
+        <p className="text-center text-xs muted">
+          This deck holds cards {offset + 1}–{offset + leads.length} of the {total} on the list
+          {nextAfter ? " — finish these to load the next ones." : "."}
+        </p>
+      )}
+
       <div className="card w-full max-w-md p-6 shadow-lg shadow-indigo-500/5 sm:p-8">
+        {current.review && (
+          <div className="notice-warning mb-4" role="note">
+            <p>
+              <strong>Reply needs a look before calling.</strong> {current.review} Read it on the lead page and decide there first.
+            </p>
+          </div>
+        )}
         <h2 className="break-words text-center text-2xl font-bold">{current.name}</h2>
         {current.subtitle && <p className="mt-1 text-center text-sm font-medium text-zinc-700 dark:text-zinc-300">{current.subtitle}</p>}
         <p className="mt-2 text-center">
@@ -243,7 +280,17 @@ export default function ColdCallFlashcards({ pipeline, leads: initialLeads }: { 
   );
 }
 
-function Summary({ log, basePath, onStartOver }: { log: Logged[]; basePath: string; onStartOver: () => void }) {
+function Summary({
+  log,
+  basePath,
+  onStartOver,
+  more,
+}: {
+  log: Logged[];
+  basePath: string;
+  onStartOver: () => void;
+  more: { href: string; count: number } | null;
+}) {
   const counts = new Map<string, number>();
   for (const entry of log) counts.set(entry.outcome, (counts.get(entry.outcome) ?? 0) + 1);
   const interested = log.filter((e) => e.outcome === "interested");
@@ -283,9 +330,25 @@ function Summary({ log, basePath, onStartOver }: { log: Logged[]; basePath: stri
         </div>
       )}
       <p className="text-center text-sm muted">No-answers stay on the list for another try.</p>
-      <button type="button" onClick={onStartOver} className="btn-secondary self-center">
-        Start a fresh deck
-      </button>
+      {more ? (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm">
+            {more.count} more {more.count === 1 ? "lead is" : "leads are"} on the call list after this deck.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <a href={more.href} className="btn-primary">
+              Load the next cards
+            </a>
+            <button type="button" onClick={onStartOver} className="btn-secondary">
+              Start from the top
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={onStartOver} className="btn-secondary self-center">
+          Start a fresh deck
+        </button>
+      )}
     </div>
   );
 }

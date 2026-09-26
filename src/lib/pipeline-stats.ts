@@ -39,6 +39,20 @@ export type BaseStats = {
   byLocation: Breakdown;
   leadsPerDay: { day: string; count: number }[];
   emailsPerDay: { day: string; count: number }[];
+  /** Sends and replies per version of the pitch's wording, newest version first. */
+  byTemplate: TemplateStats[];
+};
+
+export type TemplateStats = {
+  /** Null for sends made before versions were recorded. */
+  version: string | null;
+  subject: string | null;
+  sent: number;
+  /** Distinct leads emailed with this version. */
+  leads: number;
+  /** Of `leads`, how many a person replied to (opt-outs excluded). */
+  replied: number;
+  replyRate: number | null;
 };
 
 export type VaultStats = BaseStats & {
@@ -127,6 +141,31 @@ async function countAutoRepliedEmailed(pipelineId: PipelineId, logTable: string)
   return Number(row?.n ?? 0);
 }
 
+/** Sends, leads and genuine replies per template version (see email-template-version.ts). */
+async function countByTemplate(logTable: string, leadTable: string): Promise<TemplateStats[]> {
+  const rows = await prisma.$queryRaw<{ version: string | null; subject: string | null; sent: bigint; leads: bigint; replied: bigint }[]>`
+    SELECT l."templateVersion" AS version,
+           max(l."subject") AS subject,
+           COUNT(*)::bigint AS sent,
+           COUNT(DISTINCT l."leadId")::bigint AS leads,
+           COUNT(DISTINCT l."leadId") FILTER (
+             WHERE d."repliedAt" IS NOT NULL
+               AND (d."sendBlockedReason" IS NULL OR left(d."sendBlockedReason", ${OPTED_OUT_BLOCK_PREFIX.length}) <> ${OPTED_OUT_BLOCK_PREFIX})
+           )::bigint AS replied
+    FROM ${Prisma.raw(`"${logTable}"`)} l
+    LEFT JOIN ${Prisma.raw(`"${leadTable}"`)} d ON d."id" = l."leadId"
+    GROUP BY 1
+    ORDER BY min(l."sentAt") DESC`;
+  return rows.map((r) => ({
+    version: r.version,
+    subject: r.subject,
+    sent: Number(r.sent),
+    leads: Number(r.leads),
+    replied: Number(r.replied),
+    replyRate: rate(Number(r.replied), Number(r.leads)),
+  }));
+}
+
 async function countDistinctEmailedLeads(logTable: string): Promise<number> {
   const [row] = await prisma.$queryRaw<{ n: bigint }[]>`
     SELECT COUNT(DISTINCT "leadId")::bigint AS n FROM ${Prisma.raw(`"${logTable}"`)}`;
@@ -173,6 +212,7 @@ async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()):
     sourceGroups,
     locationGroups,
     leadsCreatedPerDay,
+    byTemplate,
   ] = await Promise.all([
     leads.count(),
     leads.count({ where: { email: { not: null } } }),
@@ -194,6 +234,7 @@ async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()):
     leads.groupBy({ by: ["source"], _count: true }),
     leads.groupBy({ by: [source.location], _count: true }),
     countPerZoneDay(source.leadTable, "createdAt", startOfZoneDay(TREND_DAYS - 1, now)),
+    countByTemplate(source.logTable, source.leadTable),
   ]);
 
   const statusCounts = Object.fromEntries(statusGroups.map((g) => [g.status!, g._count]));
@@ -224,6 +265,7 @@ async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()):
     ),
     leadsPerDay: fillDays(leadsCreatedPerDay, TREND_DAYS, now),
     emailsPerDay: fillDays(sendsPerDay, TREND_DAYS, now),
+    byTemplate,
   };
 }
 

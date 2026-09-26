@@ -8,12 +8,13 @@
 // for every column the shared rules touch, so the only per-pipeline
 // differences are data — which tables, which pitch, which sender, and the
 // one pipeline-specific column (company vs brokerage/county).
-import type { AgentLead, Lead, Prisma, PrismaClient } from "@/generated/prisma/client";
-import { buildAgentOutreachEmail } from "@/lib/dataleadsell-email-template";
-import { buildOutreachEmail } from "@/lib/vault-email-template";
+import { Prisma, type AgentLead, type Lead, type PrismaClient } from "@/generated/prisma/client";
+import { buildAgentOutreachEmail, DATALEADSELL_TEMPLATE_VERSION } from "@/lib/dataleadsell-email-template";
+import { buildOutreachEmail, COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-email-template";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
+import { APP_TIME_ZONE } from "@/lib/time";
 
 export type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -67,7 +68,7 @@ export type LeadUpdate = {
   replyReviewReason?: string | null;
 };
 
-export type NewLeadData = {
+type NewLeadData = {
   name: string;
   email: string | null;
   emailEvidence?: string | null;
@@ -86,6 +87,9 @@ export type NewLeadData = {
   status?: string;
 };
 
+/** A rendered pitch, and which version of the template's wording it came from. */
+type OutreachEmail = { subject: string; body: string; templateVersion: string };
+
 /** An existing lead with the same name, and what tells two of them apart. */
 export type NamedLead = { id: string; name: string; phone: string | null; address: string | null; city: string | null };
 
@@ -94,7 +98,7 @@ export type PipelineAdapter = {
   label: string;
   basePath: string;
   senderEmail: string;
-  buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): { subject: string; body: string };
+  buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): OutreachEmail;
   findLead(db: Db, id: string): Promise<OutreachLead | null>;
   findLeadsByEmail(db: Db, email: string, excludeId?: string): Promise<OutreachLead[]>;
   /** Leads whose name equals one of `names` (case-insensitively), for duplicate checks. */
@@ -111,7 +115,15 @@ export type PipelineAdapter = {
   claimForSend(db: Db, leadId: string, email: string, at: Date): Promise<boolean>;
   /** Undoes claimForSend after a send that definitely didn't go out. */
   releaseClaim(db: Db, leadId: string, claimedAt: Date, previous: { lastEmailedAt: Date | null; repliedAt: Date | null }): Promise<void>;
-  recordSend(db: Db, leadId: string, email: string, providerMessageId: string, sentAt: Date): Promise<void>;
+  /** Records a send that went out, with the subject and template version it used. */
+  recordSend(
+    db: Db,
+    leadId: string,
+    email: string,
+    providerMessageId: string,
+    sentAt: Date,
+    pitch: Pick<OutreachEmail, "subject" | "templateVersion">,
+  ): Promise<void>;
   markLatestSendBounced(db: Db, leadId: string, at: Date): Promise<boolean>;
   hasBeenEmailed(db: Db, leadId: string): Promise<boolean>;
   /** Leads the bulk send may pitch: new, with an address, not flagged. */
@@ -122,11 +134,14 @@ export type PipelineAdapter = {
   /**
    * Moves every lead still Contacted and last emailed at or before `cutoff`
    * to phone outreach — the cold-call list, or the contactless list when it
-   * has no phone number — in two set-based updates, so the job's time
-   * doesn't grow with the backlog. Each row is only moved if it is still
-   * Contacted at that moment, so a reply that landed first wins.
+   * has no phone number — and writes a History entry on each saying why,
+   * all in one set-based statement, so the job's time doesn't grow with the
+   * backlog. Each row is only moved if it is still Contacted at that moment,
+   * so a reply that landed first wins. A lead whose reply is flagged "needs
+   * a look" stays in Contacted (off the call deck) until the operator
+   * resolves the flag.
    */
-  routeStaleContacted(db: Db, cutoff: Date): Promise<{ coldCall: number; contactless: number }>;
+  routeStaleContacted(db: Db, cutoff: Date, now: Date): Promise<{ coldCall: number; contactless: number }>;
   /**
    * Leads with no address that were never checked, leaving out any whose
    * site was unreachable at or after `retryBefore` (they're retried later).
@@ -155,6 +170,15 @@ export type PipelineAdapter = {
   addActivity(db: Db, leadId: string, entry: { type: ActivityType; notes: string; date?: Date }): Promise<void>;
   /** Deletes the lead. Its send history rows and ledger entry stay (so the address is never re-pitched). */
   deleteLead(db: Db, id: string): Promise<boolean>;
+};
+
+/** How many days without a reply move a Contacted lead to phone outreach (run daily by /api/cron/stale-contacts). */
+export const STALE_CONTACT_DAYS = 7;
+/** The History entry the stale-contacts move writes: "<move> — no reply 7 days after the pitch sent Sep 17, 2026." */
+const STALE_NOTE = {
+  coldCall: "Moved to the call deck",
+  contactless: "Moved to the No phone number list",
+  days: String(STALE_CONTACT_DAYS),
 };
 
 const SENDABLE = { status: "new", email: { not: null }, sendBlockedReason: null } as const satisfies Prisma.LeadWhereInput &
@@ -208,6 +232,8 @@ void rowColumnsExist;
 
 type PipelineSpec = {
   id: PipelineId;
+  /** The SQL table names, for the set-based statements Prisma can't express. */
+  tables: { leads: string; activities: string };
   senderEmail: string;
   buildEmail: PipelineAdapter["buildEmail"];
   leads: (db: Db) => LeadTable;
@@ -311,8 +337,10 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
         data: { status: "new", lastEmailedAt: previous.lastEmailedAt, repliedAt: previous.repliedAt },
       });
     },
-    async recordSend(db, leadId, email, providerMessageId, sentAt) {
-      await sendLogs(db).create({ data: { leadId, email, providerMessageId, sentAt } });
+    async recordSend(db, leadId, email, providerMessageId, sentAt, pitch) {
+      await sendLogs(db).create({
+        data: { leadId, email, providerMessageId, sentAt, subject: pitch.subject, templateVersion: pitch.templateVersion },
+      });
       await leads(db).updateMany({
         where: { id: leadId },
         data: { lastSendFailedAt: null, lastSendFailure: null, sendRefusalCount: 0 },
@@ -333,17 +361,34 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     },
     countSendable: (db) => leads(db).count({ where: SENDABLE }),
     countBlockedNew: (db) => leads(db).count({ where: BLOCKED_NEW }),
-    async routeStaleContacted(db, cutoff) {
-      const due = { status: "contacted", lastEmailedAt: { lte: cutoff } };
-      const coldCall = await leads(db).updateMany({
-        where: { ...due, phone: { not: null }, NOT: { phone: "" } },
-        data: { status: "cold_call_list" },
-      });
-      const contactless = await leads(db).updateMany({
-        where: { ...due, OR: [{ phone: null }, { phone: "" }] },
-        data: { status: "contactless_list" },
-      });
-      return { coldCall: coldCall.count, contactless: contactless.count };
+    async routeStaleContacted(db, cutoff, now) {
+      // One data-modifying CTE: the move and its History entries commit
+      // together, and the entry names the pitch date in the operator's zone
+      // ("Sep 17, 2026", as formatDate prints it).
+      const leadTable = Prisma.raw(`"${spec.tables.leads}"`);
+      const activityTable = Prisma.raw(`"${spec.tables.activities}"`);
+      // Prisma stores times as UTC in "timestamp without time zone" columns,
+      // so instants go in as UTC wall-clock times whatever the session zone.
+      const utc = (d: Date) => Prisma.sql`(${d.toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
+      const rows = await db.$queryRaw<{ status: string; count: bigint }[]>`
+        WITH moved AS (
+          UPDATE ${leadTable}
+          SET "status" = CASE WHEN "phone" IS NOT NULL AND "phone" <> '' THEN 'cold_call_list' ELSE 'contactless_list' END,
+              "updatedAt" = ${utc(now)}
+          WHERE "status" = 'contacted' AND "lastEmailedAt" <= ${utc(cutoff)} AND "replyNeedsReview" = false
+          RETURNING "id", "status", "lastEmailedAt"
+        ), logged AS (
+          INSERT INTO ${activityTable} ("id", "leadId", "type", "notes", "date")
+          SELECT gen_random_uuid()::text, "id", 'note',
+                 (CASE WHEN "status" = 'cold_call_list' THEN ${STALE_NOTE.coldCall}::text ELSE ${STALE_NOTE.contactless}::text END)
+                   || ' — no reply ' || ${STALE_NOTE.days}::text || ' days after the pitch sent '
+                   || to_char(("lastEmailedAt" AT TIME ZONE 'UTC') AT TIME ZONE ${APP_TIME_ZONE}::text, 'Mon FMDD, YYYY') || '.',
+                 ${utc(now)}
+          FROM moved
+        )
+        SELECT "status", count(*) AS count FROM moved GROUP BY "status"`;
+      const count = (status: string) => Number(rows.find((r) => r.status === status)?.count ?? 0);
+      return { coldCall: count("cold_call_list"), contactless: count("contactless_list") };
     },
     async listNeedingEmailLookup(db, limit, retryBefore) {
       const rows = await leads(db).findMany({ where: needsLookup(retryBefore), orderBy: { createdAt: "asc" }, take: limit });
@@ -384,8 +429,9 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
 
 const dataleadsell = makeAdapter({
   id: "dataleadsell",
+  tables: { leads: "AgentLead", activities: "AgentLeadActivity" },
   senderEmail: DATALEADSELL_SENDER_EMAIL,
-  buildEmail: (lead) => buildAgentOutreachEmail(lead.name, lead.county),
+  buildEmail: (lead) => ({ ...buildAgentOutreachEmail(lead.name, lead.county), templateVersion: DATALEADSELL_TEMPLATE_VERSION }),
   leads: (db) => db.agentLead as unknown as LeadTable,
   sendLogs: (db) => db.emailSendLog as unknown as SendLogTable,
   activities: (db) => db.agentLeadActivity as unknown as ActivityTable,
@@ -395,8 +441,9 @@ const dataleadsell = makeAdapter({
 
 const coldOutreach = makeAdapter({
   id: "cold-outreach",
+  tables: { leads: "Lead", activities: "LeadActivity" },
   senderEmail: VAULT_PIPELINE_SENDER_EMAIL,
-  buildEmail: (lead) => buildOutreachEmail(lead.company || lead.name),
+  buildEmail: (lead) => ({ ...buildOutreachEmail(lead.company || lead.name), templateVersion: COLD_OUTREACH_TEMPLATE_VERSION }),
   leads: (db) => db.lead as unknown as LeadTable,
   sendLogs: (db) => db.leadEmailSendLog as unknown as SendLogTable,
   activities: (db) => db.leadActivity as unknown as ActivityTable,

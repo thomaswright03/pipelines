@@ -4,6 +4,7 @@
 
 // CAN-SPAM requires a valid physical postal address on commercial email.
 import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
+import { templateVersion } from "@/lib/email-template-version";
 
 const COUNTY_PRICING: Record<string, string> = {
   Maricopa: "$500/mo",
@@ -80,3 +81,9 @@ export function buildAgentOutreachEmail(agentName: string, county: string | null
 
   return { subject, body };
 }
+
+/** Which wording a send used (stored with it); changes whenever the template's text or a county price does. */
+export const DATALEADSELL_TEMPLATE_VERSION = templateVersion(
+  "dataleadsell",
+  [null, ...Object.keys(COUNTY_PRICING)].map((county) => buildAgentOutreachEmail("{agent}", county)),
+);

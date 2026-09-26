@@ -211,6 +211,8 @@ export default function LeadActions({
               {lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`} Read it in the history on this
               page, then mark them opted out, use Mark replied if it is a real reply (only then does it count toward the reply rate), move
               the lead, or keep it as it is.
+              {lead.status === "contacted" && " Until you do, the lead stays in Contacted and off the call deck."}
+              {lead.status === "cold_call_list" && " The call deck shows this warning on the lead's card until you do."}
             </p>
             <button
               type="button"

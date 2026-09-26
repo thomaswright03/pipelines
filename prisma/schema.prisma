@@ -284,6 +284,10 @@ model EmailSendLog {
   // return its own tracking id, so bounces are recorded with the manual
   // "Mark bounced" button rather than a webhook.
   providerMessageId String?    @unique
+  // The subject line as sent, and which version of the pitch's wording
+  // (src/lib/email-template-version.ts) — null for sends before these existed.
+  subject           String?
+  templateVersion   String?
 
   @@index([leadId])
 }
@@ -410,6 +414,9 @@ model LeadEmailSendLog {
   bouncedAt         DateTime?
   // See EmailSendLog.providerMessageId above.
   providerMessageId String?   @unique
+  // See EmailSendLog.subject / templateVersion above.
+  subject           String?
+  templateVersion   String?
 
   @@index([leadId])
 }

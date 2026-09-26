@@ -9,6 +9,7 @@ import { sendFirstTouch } from "@/lib/outreach/send";
 import { routeStaleContacts } from "@/lib/outreach/stale-contacts";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { getDataleadsellStats, getVaultStats } from "@/lib/pipeline-stats";
+import { loadCallDeck } from "@/lib/call-deck";
 import { captureMail, makeAgentLead, makeColdLead } from "./helpers";
 
 function inbound(body: Record<string, unknown>) {
@@ -71,7 +72,7 @@ describe("a reply after the lead left Contacted", () => {
     expect(after).toMatchObject({ status: "responded", replyNeedsReview: false });
     expect(after.repliedAt).not.toBeNull();
     expect(after.notes).toBeNull();
-    expect((await prisma.agentLeadActivity.findFirstOrThrow({ where: { leadId: agent.id } })).notes).toContain(
+    expect((await prisma.agentLeadActivity.findFirstOrThrow({ where: { leadId: agent.id, type: "email" } })).notes).toContain(
       "Tell me more about the probate leads.",
     );
     expect((await getDataleadsellStats()).replied).toBe(1);
@@ -213,7 +214,37 @@ describe("a reply that arrives while the database is down", () => {
   it("tells the Worker not to retry a bad request", async () => {
     const res = await inbound({ subject: "no sender" });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ retry: false });
+    expect(await res.json()).toMatchObject({ retry: false, error: expect.stringMatching(/^Rejected: from is invalid/) });
+  });
+
+  it("logs every rejected reply with the failing field names, never its content, and names the field in the response", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const secret = "S".repeat(3_000);
+    const res = await inbound({ from: "owner@business.test", subject: secret, text: "please stop emailing me" });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toMatchObject({ retry: false, error: expect.stringContaining("subject is too long (at most 2000 characters)") });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = String(warn.mock.calls[0]![0]);
+    expect(line).toMatch(/^\[api\.email-inbound\] Rejected an inbound reply: invalid fields \(fields=subject\)$/);
+    expect(line).not.toContain("SSSS");
+    expect(line).not.toContain("owner@business.test");
+    expect(await prisma.inboundReply.count()).toBe(0);
+  });
+
+  it("logs a body that isn't JSON", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await POST(
+      new NextRequest("http://localhost/api/email-inbound", {
+        method: "POST",
+        headers: { authorization: "Bearer test-inbound-secret", "content-type": "application/json" },
+        body: "not json",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: expect.stringMatching(/^Body must be JSON/) });
+    expect(String(warn.mock.calls[0]![0])).toMatch(/Rejected an inbound reply: body isn't JSON/);
   });
 });
 
@@ -250,5 +281,55 @@ describe("stale-contacts routing", () => {
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(result["cold-outreach"]).toEqual({ coldCall: 5_000, contactless: 5_000 });
     expect(await prisma.lead.count({ where: { status: "contacted" } })).toBe(0);
+    // Every moved lead has its History entry, written in the same pass.
+    expect(await prisma.leadActivity.count({ where: { notes: { startsWith: "Moved to" } } })).toBe(10_000);
+  });
+
+  it("writes a History entry on every moved lead saying when and why", async () => {
+    const pitched = new Date("2026-09-17T20:00:00Z"); // Sep 17 in Arizona
+    const now = new Date("2026-09-26T16:00:00Z");
+    const agent = await makeAgentLead({ status: "contacted", lastEmailedAt: pitched, phone: "(602) 555-0142" });
+    const cold = await makeColdLead({ status: "contacted", lastEmailedAt: pitched, phone: null });
+
+    const result = await routeStaleContacts(now);
+
+    expect(result).toEqual({ dataleadsell: { coldCall: 1, contactless: 0 }, "cold-outreach": { coldCall: 0, contactless: 1 } });
+    const agentHistory = await prisma.agentLeadActivity.findMany({ where: { leadId: agent.id } });
+    expect(agentHistory).toEqual([
+      expect.objectContaining({
+        type: "note",
+        notes: "Moved to the call deck — no reply 7 days after the pitch sent Sep 17, 2026.",
+        date: now,
+      }),
+    ]);
+    const coldHistory = await prisma.leadActivity.findMany({ where: { leadId: cold.id } });
+    expect(coldHistory.map((a) => a.notes)).toEqual([
+      "Moved to the No phone number list — no reply 7 days after the pitch sent Sep 17, 2026.",
+    ]);
+    // The pitch date is shown in Arizona time: 03:00 UTC on the 18th is still the 17th there.
+    const late = await makeColdLead({ status: "contacted", lastEmailedAt: new Date("2026-09-18T03:00:00Z"), phone: "(480) 555-0100" });
+    await routeStaleContacts(now);
+    expect((await prisma.leadActivity.findFirstOrThrow({ where: { leadId: late.id } })).notes).toMatch(/sent Sep 17, 2026\.$/);
+  });
+
+  it("leaves a lead whose reply needs a look in Contacted until the operator resolves it", async () => {
+    const old = new Date(Date.now() - EIGHT_DAYS_MS);
+    const lead = await makeColdLead({ status: "contacted", lastEmailedAt: old, phone: "(480) 555-0122", email: "grumpy@owner.test" });
+    await prisma.leadEmailSendLog.create({
+      data: { leadId: lead.id, email: "grumpy@owner.test", providerMessageId: "<p1@test>", sentAt: old },
+    });
+
+    const res = await inbound({ from: "grumpy@owner.test", subject: "Re: hello", text: "How did you get my email? This is spam." });
+    expect(res.status).toBe(200);
+    expect(await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({ status: "contacted", replyNeedsReview: true });
+
+    expect((await routeStaleContacts())["cold-outreach"]).toEqual({ coldCall: 0, contactless: 0 });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("contacted");
+    expect((await loadCallDeck("cold-outreach")).cards).toEqual([]);
+
+    // "Keep as Contacted" is the operator's decision that the lead may be called.
+    expect(await dismissReplyReviewAction("cold-outreach", lead.id)).toMatchObject({ ok: true });
+    expect((await routeStaleContacts())["cold-outreach"]).toEqual({ coldCall: 1, contactless: 0 });
+    expect((await loadCallDeck("cold-outreach")).cards.map((c) => c.id)).toEqual([lead.id]);
   });
 });
