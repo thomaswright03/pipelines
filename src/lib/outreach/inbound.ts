@@ -11,9 +11,10 @@
 //   an old call outcome rather than a decision about this reply).
 // - Any other status → reply time set if missing; status kept.
 // A reply that isn't an opt-out but reads like a brush-off or complaint
-// ("not interested", "wrong person" — see reply-classifier.ts) sets the
-// reply time and flags the lead "Reply needs a look" with the reason,
-// instead of moving it to Responded; the operator decides.
+// ("not interested", "no thanks", "who is this" — see reply-classifier.ts)
+// flags the lead "Reply needs a look" with the reason and leaves its status
+// and reply time alone, so it neither leaves the call deck nor counts toward
+// the reply rate; the operator decides ("Mark replied" counts it).
 // An opt-out reply suppresses the address (from any status) and moves a
 // lead we were working — Contacted, Responded, on the call deck — to Lost
 // (Not interested in dataleadsell). New leads just become unsendable;
@@ -254,8 +255,11 @@ function replyUpdateFor(
   reply: { optOut: boolean; review?: string | null; pitched: boolean; fromEmail: string; now: Date },
 ): { data: LeadUpdate; needsReview: boolean } {
   const data: LeadUpdate = {};
+  // A possible "no" (see below) isn't counted as a reply until the operator
+  // decides it is one ("Mark replied"), so it can't inflate the reply rate.
+  const possibleNo = Boolean(reply.review) && !reply.optOut && lead.status !== "new";
   // Only a lead that was actually emailed counts toward the reply rate.
-  if (reply.pitched && !lead.repliedAt) data.repliedAt = reply.now;
+  if (reply.pitched && !lead.repliedAt && !possibleNo) data.repliedAt = reply.now;
 
   if (reply.optOut) {
     data.sendBlockedReason = `${OPTED_OUT_BLOCK_PREFIX} — ${reply.fromEmail} is on the suppression list.`;
@@ -268,7 +272,7 @@ function replyUpdateFor(
   }
 
   if (!reply.pitched) return { data, needsReview: false };
-  if (reply.review && lead.status !== "new") {
+  if (possibleNo) {
     // Possibly a "no" or a complaint: the operator decides, the status stays.
     data.replyNeedsReview = true;
     data.replyReviewReason = `The reply ${reply.review}. It may be asking not to be emailed.`;

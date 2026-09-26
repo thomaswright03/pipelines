@@ -68,7 +68,8 @@ describe("plain opt-out replies (finding 2)", () => {
     const after = await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } });
     expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true });
     expect(after.replyReviewReason).toMatch(/not interested.*may be asking not to be emailed/);
-    expect(after.repliedAt).not.toBeNull();
+    // Not counted as a reply (reply rate, call deck) until the operator says it is one.
+    expect(after.repliedAt).toBeNull();
     expect(await prisma.suppressedEmail.count()).toBe(0);
     expect((await prisma.inboundReply.findFirstOrThrow()).reviewReason).toMatch(/not interested/);
 

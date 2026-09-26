@@ -16,6 +16,16 @@
 // folder but I'm interested.". Round 6 (2026-09-25): 35 fresh cases
 // scored as-is — 50 cases, precision 96.0%, recall 85.7%; new misses "No,
 // thank you.", "Who gave you this email address?" and "This isn't for us.".
+// Round 7 (2026-09-26): 28 fresh cases (polite declines, "we're all set",
+// "no need", "who is this", "I'll pass" and look-alikes such as "No
+// problem" or "I'll pass this along") written before the rules changed.
+// Before: 78 cases, precision 96.3%, recall 59.1%. After the new rules
+// (built from the reviewers' phrasings, added to REVIEW_DEV): precision
+// 97.7%, recall 95.5% — the misses "Where'd you get my email?" and "Who's
+// this?" exposed a contraction bug, which was then fixed (97.8% / 100%), so
+// those two no longer measure anything new. "Who is this?" in REVIEW_DEV
+// was relabelled to needs-a-look in the same round. Same-author caveat as
+// in replies.ts.
 
 export type LabelledReview = { text: string; review: boolean };
 
@@ -32,7 +42,17 @@ export const REVIEW_DEV: LabelledReview[] = [
   { text: "Yes, interested! What does it cost?", review: false },
   { text: "Tell me more.", review: false },
   { text: "Can you call me tomorrow afternoon?", review: false },
-  { text: "Who is this?", review: false },
+  // Relabelled in round 7: "who is this" is no sign of interest, and a
+  // false flag only asks for a glance.
+  { text: "Who is this?", review: true },
+  // Round 7, from the reviewers' reports: brush-offs that were counted as
+  // positive replies.
+  { text: "Not for us, thanks", review: true },
+  { text: "We're good, no need.", review: true },
+  { text: "We don't need a website.", review: true },
+  { text: "No, thanks.", review: true },
+  { text: "No problem, send it over.", review: false },
+  { text: "We're good to go, send the link.", review: false },
   { text: "Send pricing please", review: false },
   { text: "Received, will review.", review: false },
 ];
@@ -89,4 +109,36 @@ export const REVIEW_HELD_OUT: LabelledReview[] = [
   { text: "Maybe — what's the minimum term?", review: false },
   { text: "Thanks! Talk soon.", review: false },
   { text: "Can you include the property addresses?", review: false },
+  // Fresh batch, 2026-09-26 (round 7): polite declines, "we're all set",
+  // "who is this" and their look-alikes. Written before the rules for these
+  // families were changed (the phrasings the reviewers reported went to the
+  // development set); see the header for the scores.
+  { text: "Thanks, but we're all set.", review: true },
+  { text: "Not for me, thanks.", review: true },
+  { text: "We don't need this.", review: true },
+  { text: "No thank you!", review: true },
+  { text: "Nope.", review: true },
+  { text: "Nah, we're good.", review: true },
+  { text: "Who are you?", review: true },
+  { text: "Where'd you get my email?", review: true },
+  { text: "We already have a web guy.", review: true },
+  { text: "I'll pass.", review: true },
+  { text: "Not a good fit for us.", review: true },
+  { text: "No need, thanks.", review: true },
+  { text: "Who's this?", review: true },
+  { text: "We already work with another lead provider.", review: true },
+  { text: "Thanks but no thanks.", review: true },
+  { text: "Not looking for anything like this.", review: true },
+  { text: "No problem, call me at 3.", review: false },
+  { text: "We're good to go — send the invoice.", review: false },
+  { text: "I'll pass this along to my broker.", review: false },
+  { text: "No worries, Thursday works.", review: false },
+  { text: "I'm good with that price.", review: false },
+  { text: "Who do I pay?", review: false },
+  { text: "Where do I sign up?", review: false },
+  { text: "Not sure yet — what's included?", review: false },
+  { text: "We don't need a contract, right? Month to month?", review: false },
+  { text: "Now's a good time, call me.", review: false },
+  { text: "We already talked last week, send the sample.", review: false },
+  { text: "No rush, whenever you can.", review: false },
 ];

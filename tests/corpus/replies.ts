@@ -23,6 +23,16 @@
 // "Honestly I do not want any of these emails" (missed) and "Can I
 // unsubscribe later if it doesn't work out?" (false opt-out).
 //
+// Round 7 (2026-09-26): 24 fresh held-out cases (curt and informal
+// opt-outs — "knock it off", "enough with the emails", "forget my address",
+// "any of these emails" — and look-alikes) written before the rules for
+// that family changed. Before the change: precision 98.3%, recall 79.5% on
+// 126 cases (15 missed opt-outs). After (the reviewers' own phrasings were
+// added to the development set, not this one): precision 98.6%, recall
+// 100.0%; the one miss left is the false opt-out "Can I unsubscribe later
+// if it doesn't work out?". Caveat: the same author wrote this batch and
+// the rules, so it is less independent than real mail would be.
+//
 // optOut: true  — the sender is asking not to be contacted (CAN-SPAM opt-out).
 // optOut: false — anything else, including "no thanks" and complaints that
 //                 don't ask to stop (those are flagged for a look instead).
@@ -100,6 +110,9 @@ export const REPLY_CORPUS: LabelledReply[] = [
   { text: "Please cease emailing me.", optOut: true },
   { text: "Take me off the list, thanks", optOut: true },
   { text: "Lose my email.", optOut: true },
+  // Round 7, from the reviewers' reports.
+  { text: "Knock it off.", optOut: true },
+  { text: "Enough with the emails.", optOut: true },
   { text: "Do not send further emails.", optOut: true },
   // Moved here from the held-out split after its first run (2026-09-25),
   // where these four were missed; the rules were then fixed for them, so
@@ -296,4 +309,32 @@ export const REPLY_HELD_OUT: LabelledReply[] = [
   { text: "I don't want to commit yet, but send a sample.", optOut: false },
   { text: "Removing the old listings now — thanks for the reminder.", optOut: false },
   { text: "We have a lot of email to get through; I'll reply properly next week.", optOut: false },
+  // Fresh batch, 2026-09-26 (round 7): informal and curt opt-outs, and their
+  // look-alikes. Written before the rules for this family were changed
+  // (the phrasings the reviewers reported went to the development set) and
+  // scored before and after; see the header for the scores.
+  { text: "Knock it off already.", optOut: true },
+  { text: "Enough with these emails, seriously.", optOut: true },
+  { text: "Enough of the emails!", optOut: true },
+  { text: "Forget my address, please.", optOut: true },
+  { text: "Lose this email address.", optOut: true },
+  { text: "Cut it out.", optOut: true },
+  { text: "Go away.", optOut: true },
+  { text: "I don't want any of your emails.", optOut: true },
+  { text: "We really don't want any more of these messages.", optOut: true },
+  { text: "Stop with the emails.", optOut: true },
+  { text: "Honestly, we don't want any of this email.", optOut: true },
+  { text: "Please quit it with the emails.", optOut: true },
+  { text: "no more of these please", optOut: true },
+  { text: "Scrub my email from your list.", optOut: true },
+  { text: "Knock on wood, this could work. Tell me more.", optOut: false },
+  { text: "Enough about me — what does it cost?", optOut: false },
+  { text: "I can never get enough leads, send pricing.", optOut: false },
+  { text: "We never get enough of these emails, they're great.", optOut: false },
+  { text: "Don't lose my email, I want the sample.", optOut: false },
+  { text: "I forgot my password for your site, can you help?", optOut: false },
+  { text: "Did you get my email from last week?", optOut: false },
+  { text: "Go ahead and send the details.", optOut: false },
+  { text: "Cut to the chase: how much?", optOut: false },
+  { text: "I don't want any of the Pinal leads, only Maricopa.", optOut: false },
 ];

@@ -82,7 +82,8 @@ describe("heuristics on the labelled evaluation sets", () => {
       }));
     const words = { fp: "flagged a positive reply", fn: "missed a brush-off" };
     evaluate("Needs-a-look replies", "dev", run(REVIEW_DEV), { precision: 0.95, recall: 0.95 }, words);
-    evaluate("Needs-a-look replies", "held-out", run(REVIEW_HELD_OUT), { precision: 0.85, recall: 0.85 }, words);
+    // Raised from 0.85/0.85 in round 7 (measured 97.8% / 100% on 78 cases).
+    evaluate("Needs-a-look replies", "held-out", run(REVIEW_HELD_OUT), { precision: 0.9, recall: 0.9 }, words);
   });
 
   // Automatic replies: a false "automatic" hides a real reply (the lead

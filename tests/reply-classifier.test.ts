@@ -44,6 +44,10 @@ describe("classifyReply — not opt-outs", () => {
     ["'I don't want these emails to stop'", "I don't want these emails to stop, they're useful."],
     ["'we don't want these messages to end'", "We don't want these messages to end!"],
     ["'don't want emails about' one county, only another", "I don't want emails about Pinal, only Maricopa."],
+    ["'don't lose my email'", "Don't lose my email, I want the sample."],
+    ["'never get enough of these emails'", "We never get enough of these emails, they're great."],
+    ["'knock on wood'", "Knock on wood, this could work."],
+    ["'go ahead'", "Go ahead and send the details."],
   ];
   for (const [label, text] of cases) {
     it(label, () => {
@@ -143,6 +147,13 @@ describe("classifyReply — replies that need a human look", () => {
     ["wrong person", "You have the wrong person, Jane left the brokerage.", /wrong person/],
     ["how did you get my email", "How did you get my email?", /how we got their address/],
     ["spam", "This is spam.", /spam/],
+    ["'No, thank you.' with a comma", "No, thank you.", /no thanks/],
+    ["'not for us'", "Not for us, thanks", /isn't for them/],
+    ["'we're good, no need'", "We're good, no need.", /all set/],
+    ["'we don't need a website'", "We don't need a website.", /don't need it/],
+    ["'who is this'", "Who is this?", /who we are/],
+    ["a bare 'Nope.'", "Nope.", /says no/],
+    ["'where'd you get my email' (contraction)", "Where'd you get my email?", /how we got their address/],
   ];
   for (const [label, text, reason] of cases) {
     it(label, () => {
@@ -162,6 +173,19 @@ describe("classifyReply — replies that need a human look", () => {
 
   it("an English reply that greets in Spanish needs no look", () => {
     expect(classifyReply({ text: "Hola Thomas, yes I'm interested — send the price." }).review).toBeNull();
+  });
+
+  it("positive replies that share words with a brush-off need no look", () => {
+    for (const text of [
+      "No problem, send it over.",
+      "No worries — Thursday works.",
+      "We're good to go, send the link.",
+      "I'm good with that price.",
+      "I'll pass this along to my broker.",
+      "No need to call, just email the pricing.",
+    ]) {
+      expect(classifyReply({ text }), text).toMatchObject({ optOut: false, review: null });
+    }
   });
 
   it("an interested reply needs no look", () => {

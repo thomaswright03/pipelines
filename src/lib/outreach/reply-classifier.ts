@@ -11,12 +11,14 @@
 // 2. What's left must *ask* not to be contacted: a line that is just the
 //    command ("STOP", "Unsubscribe", "Please remove me"), or an explicit
 //    phrase ("take me off your list", "don't email me", "quit contacting
-//    us", "delete my email address", "leave me alone"). Ordinary uses of the
+//    us", "delete my email address", "leave me alone"), including curt ones
+//    ("knock it off", "enough with the emails", "lose my email"). Ordinary uses of the
 //    words ("stop by the office", "can't stop thinking about it") and
 //    negated ones ("please don't stop sending these") don't count.
 // 3. A reply that isn't an opt-out but reads like a brush-off or a
-//    complaint ("not interested", "wrong person", "how did you get my
-//    email"), or is mainly in another language, is flagged for a human
+//    complaint ("not interested", "no, thank you", "we're all set", "not
+//    for us", "who is this", "wrong person", "how did you get my email"),
+//    or is mainly in another language, is flagged for a human
 //    look (`review`) instead of being treated as an ordinary positive reply.
 //    Common Spanish and French opt-outs ("no me envíe más correos",
 //    "désabonnez-moi") count as opt-outs.
@@ -64,6 +66,16 @@ const COMMAND_WORDS = new Set([
   "stop emailing me",
   "stop sending",
   "no more emails",
+  "no more",
+  // Curt ways of saying the same.
+  "enough",
+  "enough already",
+  "knock it off",
+  "cut it out",
+  "quit it",
+  "go away",
+  "leave us alone",
+  "leave me alone",
   // Spanish and French one-word replies.
   "baja",
   "de baja",
@@ -115,15 +127,26 @@ const OPT_OUT_PHRASES: RegExp[] = [
     String.raw`\b${NEG}\s+send\s+(?:(?:me|us)\s+)?(?:any\s*(?:more|thing)|further|more|other|anything(?:\s+else)?)(?:\s+(?:e-?mails?|messages?|stuff))?(?=\s*[.!,;]|\s*$|\s+(?:e-?mails?|messages?|again|to\s+(?:me|us|this)))`,
     "im",
   ),
-  /\b(?:delete|erase|purge)\s+(?:my|our)\s+(?:e-?mail(?:\s+address)?|address|info(?:rmation)?|contact(?:\s+(?:info|details))?|details|data)\b/i,
-  /\b(?:delete|erase)\s+(?:me|us)\s+from\b/i,
+  // "delete my email", "lose my address", "forget this email address", "scrub my email from your list"
+  /\b(?:delete|erase|purge|lose|forget|scrub|drop)\s+(?:my|our|this)\s+(?:e-?mail(?:\s+address)?|address|info(?:rmation)?|contact(?:\s+(?:info|details))?|details|data)\b(?!\s+(?:from\s+last|for\s+now))/i,
+  /\b(?:delete|erase|scrub)\s+(?:me|us)\s+from\b/i,
+  // Curt imperatives: "knock it off", "cut it out", "quit it with the emails"
+  /\b(?:knock\s+it\s+off|cut\s+it\s+out|quit\s+it)\b/i,
+  // "Enough with the emails", "Enough of these emails!" — at the start of a
+  // sentence, so "we never get enough of these emails" doesn't count.
+  /(?:^|[.!?]\s+|\bthat'?s\s+)enough\s+(?:with|of)\s+(?:the|these|this|your|all\s+(?:the|these|your))\s+(?:e-?mails?|messages?|spam|e-?mailing)\b/im,
+  // "stop with the emails", "stop the emails"
+  /\bstop\s+(?:with\s+)?(?:the|these|your|all\s+(?:the|these|your))\s+(?:e-?mails?|messages?|spam)\b/i,
+  // "no more of these", "no more of your emails"
+  /\bno\s+more\s+of\s+(?:these|this|your|them|those)\b/i,
+  /^\s*go\s+away\b/im,
   /\bcease\s+and\s+desist\b/i,
   /\bleave\s+(?:me|us)\s+alone\b/i,
   // "I don't want these emails", "we do not wish to receive your messages",
   // "no longer want to get this kind of email" — but not "I don't want these
   // emails to stop" or "I don't want emails about Pinal, only Maricopa".
   new RegExp(
-    String.raw`\b(?:(?:i|we)\s+(?:really\s+|just\s+|simply\s+)?)?(?:do\s+not|don'?t|dont|no\s+longer)\s+(?:want|wish|care)\s+(?:to\s+(?:receive|get|see|be\s+sent|keep\s+(?:getting|receiving))\s+)?(?:(?:any\s*more|any|more|your|these|this|such|those|the|further|future|all|ur)\s+)?(?:(?:kind|kinds|type|types|sort)\s+of\s+)?(?:(?:marketing|sales|promotional|cold|spam|junk)\s+)?(?:e-?mails?|messages?|mails?|solicitations?|pitches)\b(?!\s+to\s+(?:stop|end|cease|go\s+away)\b|\s+(?:about|on|regarding|for)\b)`,
+    String.raw`\b(?:(?:i|we)\s+(?:really\s+|just\s+|simply\s+)?)?(?:do\s+not|don'?t|dont|no\s+longer)\s+(?:want|wish|care)\s+(?:to\s+(?:receive|get|see|be\s+sent|keep\s+(?:getting|receiving))\s+)?(?:(?:any|more|some|all|none)\s+(?:more\s+)?of\s+)?(?:(?:any\s*more|any|more|your|these|this|such|those|the|further|future|all|ur)\s+)?(?:(?:kind|kinds|type|types|sort)\s+of\s+)?(?:(?:marketing|sales|promotional|cold|spam|junk)\s+)?(?:e-?mails?|messages?|mails?|solicitations?|pitches)\b(?!\s+to\s+(?:stop|end|cease|go\s+away)\b|\s+(?:about|on|regarding|for)\b)`,
     "i",
   ),
   /\b(?:do\s+not|don'?t|dont|no\s+longer)\s+(?:want|wish)\s+to\s+hear\s+from\s+(?:you|u|your\s+company)\b(?!\s+(?:until|before|unless))/i,
@@ -150,13 +173,47 @@ const OPT_OUT_PHRASES: RegExp[] = [
 // for a look instead of being moved to Responded.
 const REVIEW_PHRASES: { re: RegExp; reason: string }[] = [
   { re: /\bnot\s+(?:at\s+all\s+|really\s+)?interested\b/i, reason: "says they're not interested" },
-  { re: /\bno\s+(?:thanks|thank\s+you|thx)\b/i, reason: "says no thanks" },
+  // "No thanks", "No, thank you.", "Thanks but no thanks", "No thank you!"
+  { re: /\bno[\s,.!-]+(?:thanks|thank\s+you|thx|ty)\b|\bthanks,?\s+but\s+no\b/i, reason: "says no thanks" },
+  // A reply that opens with a bare "No." / "Nope" / "Nah" — but not "No problem" or "No worries".
+  {
+    re: /^\s*(?:no|nope|nah)\b(?![\s,]*(?:problem|prob|worries|worry|rush|doubt|question|matter|kidding|need\s+to|way[,!]?\s+(?:that'?s\s+)?(?:great|cool|awesome)))/i,
+    reason: "says no",
+  },
   { re: /\bwrong\s+(?:person|e-?mail|address|contact|guy|gal)\b/i, reason: "says this is the wrong person" },
   {
     re: /\b(?:no\s+longer|not)\s+(?:work(?:ing)?\s+(?:here|there|at)|with\s+(?:the|this)\s+(?:company|brokerage|firm))\b/i,
     reason: "says they no longer work there",
   },
-  { re: /\bhow\s+did\s+you\s+get\s+(?:my|this|our)\b/i, reason: "asks how we got their address" },
+  {
+    re: /\b(?:how|where)(?:\s+did|'d)\s+(?:you|u)\s+(?:get|find)\s+(?:my|this|our|me|us)\b|\bwho\s+gave\s+(?:you|u)\s+(?:my|this|our)\b/i,
+    reason: "asks how we got their address",
+  },
+  { re: /\bwho(?:\s+is|'s)\s+this\b|\bwho\s+(?:are|r)\s+(?:you|u)\b(?!\s+(?:working|recommending))/i, reason: "asks who we are" },
+  // "Not for us", "This isn't for us", "Not a good fit"
+  {
+    re: /\b(?:not|isn'?t|is\s+not|ain'?t)\s+(?:really\s+)?(?:for\s+(?:us|me)\b|a\s+(?:good\s+|great\s+)?fit\b)/i,
+    reason: "says it isn't for them",
+  },
+  // "We're good", "We're all set", "I'm covered" — but not "we're good to go" or "I'm good with that".
+  {
+    re: /\b(?:we'?re|we\s+are|i'?m|i\s+am)\s+(?:all\s+)?(?:good|set|covered|all\s+set)\b(?!\s+(?:to\s+go|with\b|for\b|on\s+(?:my|our)\s+end\s*[,-]?\s*(?:send|go)))/i,
+    reason: "says they're all set",
+  },
+  // "No need", "We don't need this" — but not "No need to call, just email".
+  {
+    re: /\bno\s+need\b(?!\s+to\b)|\b(?:we|i)\s+(?:really\s+)?(?:do\s+not|don'?t|dont)\s+need\s+(?:this|that|it|your|these|those|any|a\s+(?:new\s+)?(?:website|site|service|lead|leads))\b/i,
+    reason: "says they don't need it",
+  },
+  {
+    re: /\b(?:we|i)\s+already\s+(?:have|use|work\s+with|got|pay\s+for)\b/i,
+    reason: "says they already have this",
+  },
+  {
+    re: /\b(?:i'?ll|we'?ll|i\s+will|we\s+will|hard|gonna)\s+pass\b(?!\s+(?:this|it|that|them|along|your|on\s+to))/i,
+    reason: "says they'll pass",
+  },
+  { re: /\bnot\s+(?:currently\s+)?(?:looking\s+for|in\s+the\s+market)\b/i, reason: "says they're not looking" },
   { re: /\b(?:spam|spammer|spamming|unsolicited)\b|\breport(?:ed|ing)?\s+(?:you|this|it)\b/i, reason: "calls the email spam" },
   { re: /\b(?:retired|passed\s+away|deceased)\b/i, reason: "says the person has retired or died" },
 ];

@@ -209,7 +209,8 @@ export default function LeadActions({
             <p>
               <strong>Reply needs a look.</strong>{" "}
               {lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`} Read it in the history on this
-              page, then mark them opted out, move the lead (for example to Responded), or keep it as it is.
+              page, then mark them opted out, use Mark replied if it is a real reply (only then does it count toward the reply rate), move
+              the lead, or keep it as it is.
             </p>
             <button
               type="button"

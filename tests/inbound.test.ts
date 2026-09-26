@@ -63,6 +63,30 @@ describe("/api/email-inbound", () => {
     expect(await prisma.suppressedEmail.findUnique({ where: { email: "joe@joesplumbing.test" } })).not.toBeNull();
   });
 
+  it.each(["Knock it off.", "Enough with the emails.", "Lose my email.", "Honestly I do not want any of these emails"])(
+    "treats the curt opt-out %j as an opt-out",
+    async (text) => {
+      const cold = await makeColdLead({ email: "curt@shop.test", status: "contacted" });
+      const json = await (await inbound({ from: "curt@shop.test", text })).json();
+      expect(json).toMatchObject({ optedOut: true });
+      expect((await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } })).status).toBe("lost");
+      expect(await prisma.suppressedEmail.findUnique({ where: { email: "curt@shop.test" } })).not.toBeNull();
+    },
+  );
+
+  it.each(["No, thank you.", "Not for us, thanks", "We're good, no need.", "We don't need a website.", "Who is this?"])(
+    "flags the brush-off %j for a look and keeps the lead out of Responded",
+    async (text) => {
+      const cold = await makeColdLead({ email: "meh@shop.test", status: "contacted", lastEmailedAt: new Date() });
+      const json = await (await inbound({ from: "meh@shop.test", text })).json();
+      expect(json.optedOut).toBe(false);
+      expect(json.review).toEqual(expect.any(String));
+      const after = await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } });
+      expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true, repliedAt: null });
+      expect(await prisma.suppressedEmail.count()).toBe(0);
+    },
+  );
+
   it("flags a Spanish reply it doesn't understand for a look instead of moving the lead to Responded", async () => {
     const cold = await makeColdLead({ email: "ana@panaderia.test", status: "contacted" });
     const json = await (await inbound({ from: "ana@panaderia.test", text: "Hola, ¿de dónde sacó mi correo? Gracias." })).json();

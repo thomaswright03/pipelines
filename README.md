@@ -259,9 +259,11 @@ and prints precision and recall, with every miss, for two splits:
   score.** A miss there is recorded in the corpus header, not patched. The one exception so far: the first
   held-out opt-out run missed 4 of 20 opt-outs, and because a missed opt-out means emailing someone who
   asked us to stop, those cases were moved to dev, the rules fixed, and fresh held-out cases written (see
-  the header of `tests/corpus/replies.ts`).
+  the header of `tests/corpus/replies.ts`). When a reviewer reports misses, their phrasings go to **dev**;
+  a fresh held-out batch for the same family is written *before* the rules change and scored before and
+  after (both scores are in the corpus headers).
 
-Every held-out split has at least 50 cases (opt-outs 102). Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
+Every held-out split has at least 50 cases (opt-outs 126, needs-a-look 78). Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
 even when every unit test passes. CI also writes the scores to the run summary.
 
 Every set is **synthetic**, written to resemble real mail, sites and staff directories. To measure
