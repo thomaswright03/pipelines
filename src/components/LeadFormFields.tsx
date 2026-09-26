@@ -100,7 +100,7 @@ export function useLeadForm<T extends Record<string, string>>(
  * The browser's Back button isn't intercepted: the app router owns history
  * navigation, and trapping it reliably isn't possible without breaking it.
  */
-export function useUnsavedChangesGuard(dirty: boolean): ReactNode {
+function useUnsavedChangesGuard(dirty: boolean): ReactNode {
   const router = useRouter();
   const [dialog, confirm] = useConfirm();
 

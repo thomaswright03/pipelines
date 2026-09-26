@@ -8,9 +8,11 @@ const testDatabaseUrl = process.env.TEST_DATABASE_URL ?? "postgresql://ci:ci@loc
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  // Component tests (tests/components/*.test.tsx) use React's automatic JSX runtime, as Next does.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.{ts,tsx}"],
     globalSetup: ["tests/global-setup.ts"],
     setupFiles: ["tests/setup.ts"],
     // Every file shares one database, so files run one at a time.
@@ -24,10 +26,13 @@ export default defineConfig({
       reporter: ["text-summary", "text", "json-summary"],
       // The code that decides who is emailed, and the actions behind every
       // button, must stay well covered; `npm run test:coverage` fails below
-      // these. (Pages and components are covered by the browser tests.)
+      // these. Components are exercised in jsdom (tests/components/: each
+      // control's pending, success, refusal and network-failure states) and
+      // end to end by the browser tests; pages only by the browser tests.
       thresholds: {
         "src/lib/outreach/**": { lines: 90 },
         "src/lib/actions/**": { lines: 85 },
+        "src/components/**": { lines: 35 },
       },
     },
     hookTimeout: 60_000,

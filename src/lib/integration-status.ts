@@ -32,7 +32,7 @@ export type ConnectionStatus = {
   testable?: boolean;
 };
 
-export const NOT_CONFIRMED = "Not confirmed yet";
+const NOT_CONFIRMED = "Not confirmed yet";
 
 const CRON_JOBS = [
   {

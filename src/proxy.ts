@@ -26,7 +26,7 @@ export function resetProbeCache(): void {
   lastProbe = null;
 }
 
-export const OUTAGE_HTML = `<!doctype html>
+const OUTAGE_HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">

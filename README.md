@@ -236,8 +236,11 @@ What's covered, by file:
 | `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
 | `tests/heuristics-eval.test.ts` | Precision/recall of every heuristic (opt-outs, needs-a-look, automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
 
-**Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines or
-`src/lib/actions` below 85% (`vitest.config.ts`). Pages and components are exercised by the browser tests;
+**Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines,
+`src/lib/actions` below 85% or `src/components` below 35% (`vitest.config.ts`). Components are tested in
+jsdom with Testing Library (`tests/components/*.test.tsx`: the lead page's email controls, the bulk-send
+dialog, the do-not-email list, unmatched replies, the pipeline controls, the last-run line and the lead
+list's markers — pending, success, refusal and network-failure states) and end to end by the browser tests;
 the logic inside the more involved client components (the bulk-send loop, the call deck's saved place) lives
 in `src/lib/` where it is unit-tested, and the Connections list is rendered in a unit test. The confirm
 dialog's focus and Escape handling need a real browser and are covered by the browser tests.

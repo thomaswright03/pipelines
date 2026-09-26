@@ -69,7 +69,7 @@ export const coldOutreachLeadSchema = z.object({
 });
 
 /** Why an estimated value isn't usable, naming the actual problem; null when it is fine. */
-export function estimatedValueProblem(value: string): string | null {
+function estimatedValueProblem(value: string): string | null {
   const v = value.trim();
   if (/^-\s*\$?\s*\d/.test(v) || /^\$\s*-/.test(v)) return "Estimated value can't be negative — enter 0 or more, like 2500";
   if (/^\$?\s*\d[\d,]*\.\d{3,}$/.test(v)) return "Estimated value can have at most two decimal places (cents), like 2500.50";
