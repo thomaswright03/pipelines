@@ -1,6 +1,6 @@
 // Pipeline identifiers shared by server and client code. Kept free of any
 // server-only imports so client components can use it too.
-const PIPELINE_IDS = ["dataleadsell", "cold-outreach"] as const;
+export const PIPELINE_IDS = ["dataleadsell", "cold-outreach"] as const;
 export type PipelineId = (typeof PIPELINE_IDS)[number];
 
 export const PIPELINE_LABEL: Record<PipelineId, string> = {

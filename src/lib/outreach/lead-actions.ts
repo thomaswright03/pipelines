@@ -72,6 +72,10 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
       ...(to === "lost" ? { callOutcome: reason } : {}),
     });
     if (!moved) return changedMeanwhile(lead.name);
+    // Reopening a lead a reply closed as a plain no: the reply rules misread it.
+    if (to === "responded" && (lead.status === "lost" || lead.status === "not_interested")) {
+      await recordReplyCorrection(pipelineId, lead, "declined", "decline_reversed");
+    }
   }
   const why = to === "lost" && reason ? ` (${CALL_OUTCOME_LABEL[reason]})` : "";
   return ok(`Moved ${lead.name} from ${statusLabel(lead.status)} to ${statusLabel(to)}${why}.`);
@@ -93,7 +97,35 @@ export async function markReplied(pipelineId: PipelineId, leadId: string): Promi
     replyNeedsReview: false,
   });
   if (!moved) return changedMeanwhile(lead.name);
+  // Counting a reply the rules read as only a thank-you: they missed interest.
+  await recordReplyCorrection(pipelineId, lead, "acknowledged", "courtesy_was_reply");
   return ok(`Marked ${lead.name} as replied — moved from ${statusLabel(lead.status)} to Responded.`);
+}
+
+/**
+ * Records that the operator overrode a reply verdict, when the lead's latest
+ * reply had `verdict`: the production signal for how the reply rules do.
+ */
+async function recordReplyCorrection(
+  pipelineId: PipelineId,
+  lead: OutreachLead,
+  verdict: "declined" | "acknowledged",
+  kind: "decline_reversed" | "courtesy_was_reply",
+): Promise<void> {
+  const latest = await prisma.inboundReply.findFirst({
+    where: { matched: { has: `${pipelineId}:${lead.id}` }, kind: "reply" },
+    orderBy: { receivedAt: "desc" },
+    select: { verdict: true, text: true, rulesVersion: true },
+  });
+  if (latest?.verdict !== verdict) return;
+  await recordCorrection(prisma, {
+    kind,
+    pipeline: pipelineId,
+    leadId: lead.id,
+    email: lead.email,
+    detail: latest.text,
+    rulesVersion: latest.rulesVersion,
+  });
 }
 
 /** Clears the "Replied — needs review" flag once the operator has looked. */
@@ -167,6 +199,7 @@ async function recordCorrectionIfFound(tx: Db, pipelineId: PipelineId, lead: Out
     leadId: lead.id,
     email: lead.email,
     detail: lead.emailEvidence,
+    rulesVersion: lead.emailRulesVersion,
   });
 }
 

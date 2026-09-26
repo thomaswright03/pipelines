@@ -2,7 +2,7 @@
 // /api/email-inbound) against whichever leads have that address, in both
 // pipelines, and enforces a genuine opt-out.
 //
-// The reply classifier (reply-classifier.ts) gives every reply one of three
+// The reply classifier (reply-classifier.ts) gives every reply one of five
 // verdicts, and only a confident one acts on its own:
 // - opt_out: the address is suppressed (from any status) and a lead we were
 //   working — Contacted, Responded, on the call deck — moves to Lost (Not
@@ -14,6 +14,16 @@
 //   counts and takes it off the call deck). Lost / Not interested keep their
 //   status and are flagged "Replied — needs review" (they may have got there
 //   by a bounce or an old call outcome). Other statuses keep theirs.
+// - declined (a plain no): the reply time is set on a lead that was
+//   pitched; a lead we were working — Contacted, or on the call deck —
+//   moves to Lost / Not interested (call outcome "Not interested"); a lead
+//   past that (Responded, an appointment, a customer) keeps its status and
+//   is flagged for a look. It is not an opt-out: the address isn't
+//   suppressed, but send.ts sends nothing more to it.
+// - acknowledged (only "Thanks" / "Got it"): recorded in the lead's history
+//   only — status and reply time stay as they were, so it doesn't count as
+//   a reply, and a Contacted lead still moves to phone outreach after a
+//   week. send.ts sends nothing more to the address.
 // - needs_look: every lead with the address, in either pipeline and whatever
 //   its status, is flagged "Reply needs a look" with the reason. Its status
 //   and reply time stay as they were, so it neither counts toward the reply
@@ -51,7 +61,7 @@ import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@
 import { classifyReply, REPLY_RULES_VERSION, showsClearInterest, type ReplyVerdict } from "@/lib/outreach/reply-classifier";
 import { AUTO_MAIL_RULES_VERSION, autoReplySignal, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
 import { applyBounce } from "@/lib/outreach/lead-actions";
-import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
+import { ANSWERED_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type PipelineAdapter } from "@/lib/outreach/pipelines";
@@ -74,6 +84,8 @@ type InboundKind = "reply" | "auto_reply" | "bounce";
 type InboundResult = {
   /** A reply a person wrote, an automatic reply, or a bounce notice. */
   kind: InboundKind;
+  /** For a reply a person wrote: the classifier's verdict. */
+  verdict: ReplyVerdict | null;
   matched: string[];
   optedOut: boolean;
   trigger: string | null;
@@ -153,6 +165,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
       if (earlier) {
         return {
           kind: earlier.kind as InboundKind,
+          verdict: (earlier.verdict as ReplyVerdict | null) ?? null,
           matched: earlier.matched,
           optedOut: earlier.optedOut,
           trigger: classification.trigger,
@@ -193,6 +206,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
             const flagged = await recordOnLead(tx, pipeline, lead, {
               verdict: classification.verdict,
               review: classification.review,
+              declineReason: classification.declineReason,
               fromEmail,
               note,
               now,
@@ -209,6 +223,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           subject: message.subject?.slice(0, 500) ?? null,
           optedOut: classification.optOut,
           reviewReason: kind === "reply" ? classification.review : null,
+          verdict: kind === "reply" ? classification.verdict : null,
           kind,
           kindReason: bounce ? [bounce.reason, bounce.diagnostic].filter(Boolean).join(" — ") : autoReason,
           failedRecipient: bounce?.failedRecipient ?? null,
@@ -222,6 +237,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
       });
       return {
         kind,
+        verdict: kind === "reply" ? classification.verdict : null,
         matched,
         optedOut: classification.optOut,
         trigger: classification.trigger,
@@ -266,10 +282,20 @@ async function recordBounceOnLead(
 /** What a reply does to one lead's fields, given its verdict and the lead's current status. */
 function replyUpdateFor(
   pipelineId: PipelineAdapter["id"],
-  lead: Pick<OutreachLead, "status" | "repliedAt">,
-  reply: { verdict: ReplyVerdict; review: string | null; pitched: boolean; fromEmail: string; now: Date },
+  lead: Pick<OutreachLead, "status" | "repliedAt" | "sendBlockedReason">,
+  reply: { verdict: ReplyVerdict; review: string | null; declineReason: string | null; pitched: boolean; fromEmail: string; now: Date },
 ): { data: LeadUpdate; needsReview: boolean } {
   const data: LeadUpdate = {};
+
+  // A plain no or a courtesy note holds the address (send.ts); a New lead
+  // with it says so on its page and drops out of bulk sends at once.
+  const answered = reply.verdict === "declined" || reply.verdict === "acknowledged";
+  if (answered && lead.status === "new" && !lead.sendBlockedReason) {
+    data.sendBlockedReason = `${ANSWERED_BLOCK_PREFIX} — ${reply.fromEmail} already answered a pitch (a plain no or a courtesy note), so this lead is never auto-sent.`;
+  }
+
+  // Otherwise a courtesy note changes nothing on the lead.
+  if (reply.verdict === "acknowledged") return { data, needsReview: false };
 
   if (reply.verdict === "needs_look") {
     // Not a reply, not an opt-out, until the operator decides. The flag also
@@ -292,6 +318,20 @@ function replyUpdateFor(
       data.status = pipelineId === "dataleadsell" ? "not_interested" : "lost";
     }
     return { data, needsReview: false };
+  }
+
+  if (reply.verdict === "declined") {
+    // A lead we were still trying to reach is closed, as a "not interested"
+    // call outcome would; one that got further is left for the operator.
+    if (REPLY_MOVES_TO_RESPONDED.includes(lead.status)) {
+      data.status = pipelineId === "dataleadsell" ? "not_interested" : "lost";
+      data.callOutcome = "not_interested";
+      return { data, needsReview: false };
+    }
+    if (lead.status === "new" || REPLY_FLAGS_FOR_REVIEW.includes(lead.status)) return { data, needsReview: false };
+    data.replyNeedsReview = true;
+    data.replyReviewReason = `A reply ${reply.declineReason ?? "says no"} while this lead is ${statusLabel(lead.status)} — check whether to close it.`;
+    return { data, needsReview: true };
   }
 
   if (!reply.pitched) return { data, needsReview: false };
@@ -321,7 +361,7 @@ function replyNote(
   receivedAt: Date,
   subject: string | null,
   text: string | null,
-  verdict: { verdict: ReplyVerdict; trigger: string | null; review: string | null },
+  verdict: { verdict: ReplyVerdict; trigger: string | null; review: string | null; declineReason: string | null },
   from?: string,
 ): string {
   return [
@@ -330,6 +370,12 @@ function replyNote(
     verdict.verdict === "opt_out" && verdict.trigger ? `→ Read as an opt-out because of: "${verdict.trigger}"` : null,
     verdict.verdict === "needs_look"
       ? `→ Needs a look, so not counted as a reply or an opt-out yet, and nothing is emailed to this address until you resolve it. ${verdict.review ?? ""}`.trim()
+      : null,
+    verdict.verdict === "declined"
+      ? `→ Read as a plain no: it ${verdict.declineReason ?? "says no"}${verdict.trigger ? ` ("${verdict.trigger}")` : ""}. A lead still being worked moves to Lost / Not interested, and nothing more is emailed to this address. It isn't treated as an opt-out; if it was misread, move the lead back to Responded.`
+      : null,
+    verdict.verdict === "acknowledged"
+      ? `→ Read as a courtesy note only: not counted as a reply or an opt-out, and the lead stays where it was. Nothing more is emailed to this address. If they meant more, use "Mark replied".`
       : null,
   ]
     .filter(Boolean)
@@ -353,6 +399,8 @@ type UnmatchedReply = {
   failedRecipient: string | null;
   /** Why the reply needs a look, when it does (nothing is emailed to the address until it's dealt with). */
   reviewReason: string | null;
+  /** The classifier's verdict, for a reply a person wrote. */
+  verdict: string | null;
   receivedAt: Date;
 };
 
@@ -373,6 +421,7 @@ export async function listUnmatchedReplies(take = 20): Promise<UnmatchedReply[]>
       kindReason: true,
       failedRecipient: true,
       reviewReason: true,
+      verdict: true,
       receivedAt: true,
     },
   });
@@ -435,12 +484,16 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
 
       // The stored verdict stands (the rules may have changed since); the
       // stored text is what the classifier kept, so re-reading it recovers
-      // an opt-out's trigger words.
-      const trigger = reply.optedOut ? classifyReply({ subject: reply.subject, text: reply.text }).trigger : null;
+      // an opt-out's or a decline's words. Rows from before verdicts were
+      // stored imply theirs from the opt-out and review fields.
+      const stored =
+        (reply.verdict as ReplyVerdict | null) ?? (reply.optedOut ? "opt_out" : reply.reviewReason ? "needs_look" : "positive");
+      const again = stored === "opt_out" || stored === "declined" ? classifyReply({ subject: reply.subject, text: reply.text }) : null;
       const verdict = {
-        verdict: (reply.optedOut ? "opt_out" : reply.reviewReason ? "needs_look" : "positive") as ReplyVerdict,
-        trigger,
-        review: reply.optedOut ? null : reply.reviewReason,
+        verdict: stored,
+        trigger: again?.trigger ?? null,
+        review: stored === "needs_look" ? reply.reviewReason : null,
+        declineReason: stored === "declined" ? (again?.declineReason ?? null) : null,
       };
       if (reply.optedOut && lead.email) {
         await suppressEmail(
@@ -448,7 +501,7 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
           {
             reason: `A reply from ${reply.fromEmail} about this lead asked not to be emailed`,
             source: "inbound_reply",
-            evidence: trigger,
+            evidence: verdict.trigger,
           },
           tx,
         );
@@ -457,6 +510,7 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
       await recordOnLead(tx, pipeline, lead, {
         verdict: verdict.verdict,
         review: verdict.review,
+        declineReason: verdict.declineReason,
         fromEmail: lead.email ?? reply.fromEmail,
         note,
         now: reply.receivedAt,
@@ -508,7 +562,7 @@ async function recordOnLead(
   tx: Db,
   pipeline: PipelineAdapter,
   initial: OutreachLead,
-  reply: { verdict: ReplyVerdict; review: string | null; fromEmail: string; note: string; now: Date },
+  reply: { verdict: ReplyVerdict; review: string | null; declineReason: string | null; fromEmail: string; note: string; now: Date },
 ): Promise<boolean> {
   // Contacted always means "was emailed" (only a send puts a lead there).
   const pitched = initial.status === "contacted" || initial.lastEmailedAt !== null || (await pipeline.hasBeenEmailed(tx, initial.id));

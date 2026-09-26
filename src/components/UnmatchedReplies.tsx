@@ -14,6 +14,8 @@ type UnmatchedReplyView = {
   optedOut: boolean;
   /** Why the reply needs a look (nothing is emailed to the address until it's dealt with), or null. */
   reviewReason: string | null;
+  /** The classifier's verdict: "declined" and "acknowledged" hold the address until the reply is dismissed. */
+  verdict: string | null;
   /** A delivery-failure notice whose failed address couldn't be matched to a lead. */
   bounce: boolean;
   kindReason: string | null;
@@ -104,6 +106,8 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
         <p>
           It is recorded as {lead.name}&apos;s reply ({lead.pipelineLabel}, now {lead.status}), exactly as if it came from their own
           address.
+          {reply.verdict === "declined" && " It reads as a plain no, so a lead still being worked moves to Lost / Not interested."}
+          {reply.verdict === "acknowledged" && " It only says thanks, so the lead stays where it is."}
           {reply.optedOut && (
             <> It reads as an opt-out, so {lead.email ? <strong>{lead.email}</strong> : "their address"} goes on the do-not-email list.</>
           )}
@@ -115,13 +119,16 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
     if (confirmed) act(() => attachReplyAction(reply.id, lead.pipeline, lead.id));
   }
 
+  const holds = reply.verdict === "declined" || reply.verdict === "acknowledged";
+
   async function dismiss() {
     const confirmed = await confirm({
       title: reply.bounce ? `Dismiss this bounce notice?` : `Dismiss the reply from ${reply.fromEmail}?`,
       body: (
         <p>
           It leaves this list without changing any lead.
-          {reply.reviewReason && " The address can then be emailed again — if the reply asks to stop, use Mark opted out instead."}
+          {(reply.reviewReason || holds) &&
+            " The address can then be emailed again — if the reply asks to stop, use Mark opted out instead."}
         </p>
       ),
       confirmLabel: "Dismiss",
@@ -157,6 +164,12 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
         {reply.text ?? <span className="muted">(The text of replies from before this list existed wasn&apos;t kept.)</span>}
       </p>
       {reply.optedOut && <p className="notice-warning">Read as an opt-out: {reply.fromEmail} is already on the do-not-email list.</p>}
+      {!reply.reviewReason && holds && (
+        <p className="notice-info">
+          {reply.verdict === "declined" ? "Read as a plain no" : "Only says thanks"} — not an opt-out and nothing to act on, but nothing
+          more is emailed to this address. Attach it to the lead it belongs to, or dismiss it.
+        </p>
+      )}
       {reply.reviewReason && (
         <div className="notice-warning flex flex-col gap-2">
           <p>

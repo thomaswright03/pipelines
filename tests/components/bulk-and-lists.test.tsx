@@ -28,6 +28,7 @@ const { default: UnmatchedReplies } = await import("@/components/UnmatchedReplie
 
 const PREVIEW: BulkPreview = {
   paused: false,
+  pausedByEnvironment: false,
   totalEligible: 3,
   leadIds: ["a", "b", "c"],
   willSend: 3,
@@ -36,7 +37,7 @@ const PREVIEW: BulkPreview = {
     { name: "Acme", email: "a@acme.test" },
     { name: "Bolt", email: "b@bolt.test" },
   ],
-  skipped: { duplicateInBatch: 0, alreadyPitched: 0, suppressed: 0 },
+  skipped: { duplicateInBatch: 0, alreadyPitched: 0, suppressed: 0, refusedEarlier: 0, replyNeedsLook: 0, alreadyAnswered: 0 },
   batchLimit: 50,
 };
 
@@ -137,16 +138,32 @@ describe("Do-not-email list", () => {
   it("removes an address only after confirming, and reports the result", async () => {
     settings.removeSuppressionByEmailAction.mockResolvedValue({ ok: true, message: "Removed stop@x.test from the list." });
     render(<DoNotEmailRows rows={rows} />);
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove stop@x.test from the list" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove from list" }));
     expect(await screen.findByText("Removed stop@x.test from the list.")).toBeTruthy();
     expect(settings.removeSuppressionByEmailAction).toHaveBeenCalledWith("stop@x.test");
   });
 
+  it("shows each address whole, with its date and reason, as a list a phone can read", () => {
+    const long = {
+      email: "accounts.receivable.department@very-long-business-name.example.test",
+      since: "Sep 1, 2026",
+      why: "Asked by phone",
+    };
+    render(<DoNotEmailRows rows={[...rows, long]} />);
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[1].textContent).toContain(long.email);
+    expect(items[1].textContent).toMatch(/Since Sep 1, 2026/);
+    expect(items[1].textContent).toMatch(/Why: Asked by phone/);
+    // It may wrap only after the @ or a hyphen, or before a dot, never mid-word.
+    expect(items[1].querySelectorAll("wbr")).toHaveLength(8);
+  });
+
   it("says the list didn't change when the server can't be reached", async () => {
     settings.removeSuppressionByEmailAction.mockRejectedValue(new TypeError("Failed to fetch"));
     render(<DoNotEmailRows rows={rows} />);
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove stop@x.test from the list" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove from list" }));
     expect(await screen.findByText(/Couldn't reach the server — the list didn't change/)).toBeTruthy();
   });
@@ -189,6 +206,7 @@ describe("Unmatched replies", () => {
     text: "Forwarding to the owner.",
     optedOut: false,
     reviewReason: null,
+    verdict: "positive" as string | null,
     bounce: false,
     kindReason: null,
     receivedAt: "Sep 25, 2026",
@@ -233,6 +251,14 @@ describe("Unmatched replies", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add to do-not-email list" }));
     expect(await screen.findByText("Added assistant@acme.test to the do-not-email list.")).toBeTruthy();
     expect(replies.optOutReplyAction).toHaveBeenCalledWith("r1");
+  });
+
+  it("says a plain no or a thank-you holds the address until it is dismissed", async () => {
+    replies.dismissReplyAction.mockResolvedValue({ ok: true, message: "Dismissed the reply." });
+    render(<UnmatchedReplies replies={[{ ...reply, text: "Thanks!", verdict: "acknowledged" }]} />);
+    expect(screen.getByText(/Only says thanks/).textContent).toMatch(/nothing more is\s+emailed to this address/);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect((await screen.findByRole("dialog")).textContent).toMatch(/can then be emailed again/);
   });
 
   it("reports a failed search and a failed dismiss plainly", async () => {

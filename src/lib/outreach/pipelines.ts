@@ -40,6 +40,8 @@ export type OutreachLead = {
   notes: string | null;
   /** Why the address is believed to be the lead's (see AgentLead.emailEvidence). */
   emailEvidence: string | null;
+  /** Which version of the address rules accepted it (null when a person entered or checked it). */
+  emailRulesVersion: string | null;
   /** A reply from this lead is waiting for the operator ("Reply needs a look"); nothing is sent to it until resolved. */
   replyNeedsReview: boolean;
   company: string | null; // Cold Outreach only
@@ -103,6 +105,8 @@ export type PipelineAdapter = {
   buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): OutreachEmail;
   findLead(db: Db, id: string): Promise<OutreachLead | null>;
   findLeadsByEmail(db: Db, email: string, excludeId?: string): Promise<OutreachLead[]>;
+  /** Leads with one of `emails` (lower-case) whose reply is waiting for the operator — they hold the address (send.ts). */
+  findReplyFlagged(db: Db, emails: string[]): Promise<{ email: string; name: string }[]>;
   /** Leads whose name equals one of `names` (case-insensitively), for duplicate checks. */
   findSameNamed(db: Db, names: string[]): Promise<NamedLead[]>;
   createLead(db: Db, data: NewLeadData): Promise<OutreachLead>;
@@ -272,6 +276,7 @@ function toOutreach(row: Row): OutreachLead {
     repliedAt: row.repliedAt,
     notes: row.notes,
     emailEvidence: row.emailEvidence,
+    emailRulesVersion: row.emailRulesVersion,
     replyNeedsReview: row.replyNeedsReview,
     company: row.company ?? null,
     brokerage: row.brokerage ?? null,
@@ -290,6 +295,15 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     async findLead(db, id) {
       const lead = await leads(db).findUnique({ where: { id } });
       return lead && toOutreach(lead);
+    },
+    async findReplyFlagged(db, emails) {
+      if (emails.length === 0) return [];
+      const rows = await leads(db).findMany({
+        where: { email: { in: emails }, replyNeedsReview: true },
+        orderBy: { createdAt: "asc" },
+        select: { email: true, name: true },
+      });
+      return rows.map((r) => ({ email: r.email!, name: r.name }));
     },
     async findLeadsByEmail(db, email, excludeId) {
       const rows = await leads(db).findMany({

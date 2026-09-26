@@ -15,7 +15,8 @@ import { ADDRESS_BLOCK_PREFIXES, UNVERIFIED_BLOCK_PREFIX } from "@/lib/outreach/
 import { getPipeline } from "@/lib/outreach/pipelines";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import { enteredByHandEvidence } from "@/lib/outreach/evidence";
+import { CHECKED_BY_HAND_PREFIX, ENTERED_BY_HAND_PREFIX, enteredByHandEvidence } from "@/lib/outreach/evidence";
+import { recordCorrection } from "@/lib/outreach/corrections";
 
 type AddressProblem = { message: string; link: { href: string; label: string } | null };
 
@@ -90,6 +91,17 @@ export async function editLead(
   if (!applied) {
     return { ok: false, error: `${lead.name} changed a moment ago (for example, it was just emailed) — reload the page and try again.` };
   }
+  // Replacing an address the lookup found: a sign it picked the wrong one.
+  if (newEmail !== lead.email && lead.email && lead.emailEvidence && !lead.emailEvidence.startsWith(ENTERED_BY_HAND_PREFIX)) {
+    await recordCorrection(prisma, {
+      kind: "address_corrected",
+      pipeline: pipelineId,
+      leadId,
+      email: lead.email,
+      detail: lead.emailEvidence,
+      rulesVersion: lead.emailRulesVersion,
+    });
+  }
   return { ok: true };
 }
 
@@ -108,7 +120,7 @@ export async function confirmAddress(pipelineId: PipelineId, leadId: string): Pr
     prisma,
     leadId,
     { status: lead.status, email: lead.email },
-    { sendBlockedReason: null, emailEvidence: `Checked by hand on ${formatDate(new Date())}.`, emailRulesVersion: null },
+    { sendBlockedReason: null, emailEvidence: `${CHECKED_BY_HAND_PREFIX} on ${formatDate(new Date())}.`, emailRulesVersion: null },
   );
   if (!applied) return { ok: false, error: `${lead.name} changed a moment ago — reload the page and try again.` };
   return { ok: true, message: `Marked ${lead.email} as checked — ${lead.name} can be emailed.` };

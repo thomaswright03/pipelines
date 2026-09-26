@@ -71,8 +71,10 @@ export async function runDailyColdOutreach(
 ): Promise<RunOutcome> {
   const now = options.now ?? Date.now;
   const startedAt = now();
-  if ((await getAppSettings()).outboundPaused) {
-    return { status: "skipped", summary: "Outbound email is paused, so the daily run didn't search or send." };
+  const settings = await getAppSettings();
+  if (settings.outboundPaused) {
+    const why = settings.pausedBy === "environment" ? "switched off on the server (OUTBOUND_EMAIL_DISABLED)" : "paused";
+    return { status: "skipped", summary: `Outbound email is ${why}, so the daily run didn't search or send.` };
   }
 
   // Discovery failing (Yelp down, rate-limited, key revoked) must not stop

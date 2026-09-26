@@ -146,12 +146,21 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
 function PreviewBody({ preview, noun }: { preview: BulkPreview; noun: { one: string; many: string } }) {
   const n = (count: number, prefix = "") => plural(count, `${prefix}${noun.one}`, `${prefix}${noun.many}`);
   if (preview.paused) {
-    return <p className="notice-warning">Outbound email is paused, so nothing can be sent. Resume it on the Settings page first.</p>;
+    return (
+      <p className="notice-warning">
+        {preview.pausedByEnvironment
+          ? "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so nothing can be sent. It comes back on only when that setting is removed from the hosting environment."
+          : "Outbound email is paused, so nothing can be sent. Resume it on the Settings page first."}
+      </p>
+    );
   }
   const skippedParts = [
     preview.skipped.alreadyPitched && `${n(preview.skipped.alreadyPitched)} whose address was already pitched`,
     preview.skipped.duplicateInBatch && `${n(preview.skipped.duplicateInBatch)} sharing an address with another ${noun.one} in this batch`,
     preview.skipped.suppressed && `${n(preview.skipped.suppressed)} on the do-not-email list`,
+    preview.skipped.refusedEarlier && `${n(preview.skipped.refusedEarlier)} whose address a mail server refused on an earlier send`,
+    preview.skipped.replyNeedsLook && `${n(preview.skipped.replyNeedsLook)} whose address has a reply waiting for a look (see Replies)`,
+    preview.skipped.alreadyAnswered && `${n(preview.skipped.alreadyAnswered)} whose address already answered with a no or a thank-you`,
   ].filter(Boolean);
   if (preview.willSend === 0) {
     return (

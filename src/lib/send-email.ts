@@ -17,6 +17,7 @@ import nodemailer from "nodemailer";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveTransportKind, type TransportKind } from "@/lib/mail-transport-kind";
+import { ENV_PAUSED_MESSAGE, OutboundDisabledError, outboundDisabledByEnvironment } from "@/lib/outbound-switch";
 
 export type MailMessage = {
   from: string;
@@ -150,6 +151,9 @@ export function describeConnectionTestError(err: unknown): string {
 }
 
 export async function sendOutreachEmail(from: string, to: string, subject: string, body: string): Promise<{ providerMessageId: string }> {
+  // The environment's emergency stop, checked here too in case any path
+  // reaches the transport without going through sendFirstTouch's check.
+  if (outboundDisabledByEnvironment()) throw new OutboundDisabledError();
   // Replies go explicitly to the sending address (the inbox the reply
   // Worker reads), and mail clients can offer their own unsubscribe button,
   // which emails that inbox with the subject "unsubscribe".
@@ -215,6 +219,7 @@ function serverReply(e: SmtpishError): string {
 /** Classifies a transport error for the operator and the send ledger. */
 export function classifySendError(err: unknown): SendFailure {
   const service = (message: string): SendFailure => ({ delivery: "not_sent", scope: "service", permanent: false, message });
+  if (err instanceof OutboundDisabledError) return service(ENV_PAUSED_MESSAGE);
   if (err instanceof MailConfigError) {
     // The technical detail (which setting is missing) is in the server log.
     return service("Email sending isn't set up yet — nothing was sent. Ask your developer to finish the email setup.");

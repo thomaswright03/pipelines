@@ -6,12 +6,19 @@ import { getReplyHealth } from "@/lib/outreach/reply-health";
 import { formatDateTime } from "@/lib/time";
 import { getQualitySignals } from "@/lib/outreach/corrections";
 import { StatCard } from "@/components/PipelineStatsWidgets";
+import FinderQuality from "@/components/FinderQuality";
+import { getFinderQuality } from "@/lib/outreach/finder-quality";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Replies" };
 
 export default async function RepliesPage() {
-  const [health, replies, quality] = await Promise.all([getReplyHealth(), listUnmatchedReplies(50), getQualitySignals()]);
+  const [health, replies, quality, finder] = await Promise.all([
+    getReplyHealth(),
+    listUnmatchedReplies(50),
+    getQualitySignals(),
+    getFinderQuality(),
+  ]);
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -37,11 +44,12 @@ export default async function RepliesPage() {
             How the automatic checks are doing (last {quality.sinceDays} days)
           </h2>
           <p className="mt-1 text-sm muted">
-            Each time you correct the app — undo an opt-out it read from a reply, mark someone opted out that it missed, or mark a found
-            address bounced — it counts here. Rising numbers mean the rules need a look.
+            Each time you correct the app — undo an opt-out it read from a reply, mark someone opted out that it missed, reopen a lead it
+            closed on a “no”, count a thank-you as a reply, or mark a found address bounced — it counts here. Rising numbers mean the rules
+            need a look.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <StatCard
             label="Opt-outs read from replies"
             value={quality.autoOptOuts}
@@ -53,8 +61,31 @@ export default async function RepliesPage() {
             value={quality.flaggedForReview}
             sublabel={`${quality.wrongPerson.toLocaleString("en-US")} said “wrong person”`}
           />
+          <StatCard
+            label="Plain no's closed automatically"
+            value={quality.declined}
+            sublabel={`${quality.declinesReversed.toLocaleString("en-US")} reopened by you`}
+          />
+          <StatCard
+            label="Thank-you-only replies"
+            value={quality.acknowledged}
+            sublabel={`${quality.courtesyWasReply.toLocaleString("en-US")} you counted as a reply`}
+          />
           <StatCard label="Found addresses that bounced" value={quality.foundAddressesBounced} sublabel="marked bounced by you" />
         </div>
+      </section>
+
+      <section aria-labelledby="finder-heading" className="card flex flex-col gap-3 p-4">
+        <div>
+          <h2 id="finder-heading" className="text-base font-semibold">
+            How found addresses are doing (last {finder.sinceDays} days)
+          </h2>
+          <p className="mt-1 text-sm muted">
+            Addresses the lookup found, by version of its rules, next to ones typed in by hand. A found address that bounces, reaches the
+            wrong person or had to be replaced means the lookup picked the wrong one; compare a new rules version with the one before it.
+          </p>
+        </div>
+        <FinderQuality data={finder} />
       </section>
 
       <section aria-labelledby="unmatched-heading" className="flex flex-col gap-3">
@@ -69,6 +100,7 @@ export default async function RepliesPage() {
             text: r.text,
             optedOut: r.optedOut,
             reviewReason: r.reviewReason,
+            verdict: r.verdict,
             bounce: r.kind === "bounce",
             kindReason: r.kindReason,
             receivedAt: formatDateTime(r.receivedAt),

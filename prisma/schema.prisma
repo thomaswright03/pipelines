@@ -158,9 +158,16 @@ model InboundReply {
   // Which version of the reply and automatic-mail rules made the kind,
   // opt-out and review verdicts above (see src/lib/outreach/rules-version.ts).
   rulesVersion    String?
+  // For a reply a person wrote: the classifier's verdict — "opt_out",
+  // "positive", "declined", "acknowledged" or "needs_look". A "declined" or
+  // "acknowledged" reply holds every further email to fromEmail (send.ts)
+  // without asking the operator to look. Null for automatic replies and
+  // bounces.
+  verdict         String?
 
   @@index([dedupeKey, receivedAt])
   @@index([receivedAt])
+  @@index([fromEmail, verdict])
 }
 
 // An operator correcting one of the automatic heuristics — the production
@@ -168,15 +175,20 @@ model InboundReply {
 // opt_out_reversed  an auto-detected opt-out removed from the do-not-email list
 // opt_out_missed    "Mark opted out" on a lead whose reply wasn't read as one
 // wrong_address     "Mark bounced" on an address the lookup found (not typed in)
+// address_corrected a found address changed by hand before it was pitched
+// decline_reversed  a lead closed by a reply read as a plain no, reopened
+// courtesy_was_reply "Mark replied" on a lead whose reply was read as a thank-you
 model OutreachCorrection {
-  id        String   @id @default(cuid())
-  kind      String
-  pipeline  String?
-  leadId    String?
-  email     String?
+  id           String   @id @default(cuid())
+  kind         String
+  pipeline     String?
+  leadId       String?
+  email        String?
   // What the heuristic had decided (e.g. the opt-out trigger words).
-  detail    String?
-  createdAt DateTime @default(now())
+  detail       String?
+  // The version of the rules that made the corrected decision, when known.
+  rulesVersion String?
+  createdAt    DateTime @default(now())
 
   @@index([kind, createdAt])
 }

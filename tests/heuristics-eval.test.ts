@@ -22,6 +22,7 @@ import { AUTO_REPLY_DEV, AUTO_REPLY_HELD_OUT, BOUNCE_DEV, BOUNCE_HELD_OUT } from
 import { REVIEW_DEV, REVIEW_HELD_OUT, REVIEW_UNLISTED_HELD_OUT } from "./corpus/review";
 import { REAL_REPLY_HELD_OUT, type ReplyOutcome } from "./corpus/real-replies";
 import { REPLY_HELD_OUT_R10 } from "./corpus/replies-held-out-r10";
+import { REPLY_HELD_OUT_R11 } from "./corpus/replies-held-out-r11";
 import { SITE_DEV, SITE_HELD_OUT } from "./corpus/sites";
 
 type Score = { precision: number; recall: number; tp: number; fp: number; fn: number; tn: number };
@@ -70,62 +71,92 @@ const firstLine = (text: string) => JSON.stringify(text.split("\n")[0]);
  */
 type Intent = ReplyOutcome | "not_opt_out";
 type IntentCase = { text: string; subject?: string; intent: Intent };
+type Verdict = ReturnType<typeof classifyReply>["verdict"];
 type ReplySplitScore = {
   name: string;
   total: number;
-  needsLook: number;
+  /** Replies per verdict. */
+  verdicts: Record<string, number>;
   optOuts: number;
   autoOptOuts: number;
   positives: number;
   autoPositives: number;
+  /** Opt-outs the rules held (declined/acknowledged) instead of suppressing: never emailed again, but not on the list. */
+  optOutsHeldOnly: string[];
+  /** Interested replies closed as a decline or filed as a courtesy note. */
+  positivesMissed: string[];
   unsafe: string[];
 };
 
-/** An outcome the app must never reach for a reply of this intent. */
-function isUnsafe(intent: Intent, verdict: ReplyOutcome): boolean {
-  if (verdict === "opt_out") return intent !== "opt_out"; // suppressed someone who didn't ask
-  if (verdict === "positive") return intent === "opt_out" || intent === "needs_look"; // counted a stop or a no as a yes
-  return false; // needs_look is always safe: the operator decides
+/**
+ * An outcome the app must never reach for a reply of this intent: an
+ * opt-out, a decline or a complaint counted as a positive reply, or a reply
+ * that doesn't ask to stop suppressed as an opt-out. "needs_look",
+ * "declined" and "acknowledged" all hold every email to the address, so
+ * none of them can email someone who asked to stop.
+ */
+function isUnsafe(intent: Intent, verdict: Verdict): boolean {
+  if (verdict === "opt_out") return intent !== "opt_out";
+  if (verdict === "positive") return intent === "opt_out" || intent === "needs_look" || intent === "declined";
+  return false;
 }
 
-/** Scores one split of labelled replies on the three outcomes, and prints it with every unsafe or needs-a-look case. */
+/** Scores one split of labelled replies on the app's outcomes, and prints it with every unsafe, missed or needs-a-look case. */
 function scoreReplies(name: string, cases: IntentCase[]): ReplySplitScore {
   const result: ReplySplitScore = {
     name,
     total: cases.length,
-    needsLook: 0,
+    verdicts: { opt_out: 0, positive: 0, declined: 0, acknowledged: 0, needs_look: 0 },
     optOuts: 0,
     autoOptOuts: 0,
     positives: 0,
     autoPositives: 0,
+    optOutsHeldOnly: [],
+    positivesMissed: [],
     unsafe: [],
   };
   const lines: string[] = [];
   for (const c of cases) {
     const verdict = classifyReply({ subject: c.subject ?? "Re: hello", text: c.text }).verdict;
     const label = (c.subject ? `[${c.subject}] ` : "") + firstLine(c.text);
-    if (verdict === "needs_look") result.needsLook++;
+    result.verdicts[verdict] = (result.verdicts[verdict] ?? 0) + 1;
     if (c.intent === "opt_out") {
       result.optOuts++;
       if (verdict === "opt_out") result.autoOptOuts++;
+      if (verdict === "declined" || verdict === "acknowledged") {
+        result.optOutsHeldOnly.push(label);
+        lines.push(`  held, not suppressed: opt_out read as ${verdict}: ${label}`);
+      }
     }
     if (c.intent === "positive") {
       result.positives++;
       if (verdict === "positive") result.autoPositives++;
+      if (verdict === "declined" || verdict === "acknowledged") {
+        result.positivesMissed.push(label);
+        lines.push(`  interest missed: positive read as ${verdict}: ${label}`);
+      }
     }
     if (isUnsafe(c.intent, verdict)) {
       result.unsafe.push(label);
       lines.push(`  UNSAFE: ${c.intent} read as ${verdict}: ${label}`);
     } else if (verdict === "needs_look" && c.intent !== "needs_look") {
       lines.push(`  needs a look: ${c.intent}: ${label}`);
+    } else if (
+      verdict !== c.intent &&
+      (["declined", "acknowledged"].includes(c.intent) || ["declined", "acknowledged"].includes(verdict))
+    ) {
+      lines.push(`  other: ${c.intent} read as ${verdict}: ${label}`);
     }
   }
   const rate = (n: number, d: number) => (d === 0 ? "—" : `${n} of ${d} (${pct(n / d)})`);
+  const v = result.verdicts;
   console.log(
     [
       `Reply outcomes [${name}, synthetic]: ${result.total} replies; unsafe ${result.unsafe.length}; ` +
-        `needs a look ${rate(result.needsLook, result.total)}; opt-outs suppressed automatically ${rate(result.autoOptOuts, result.optOuts)}; ` +
-        `interested replies counted automatically ${rate(result.autoPositives, result.positives)}`,
+        `needs a look ${rate(v.needs_look!, result.total)}; declined ${v.declined}, acknowledged ${v.acknowledged}; ` +
+        `opt-outs suppressed automatically ${rate(result.autoOptOuts, result.optOuts)}; ` +
+        `interested replies counted automatically ${rate(result.autoPositives, result.positives)}; ` +
+        `opt-outs held but not suppressed ${result.optOutsHeldOnly.length}; interested replies closed or filed ${result.positivesMissed.length}`,
       ...lines,
     ].join("\n"),
   );
@@ -147,7 +178,8 @@ describe("heuristics on the labelled evaluation sets", () => {
     REPLY_UNLISTED_HELD_OUT.length +
     REVIEW_HELD_OUT.length +
     REVIEW_UNLISTED_HELD_OUT.length +
-    REPLY_HELD_OUT_R10.length
+    REPLY_HELD_OUT_R10.length +
+    REPLY_HELD_OUT_R11.length
   } held-out)`, () => {
     expect(REPLY_CORPUS.length).toBeGreaterThanOrEqual(100);
     const fromOptOutLabels = (cases: typeof REPLY_CORPUS): IntentCase[] =>
@@ -168,20 +200,29 @@ describe("heuristics on the labelled evaluation sets", () => {
       scoreReplies("held-out, rounds 5-7 decline labels", fromReviewLabels(REVIEW_HELD_OUT)),
       scoreReplies("held-out, round 9 unlisted declines", fromReviewLabels(REVIEW_UNLISTED_HELD_OUT)),
       scoreReplies("held-out, round 10 batch", fromOutcomes(REPLY_HELD_OUT_R10)),
+      scoreReplies("held-out, round 11 batch", fromOutcomes(REPLY_HELD_OUT_R11)),
     ];
     const all = [dev, ...heldOut];
 
     // Never an unsafe outcome, on any split.
     for (const split of all) expect(split.unsafe, `unsafe outcomes on the ${split.name} split`).toEqual([]);
+    // A plain no or a courtesy note holds the address but acts on nothing
+    // else; it must never swallow an opt-out (which must be suppressed) or
+    // an interested reply (which must be counted). Zero on every split.
+    for (const split of all) {
+      expect(split.optOutsHeldOnly, `opt-outs read as a plain no or a thank-you on the ${split.name} split`).toEqual([]);
+      expect(split.positivesMissed, `interested replies read as a plain no or a thank-you on the ${split.name} split`).toEqual([]);
+    }
     // Floors on what the rules handle alone, a little under the scores
-    // measured on 2026-09-26 (round 10), so the rules can't quietly slide
-    // into sending everything to the operator. Lowering one needs a reason
-    // in the commit message.
+    // measured on 2026-09-26 (round 11: 25.7% of held-out replies need a
+    // look, down from 40.3% with the round-10 rules), so the rules can't
+    // quietly slide back into sending everything to the operator. Lowering
+    // one needs a reason in the commit message.
     const sum = (key: "optOuts" | "autoOptOuts" | "positives" | "autoPositives" | "total" | "needsLook") =>
-      heldOut.reduce((n, split) => n + split[key], 0);
+      heldOut.reduce((n, split) => n + (key === "needsLook" ? split.verdicts.needs_look! : split[key]), 0);
     expect(sum("autoOptOuts") / sum("optOuts"), "held-out opt-outs suppressed automatically").toBeGreaterThanOrEqual(0.75);
     expect(sum("autoPositives") / sum("positives"), "held-out interested replies counted automatically").toBeGreaterThanOrEqual(0.75);
-    expect(sum("needsLook") / sum("total"), "held-out share of replies needing a look").toBeLessThanOrEqual(0.5);
+    expect(sum("needsLook") / sum("total"), "held-out share of replies needing a look").toBeLessThanOrEqual(0.3);
     console.log(
       `Reply outcomes [held-out, all splits, synthetic]: ${sum("total")} replies — ${sum("needsLook")} (${pct(sum("needsLook") / sum("total"))}) need a look; ` +
         `${sum("autoOptOuts")} of ${sum("optOuts")} opt-outs suppressed automatically, ${sum("autoPositives")} of ${sum("positives")} interested replies counted automatically; 0 unsafe.`,

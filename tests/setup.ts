@@ -17,4 +17,6 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Tests that set OUTBOUND_EMAIL_DISABLED (and the like) with vi.stubEnv.
+  vi.unstubAllEnvs();
 });

@@ -158,7 +158,7 @@ describe("LeadActions: what is offered", () => {
         replyNeedsReview: true,
         replyReviewReason: "It may be asking not to be emailed (“exclude”).",
       },
-      { latestReply: { text: "Kindly exclude me from future mailings.", receivedAt: "Sep 26, 2026, 9:00 AM" } },
+      { latestReply: { text: "Kindly exclude me from future mailings.", receivedAt: "Sep 26, 2026, 9:00 AM", verdict: "needs_look" } },
     );
     const banner = screen.getByRole("region", { name: "Reply needs a look" });
     expect(within(banner).getByText("Kindly exclude me from future mailings.")).toBeTruthy();
@@ -180,6 +180,28 @@ describe("LeadActions: what is offered", () => {
     renderLead({ replyNeedsReview: true, replyReviewReason: "It shows no clear yes, question or request." });
     expect(screen.queryByRole("button", { name: "Send outreach email" })).toBeNull();
     expect(screen.getByRole("button", { name: "Keep as New" })).toBeTruthy();
+  });
+
+  it("shows a thank-you-only reply, says the address is held, and still offers Mark replied", () => {
+    renderLead(
+      { status: "contacted", emailed: true },
+      { latestReply: { text: "Thanks!", receivedAt: "Sep 26, 2026, 9:00 AM", verdict: "acknowledged" } },
+    );
+    const note = screen.getByRole("region", { name: "Replied with a thank-you only" });
+    expect(within(note).getByText("Thanks!")).toBeTruthy();
+    expect(note.textContent).toMatch(/No more email goes to\s+this address/);
+    expect(note.textContent).toMatch(/moves to phone outreach after a week/);
+    expect(screen.getByRole("button", { name: "Mark replied" })).toBeTruthy();
+  });
+
+  it("shows a plain no and how to undo it", () => {
+    renderLead(
+      { status: "lost", emailed: true },
+      { latestReply: { text: "Not interested, thanks.", receivedAt: "Sep 26, 2026, 9:00 AM", verdict: "declined" } },
+    );
+    const note = screen.getByRole("region", { name: "Replied with a plain no" });
+    expect(note.textContent).toMatch(/move the lead back to Responded/);
+    expect(screen.queryByRole("region", { name: "Reply needs a look" })).toBeNull();
   });
 
   it("offers Find email when there is no address", async () => {

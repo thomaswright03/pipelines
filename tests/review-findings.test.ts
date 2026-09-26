@@ -58,26 +58,23 @@ describe("plain opt-out replies (finding 2)", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } })).status).toBe("lost");
   });
 
-  it("an ambiguous 'not interested' flags the lead for a look instead of moving it to Responded", async () => {
+  it("a plain 'not interested' closes the lead without suppressing the address, and the operator can still opt it out", async () => {
     const agent = await makeAgentLead({ email: "meh@reply.test", status: "contacted", lastEmailedAt: new Date() });
 
     const json = await (await inbound({ from: "meh@reply.test", text: "Not interested at this time." })).json();
 
-    expect(json).toMatchObject({ optedOut: false, needsReview: [`dataleadsell:${agent.id}`] });
-    expect(json.review).toMatch(/not interested/);
+    expect(json).toMatchObject({ optedOut: false, verdict: "declined", review: null, needsReview: [] });
     const after = await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } });
-    expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true });
-    expect(after.replyReviewReason).toMatch(/not interested/);
-    // Not counted as a reply (reply rate, call deck) until the operator says it is one.
-    expect(after.repliedAt).toBeNull();
+    expect(after).toMatchObject({ status: "not_interested", callOutcome: "not_interested", replyNeedsReview: false });
+    // A plain no is a reply (it counts in the reply rate), but not an opt-out.
+    expect(after.repliedAt).not.toBeNull();
     expect(await prisma.suppressedEmail.count()).toBe(0);
-    expect((await prisma.inboundReply.findFirstOrThrow()).reviewReason).toMatch(/not interested/);
+    expect(await prisma.inboundReply.findFirstOrThrow()).toMatchObject({ verdict: "declined", reviewReason: null });
 
-    // The operator decides it was an opt-out: the flag clears and the miss is counted.
+    // The operator decides it was an opt-out after all: the miss is counted.
     expect(await markOptedOutAction("dataleadsell", agent.id)).toMatchObject({ ok: true });
-    const decided = await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } });
-    expect(decided).toMatchObject({ status: "not_interested", replyNeedsReview: false, replyReviewReason: null });
-    expect(await getQualitySignals()).toMatchObject({ flaggedForReview: 1, optOutsMissed: 1 });
+    expect(await prisma.suppressedEmail.findUnique({ where: { email: "meh@reply.test" } })).not.toBeNull();
+    expect(await getQualitySignals()).toMatchObject({ flaggedForReview: 0, declined: 1, optOutsMissed: 1 });
   });
 });
 

@@ -3,11 +3,15 @@
 //
 // - Only a lead in "new" with an address and no block flag gets the
 //   first-touch pitch.
-// - Nothing is sent while outbound email is paused (Settings).
+// - Nothing is sent while outbound email is paused (Settings, or the
+//   OUTBOUND_EMAIL_DISABLED environment variable).
 // - Nothing is sent to a suppressed (opted-out) address.
 // - Nothing is sent to an address whose reply is waiting for the operator
 //   ("Reply needs a look", on any lead in either pipeline, or unmatched on
 //   the Replies page): the reply may be asking not to be emailed.
+// - Nothing is sent to an address that already answered with a plain no or
+//   only a courtesy note ("declined" / "acknowledged" replies): no look is
+//   needed, and no more cold email goes to it either.
 // - Each address gets at most one pitch per pipeline — and, unless the
 //   owner allows it in Settings, at most one pitch across both pipelines.
 // - The lead and the address are claimed atomically *before* the SMTP call
@@ -18,10 +22,12 @@
 import { prisma } from "@/lib/db";
 import { logError, logWarn } from "@/lib/log";
 import { classifySendError, sendOutreachEmail } from "@/lib/send-email";
-import { getAppSettings, PAUSED_MESSAGE, recordSendFailure } from "@/lib/outreach/settings";
+import { getAppSettings, pausedMessage, recordSendFailure } from "@/lib/outreach/settings";
 import { ALL_PIPELINES, getPipeline, type Db, type OutreachLead } from "@/lib/outreach/pipelines";
 import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { statusLabel } from "@/lib/lead-status";
+import { HOLDING_VERDICTS } from "@/lib/outreach/reply-classifier";
+import { formatDate } from "@/lib/time";
 
 // An arbitrary constant namespacing this app's advisory locks.
 const ADDRESS_LOCK_NAMESPACE = 4242;
@@ -32,8 +38,16 @@ export const OPTED_OUT_BLOCK_PREFIX = "Opted out";
 export const UNVERIFIED_BLOCK_PREFIX = "Unverified address";
 /** The recipient's mail server refused the address for good (e.g. 550 user unknown). */
 export const REFUSED_BLOCK_PREFIX = "Address refused by the mail server";
+/** The address already answered a pitch with a plain no or a courtesy note. */
+export const ANSWERED_BLOCK_PREFIX = "Already answered";
 /** Blocks that are about the lead's current address, so they end when the address changes. */
-export const ADDRESS_BLOCK_PREFIXES = [DUPLICATE_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX, UNVERIFIED_BLOCK_PREFIX, REFUSED_BLOCK_PREFIX];
+export const ADDRESS_BLOCK_PREFIXES = [
+  DUPLICATE_BLOCK_PREFIX,
+  OPTED_OUT_BLOCK_PREFIX,
+  UNVERIFIED_BLOCK_PREFIX,
+  REFUSED_BLOCK_PREFIX,
+  ANSWERED_BLOCK_PREFIX,
+];
 /**
  * Temporary refusals (4xx: mailbox full, greylisting) of one address after
  * which it is treated like a permanent refusal, so it can't hold up every
@@ -52,7 +66,9 @@ type SendRefusal =
   /** The recipient's mail server refused the address (now, or on an earlier send). */
   | "address_refused"
   /** A reply from this address is waiting for the operator to read it. */
-  | "reply_needs_look";
+  | "reply_needs_look"
+  /** This address already answered with a plain no or a courtesy note. */
+  | "already_answered";
 
 type SendOutcome =
   | { ok: true; leadId: string; leadName: string; email: string; message: string; warning?: string }
@@ -90,21 +106,58 @@ export async function findExistingPitch(
   return { pipeline: other, leadId: row.leadId, leadName: lead?.name ?? null, refused: row.state === "refused" };
 }
 
+/** Why a reply from an address holds every send to it. */
+export type ReplyHold =
+  /** A reply waiting for the operator: on a lead ("on Jane's page in Cold Outreach") or on the Replies page. */
+  | { kind: "needs_look"; where: string }
+  /** A plain no or a courtesy note: nothing more is sent, and nobody needs to look. */
+  | { kind: "answered"; verdict: string; text: string | null; receivedAt: Date };
+
 /**
- * Where a reply from `email` is waiting for the operator, if anywhere: a lead
- * flagged "Reply needs a look" in either pipeline, or a reply on the Replies
- * page that matched no lead and hasn't been dealt with.
+ * What holds sends to each of `emails` (lower-case), if anything: a lead
+ * flagged "Reply needs a look" in either pipeline, a reply on the Replies
+ * page that matched no lead and needs a look, or a reply that said no or
+ * only thanks (not dismissed from the Replies page).
  */
-export async function pendingReplyHold(db: Db, email: string): Promise<string | null> {
+export async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHold>> {
+  const holds = new Map<string, ReplyHold>();
+  if (emails.length === 0) return holds;
   for (const pipeline of ALL_PIPELINES) {
-    const flagged = (await pipeline.findLeadsByEmail(db, email)).find((l) => l.replyNeedsReview);
-    if (flagged) return `on ${flagged.name}'s page in ${pipeline.label}`;
+    for (const flagged of await pipeline.findReplyFlagged(db, emails)) {
+      if (!holds.has(flagged.email))
+        holds.set(flagged.email, { kind: "needs_look", where: `on ${flagged.name}'s page in ${pipeline.label}` });
+    }
   }
-  const unmatched = await db.inboundReply.findFirst({
-    where: { fromEmail: email, kind: "reply", reviewReason: { not: null }, matched: { isEmpty: true }, resolvedAt: null },
-    select: { id: true },
-  });
-  return unmatched ? "on the Replies page" : null;
+  const [unmatched, answered] = await Promise.all([
+    db.inboundReply.findMany({
+      where: { fromEmail: { in: emails }, kind: "reply", reviewReason: { not: null }, matched: { isEmpty: true }, resolvedAt: null },
+      select: { fromEmail: true },
+    }),
+    db.inboundReply.findMany({
+      where: {
+        fromEmail: { in: emails },
+        verdict: { in: [...HOLDING_VERDICTS] },
+        OR: [{ resolution: null }, { resolution: { not: "dismissed" } }],
+      },
+      orderBy: { receivedAt: "desc" },
+      select: { fromEmail: true, verdict: true, text: true, receivedAt: true },
+    }),
+  ]);
+  for (const row of unmatched)
+    if (!holds.has(row.fromEmail)) holds.set(row.fromEmail, { kind: "needs_look", where: "on the Replies page" });
+  for (const row of answered) {
+    if (!holds.has(row.fromEmail)) {
+      holds.set(row.fromEmail, { kind: "answered", verdict: row.verdict!, text: row.text, receivedAt: row.receivedAt });
+    }
+  }
+  return holds;
+}
+
+/** How a send refused for an answered address explains it: "said no (“Not interested.”) on Sep 26, 2026". */
+function describeAnswer(hold: Extract<ReplyHold, { kind: "answered" }>): string {
+  const words = hold.text ? hold.text.replace(/\s+/g, " ").trim() : "";
+  const quote = words ? ` (“${words.length > 60 ? `${words.slice(0, 60)}…` : words}”)` : "";
+  return `${hold.verdict === "declined" ? "said no" : "sent a courtesy reply"}${quote} on ${formatDate(hold.receivedAt)}`;
 }
 
 function describeExistingPitch(existing: { pipeline: PipelineId; leadName: string | null }, self: PipelineId): string {
@@ -155,16 +208,22 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
     recipientId = await prisma.$transaction(async (tx) => {
       await lockAddress(tx, email);
       const settings = await getAppSettings(tx);
-      if (settings.outboundPaused) throw new Refusal("paused", PAUSED_MESSAGE);
+      if (settings.outboundPaused) throw new Refusal("paused", pausedMessage(settings));
 
       if (await tx.suppressedEmail.findUnique({ where: { email } })) {
         throw new Refusal("suppressed", `${email} opted out of our emails — nothing was sent.`);
       }
-      const hold = await pendingReplyHold(tx, email);
-      if (hold) {
+      const hold = (await replyHolds(tx, [email])).get(email);
+      if (hold?.kind === "needs_look") {
         throw new Refusal(
           "reply_needs_look",
-          `A reply from ${email} is waiting for a look ${hold} — nothing was sent to ${lead.name}. Resolve that reply first.`,
+          `A reply from ${email} is waiting for a look ${hold.where} — nothing was sent to ${lead.name}. Resolve that reply first.`,
+        );
+      }
+      if (hold?.kind === "answered") {
+        throw new Refusal(
+          "already_answered",
+          `${email} already ${describeAnswer(hold)}, so no more email goes to it — nothing was sent to ${lead.name}.`,
         );
       }
 
@@ -325,6 +384,8 @@ async function flagIfPermanent(pipelineId: PipelineId, lead: OutreachLead, refus
     reason = `${DUPLICATE_BLOCK_PREFIX} — ${email} was already pitched, so this lead is never auto-sent.`;
   } else if (refusal.reason === "suppressed") {
     reason = `${OPTED_OUT_BLOCK_PREFIX} — ${email} is on the suppression list.`;
+  } else if (refusal.reason === "already_answered") {
+    reason = `${ANSWERED_BLOCK_PREFIX} — ${email} already answered a pitch (a plain no or a courtesy note), so this lead is never auto-sent.`;
   } else if (refusal.reason === "address_refused") {
     reason = `${REFUSED_BLOCK_PREFIX} — the mail server refused ${email} on an earlier send, so this lead is never auto-sent. Change the address to try another.`;
   }
@@ -353,19 +414,35 @@ const DEFAULT_SEND_DELAY_MS = 1_000;
 
 export type BulkPreview = {
   paused: boolean;
+  /** Paused by the OUTBOUND_EMAIL_DISABLED environment variable rather than the Settings switch. */
+  pausedByEnvironment: boolean;
   totalEligible: number;
   leadIds: string[];
   willSend: number;
   distinctAddresses: number;
   sample: { name: string; email: string }[];
-  skipped: { duplicateInBatch: number; alreadyPitched: number; suppressed: number };
+  /** Leads the send will skip, by the reason it will give. */
+  skipped: {
+    duplicateInBatch: number;
+    alreadyPitched: number;
+    suppressed: number;
+    /** The recipient's mail server refused the address on an earlier send. */
+    refusedEarlier: number;
+    /** A reply from the address is waiting for the operator. */
+    replyNeedsLook: number;
+    /** The address already answered with a plain no or a courtesy note. */
+    alreadyAnswered: number;
+  };
   batchLimit: number;
 };
 
 /**
  * What a bulk send would do right now: which leads it would take, how many
- * distinct addresses that is, and which would be skipped and why. Read-only;
- * the send itself re-checks every rule atomically per lead.
+ * distinct addresses that is, and which would be skipped and why — every
+ * refusal sendFirstTouch can know before sending (do-not-email list, an
+ * earlier pitch or mail-server refusal of the address, a reply holding it,
+ * the same address twice in the batch). Read-only; the send itself
+ * re-checks every rule atomically per lead.
  */
 export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPreview> {
   const pipeline = getPipeline(pipelineId);
@@ -376,22 +453,30 @@ export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPrevi
   ]);
 
   const emails = [...new Set(batch.map((l) => l.email!.toLowerCase()))];
-  const [pitched, suppressed] = await Promise.all([
+  const [pitched, suppressed, holds] = await Promise.all([
     prisma.outreachRecipient.findMany({
       where: { email: { in: emails }, ...(settings.allowCrossPipelineRepeats ? { pipeline: pipelineId } : {}) },
-      select: { email: true },
+      select: { email: true, state: true },
     }),
     prisma.suppressedEmail.findMany({ where: { email: { in: emails } }, select: { email: true } }),
+    replyHolds(prisma, emails),
   ]);
+  // Checked in the order sendFirstTouch checks them, so each skip is
+  // counted under the reason the send will give.
+  const refusedSet = new Set(pitched.filter((r) => r.state === "refused").map((r) => r.email));
   const pitchedSet = new Set(pitched.map((r) => r.email));
   const suppressedSet = new Set(suppressed.map((r) => r.email));
 
   const seen = new Set<string>();
-  const skipped = { duplicateInBatch: 0, alreadyPitched: 0, suppressed: 0 };
+  const skipped = { duplicateInBatch: 0, alreadyPitched: 0, suppressed: 0, refusedEarlier: 0, replyNeedsLook: 0, alreadyAnswered: 0 };
   const sendable: OutreachLead[] = [];
   for (const lead of batch) {
     const email = lead.email!.toLowerCase();
+    const hold = holds.get(email);
     if (suppressedSet.has(email)) skipped.suppressed++;
+    else if (hold?.kind === "needs_look") skipped.replyNeedsLook++;
+    else if (hold?.kind === "answered") skipped.alreadyAnswered++;
+    else if (refusedSet.has(email)) skipped.refusedEarlier++;
     else if (pitchedSet.has(email)) skipped.alreadyPitched++;
     else if (seen.has(email)) skipped.duplicateInBatch++;
     else {
@@ -402,6 +487,7 @@ export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPrevi
 
   return {
     paused: settings.outboundPaused,
+    pausedByEnvironment: settings.pausedBy === "environment",
     totalEligible,
     leadIds: batch.map((l) => l.id),
     willSend: sendable.length,

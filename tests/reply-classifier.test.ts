@@ -140,29 +140,111 @@ describe("extractNewReplyText", () => {
   });
 });
 
-describe("classifyReply — replies that need a human look", () => {
+describe("classifyReply — complaints need a human look", () => {
   const cases: [string, string, RegExp][] = [
-    ["a bare 'not interested'", "Not interested.", /not interested/],
-    ["'no thanks'", "No thanks, I have a lead source already.", /no thanks/],
     ["wrong person", "You have the wrong person, Jane left the brokerage.", /wrong person/],
     ["how did you get my email", "How did you get my email?", /how we got their address/],
     ["spam", "This is spam.", /spam/],
-    ["'No, thank you.' with a comma", "No, thank you.", /no thanks/],
-    ["'not for us'", "Not for us, thanks", /isn't for them/],
-    ["'we're good, no need'", "We're good, no need.", /all set/],
-    ["'we don't need a website'", "We don't need a website.", /don't need it/],
     ["'who is this'", "Who is this?", /who we are/],
-    ["a bare 'Nope.'", "Nope.", /says no/],
     ["'where'd you get my email' (contraction)", "Where'd you get my email?", /how we got their address/],
+    ["'not the right person'", "I'm not the right person for this.", /wrong person/],
+    ["a no that is also a complaint", "Not interested. Is this a scam?", /scam/],
   ];
   for (const [label, text, reason] of cases) {
     it(label, () => {
       const result = classifyReply({ subject: "Re: Probate leads", text });
-      expect(result.optOut).toBe(false);
+      expect(result).toMatchObject({ verdict: "needs_look", optOut: false });
       expect(result.review).toMatch(reason);
     });
   }
+});
 
+describe("classifyReply — a plain no is a decline, never an opt-out", () => {
+  const cases: [string, string, RegExp][] = [
+    ["a bare 'not interested'", "Not interested.", /not interested/],
+    ["'no thanks'", "No thanks, I have a lead source already.", /no thanks/],
+    ["'No, thank you.' with a comma", "No, thank you.", /no thanks/],
+    ["'not for us'", "Not for us, thanks", /isn't for them/],
+    ["'we're good, no need'", "We're good, no need.", /all set/],
+    ["'we don't need a website'", "We don't need a website.", /don't need it/],
+    ["a bare 'Nope.'", "Nope.", /says no/],
+    ["'Pass.'", "Pass.", /pass/],
+    ["'not the right business'", "We are not the right business for this", /isn't for them/],
+    ["with a signature", "Thanks but no thanks.\n\nBest,\nKevin Ortiz\nOrtiz Plumbing\n(602) 555-0100", /no thanks/],
+  ];
+  for (const [label, text, reason] of cases) {
+    it(label, () => {
+      const result = classifyReply({ subject: "Re: Probate leads", text });
+      expect(result).toMatchObject({ verdict: "declined", optOut: false, review: null });
+      expect(result.declineReason).toMatch(reason);
+      expect(result.trigger).toBeTruthy();
+    });
+  }
+
+  it.each([
+    ["No thanks — but what does the premium plan cost?", /also asks a question/],
+    ["Not interested right now, call me in March.", /also sounds interested/],
+    ["We're all set, but send me your rates for next year.", /also sounds interested/],
+  ])("a no that also sounds interested (%j) needs a look", (text, reason) => {
+    const result = classifyReply({ text });
+    expect(result.verdict).toBe("needs_look");
+    expect(result.review).toMatch(reason);
+  });
+
+  it.each(["Not interested, stop emailing me.", "No thanks. Remove me.", "Nope. Unsubscribe."])(
+    "a no with a stop request (%j) is an opt-out",
+    (text) => {
+      expect(classifyReply({ text })).toMatchObject({ verdict: "opt_out", optOut: true });
+    },
+  );
+
+  it.each(["Not interested. No further contact.", "No thanks, and I never signed up for this."])(
+    "a no with a stop word (%j) needs a look, since it may be asking not to be emailed",
+    (text) => {
+      expect(classifyReply({ text })).toMatchObject({ verdict: "needs_look", mayBeOptOut: true });
+    },
+  );
+});
+
+describe("classifyReply — a courtesy note on its own is acknowledged", () => {
+  it.each([
+    "Thanks!",
+    "Thank you.",
+    "thx",
+    "Got it, thanks.",
+    "Received, thank you",
+    "OK",
+    "Ok thank you",
+    "Noted.",
+    "Much appreciated.",
+    "Thanks so much!\n\nSent from my iPhone",
+    "Thanks,\nMaria",
+    "Thank you — Bob Smith",
+    "Hi Thomas, thanks for the email.",
+    "Hey, thanks!",
+    "Thank you 🙏",
+    "Thanks for reaching out.",
+    `Thank you!\n\nOn Thu, Sep 25, 2026 at 8:33 AM Thomas Wright <thomas@wright-ai-solutions.com> wrote:\n${quoted(coldPitch)}`,
+  ])("%j", (text) => {
+    expect(classifyReply({ text })).toMatchObject({ verdict: "acknowledged", optOut: false, review: null, trigger: null });
+  });
+
+  it.each([
+    ["a thank-you with a question", "Thanks! How much is it?", "positive"],
+    ["a thank-you with a request", "Got it, send the details.", "positive"],
+    ["a thank-you with a no", "Thanks, but no.", "declined"],
+    ["a thank-you with a stop request", "Thanks, remove me.", "opt_out"],
+    ["a thank-you that hedges", "Thanks, I guess?", "needs_look"],
+    ["a thank-you in another language", "Gracias.", "needs_look"],
+    ["a thank-you signed 'No'", "Thanks\nNo", "needs_look"],
+    ["a thank-you with a complaint", "Thanks, but who is this?", "needs_look"],
+    ["a thank-you with more to say", "Thanks, the owner is away until Monday.", "needs_look"],
+  ])("but not %s", (_label, text, verdict) => {
+    expect(classifyReply({ text }).verdict).toBe(verdict);
+  });
+});
+
+describe("classifyReply — other replies that need a human look", () => {
   it("a reply mainly in another language that isn't an opt-out", () => {
     for (const text of ["Gracias, me interesa. Llámeme mañana.", "Bonjour, oui ça m'intéresse, appelez-moi."]) {
       const result = classifyReply({ text });
@@ -212,10 +294,9 @@ describe("classifyReply — a reply counts as positive only with a positive sign
   );
 
   it.each([
-    ["Pass.", /pass/],
-    ["We are not the right business for this", /isn't for them/],
-    ["We'll stick with what we have.", /no clear yes, question or request/],
-    ["Hmm.", /no clear yes, question or request/],
+    ["We'll stick with what we have.", /no clear yes, no, question or request/],
+    ["Hmm.", /no clear yes, no, question or request/],
+    ["Maybe.", /sounds unsure/],
     ["Nein danke.", /another language/],
     ["Спасибо, не интересно.", /another language/],
   ])("flags %j for a look instead of counting it as a yes", (text, reason) => {
@@ -230,7 +311,7 @@ describe("classifyReply — a reply counts as positive only with a positive sign
       mayBeOptOut: true,
       review: expect.stringMatching(/may be asking not to be emailed/),
     });
-    expect(classifyReply({ text: "Not interested." })).toMatchObject({ verdict: "needs_look", mayBeOptOut: false });
+    expect(classifyReply({ text: "Who is this?" })).toMatchObject({ verdict: "needs_look", mayBeOptOut: false });
     expect(classifyReply({ text: "Yes, interested — what does it cost?" })).toMatchObject({ verdict: "positive", review: null });
   });
 

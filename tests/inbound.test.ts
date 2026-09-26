@@ -74,18 +74,27 @@ describe("/api/email-inbound", () => {
     },
   );
 
-  it.each(["No, thank you.", "Not for us, thanks", "We're good, no need.", "We don't need a website.", "Who is this?"])(
-    "flags the brush-off %j for a look and keeps the lead out of Responded",
+  it.each(["No, thank you.", "Not for us, thanks", "We're good, no need.", "We don't need a website."])(
+    "closes the lead on the plain no %j without suppressing the address",
     async (text) => {
       const cold = await makeColdLead({ email: "meh@shop.test", status: "contacted", lastEmailedAt: new Date() });
       const json = await (await inbound({ from: "meh@shop.test", text })).json();
-      expect(json.optedOut).toBe(false);
-      expect(json.review).toEqual(expect.any(String));
+      expect(json).toMatchObject({ optedOut: false, verdict: "declined", review: null, needsReview: [] });
       const after = await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } });
-      expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true, repliedAt: null });
+      expect(after).toMatchObject({ status: "lost", callOutcome: "not_interested", replyNeedsReview: false });
+      expect(after.repliedAt).not.toBeNull();
       expect(await prisma.suppressedEmail.count()).toBe(0);
     },
   );
+
+  it('flags the complaint "Who is this?" for a look and keeps the lead out of Responded', async () => {
+    const cold = await makeColdLead({ email: "meh@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const json = await (await inbound({ from: "meh@shop.test", text: "Who is this?" })).json();
+    expect(json).toMatchObject({ optedOut: false, verdict: "needs_look", review: expect.any(String) });
+    const after = await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } });
+    expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true, repliedAt: null });
+    expect(await prisma.suppressedEmail.count()).toBe(0);
+  });
 
   // Round 9: replies that match no listed phrase used to count as positive.
   it.each([
@@ -94,8 +103,8 @@ describe("/api/email-inbound", () => {
     ["Lose my number", "look"],
     ["F off", "opt-out"],
     ["Bitte keine E-Mails mehr", "opt-out"],
-    ["Pass.", "look"],
-    ["We are not the right business for this", "look"],
+    ["Pass.", "decline"],
+    ["We are not the right business for this", "decline"],
   ] as const)("never counts %j as a positive reply (%s)", async (text, outcome) => {
     const cold = await makeColdLead({ email: "decline@shop.test", status: "contacted", lastEmailedAt: new Date() });
     const json = await (await inbound({ from: "decline@shop.test", messageId: `<${text}@test>`, text })).json();
@@ -108,6 +117,10 @@ describe("/api/email-inbound", () => {
       expect(json.optedOut).toBe(true);
       expect(after.status).toBe("lost");
       expect(suppressed).not.toBeNull();
+    } else if (outcome === "decline") {
+      expect(json).toMatchObject({ optedOut: false, verdict: "declined" });
+      expect(after).toMatchObject({ status: "lost", replyNeedsReview: false });
+      expect(suppressed).toBeNull();
     } else {
       expect(json.optedOut).toBe(false);
       expect(after).toMatchObject({ status: "contacted", replyNeedsReview: true, repliedAt: null });

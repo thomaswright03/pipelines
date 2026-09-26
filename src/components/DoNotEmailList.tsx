@@ -53,35 +53,63 @@ export function DoNotEmailRows({ rows }: { rows: SuppressionRow[] }) {
     <div className="flex flex-col gap-2">
       {dialog}
       <ActionMessage feedback={feedback} />
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-            <tr>
-              <th className="py-2 pr-3">Address</th>
-              <th className="py-2 pr-3">Since</th>
-              <th className="py-2 pr-3">Why</th>
-              <th className="py-2">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {rows.map((row) => (
-              <tr key={row.email}>
-                <td className="max-w-[16rem] break-all py-2 pr-3">{row.email}</td>
-                <td className="whitespace-nowrap py-2 pr-3 muted">{row.since}</td>
-                <td className="py-2 pr-3 muted">{row.why}</td>
-                <td className="py-2 text-right">
-                  <button type="button" disabled={isPending} onClick={() => remove(row)} className="btn-ghost text-sm">
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* A list, not a table, so a phone shows each address whole on its own
+          line with its date and reason under it; from 640px it lines up in
+          columns under a header. */}
+      <div
+        aria-hidden
+        className="hidden text-left text-xs uppercase tracking-wide text-zinc-600 sm:grid sm:grid-cols-[minmax(0,18rem)_7rem_minmax(0,1fr)_auto] sm:gap-x-3 dark:text-zinc-400"
+      >
+        <span>Address</span>
+        <span>Since</span>
+        <span>Why</span>
+        <span className="w-20" />
       </div>
+      <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800">
+        {rows.map((row) => (
+          <li
+            key={row.email}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-0.5 py-2 sm:grid-cols-[minmax(0,18rem)_7rem_minmax(0,1fr)_auto] sm:items-center"
+          >
+            <span className="col-span-2 font-medium [overflow-wrap:anywhere] sm:col-span-1">
+              <BreakableEmail email={row.email} />
+            </span>
+            <span className="self-center muted">
+              <span className="sm:sr-only">Since </span>
+              {row.since}
+            </span>
+            <span className="col-span-2 muted [overflow-wrap:anywhere] sm:col-span-1">
+              <span className="sm:sr-only">Why: </span>
+              {row.why}
+            </span>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => remove(row)}
+              aria-label={`Remove ${row.email} from the list`}
+              className="btn-ghost col-start-2 row-start-2 w-20 text-sm sm:col-start-auto sm:row-start-auto"
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
+  );
+}
+
+/** An address that wraps after "@" or a hyphen, or before a dot, rather than mid-word on a narrow screen. */
+function BreakableEmail({ email }: { email: string }) {
+  const parts = email.split(/(?=\.)|(?<=[@-])/);
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && <wbr />}
+          {part}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -116,8 +144,8 @@ export function AddSuppressionForm() {
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="field-label min-w-0 flex-1">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className="field-label min-w-0 sm:flex-1">
           Address
           <input
             type="email"
@@ -128,7 +156,7 @@ export function AddSuppressionForm() {
             className="input"
           />
         </label>
-        <label className="field-label min-w-0 flex-1">
+        <label className="field-label min-w-0 sm:flex-1">
           Why (optional)
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Asked by phone" className="input" />
         </label>

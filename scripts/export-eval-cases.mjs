@@ -38,8 +38,11 @@ await client.connect();
 try {
   await client.query("BEGIN TRANSACTION READ ONLY");
   const { rows } = await client.query(
-    `SELECT subject, text, "optedOut", "reviewReason", kind, "failedRecipient" IS NOT NULL AS "hasRecipient", "rulesVersion"
-       FROM "InboundReply" ORDER BY "receivedAt" DESC LIMIT $1`,
+    // The verdict column exists from round 11 on; read through to_jsonb so
+    // the script also works on a database without it.
+    `SELECT subject, text, "optedOut", "reviewReason", kind, "failedRecipient" IS NOT NULL AS "hasRecipient", "rulesVersion",
+            to_jsonb(r) ->> 'verdict' AS verdict
+       FROM "InboundReply" r ORDER BY "receivedAt" DESC LIMIT $1`,
     [limit],
   );
   await client.query("ROLLBACK");
@@ -48,10 +51,20 @@ try {
     text: anonymise(r.text),
     // The outcome the app chose, in the shape tests/corpus/real-replies.ts
     // takes — a suggestion only: correct it before adding the case.
-    expected: r.optedOut ? "opt_out" : r.reviewReason !== null ? "needs_look" : r.kind === "reply" ? "positive" : r.kind,
+    expected:
+      r.kind === "reply" && r.verdict
+        ? r.verdict
+        : r.optedOut
+          ? "opt_out"
+          : r.reviewReason !== null
+            ? "needs_look"
+            : r.kind === "reply"
+              ? "positive"
+              : r.kind,
     suggested: {
       optOut: r.optedOut,
       review: r.reviewReason !== null,
+      verdict: r.verdict,
       kind: r.kind,
       bounceAddressFound: r.hasRecipient,
       rulesVersion: r.rulesVersion,

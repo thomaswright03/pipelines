@@ -84,7 +84,7 @@ describe("Settings → Connections", () => {
   });
 
   it("shows the missing replies and a failed daily run in plain words, with what to do", async () => {
-    // Emails went out 3 days ago and nothing has come back since.
+    // Emails went out 3 days ago and no reply has ever come back.
     await prisma.outreachRecipient.create({
       data: { pipeline: "cold-outreach", email: "a@x.test", state: "sent", sentAt: new Date(Date.now() - 3 * DAY_MS) },
     });
@@ -102,7 +102,7 @@ describe("Settings → Connections", () => {
 
     expect(s.replies).toMatchObject({
       tone: "warn",
-      summary: expect.stringMatching(/no reply of any kind .* has arrived in the last 7 days/),
+      summary: expect.stringMatching(/no reply of any kind .* has ever arrived/),
       next: expect.stringMatching(/tell your developer/i),
     });
     expect(s["daily-run"]).toMatchObject({ tone: "error", summary: expect.stringMatching(/failed — The run stopped with an error/) });

@@ -107,6 +107,10 @@ async function mailStatus(env: Env): Promise<ConnectionStatus> {
       "Press Test connection. If it fails again, tell your developer what it says — nothing is sent until this is fixed.",
     );
   }
+  if (settings.pausedBy === "environment") {
+    parts.push("Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so nothing is being sent.");
+    return status("warn", "Remove OUTBOUND_EMAIL_DISABLED in the hosting dashboard and redeploy when sending should resume.");
+  }
   if (settings.outboundPaused) {
     parts.push("Outbound email is paused, so nothing is being sent.");
     return status("warn", "Resume sending with the switch above when you're ready.");
@@ -138,7 +142,13 @@ async function repliesStatus(env: Env, now: Date): Promise<ConnectionStatus> {
     return {
       ...base,
       tone: "warn",
-      summary: `${received} Emails have gone out, but no reply of any kind — not even an out-of-office or a bounce — has arrived in the last ${REPLY_WATCH_WINDOW_DAYS} days. That usually means replies aren't reaching the app.`,
+      summary: `${received} Emails have gone out, but no reply of any kind — not even an out-of-office or a bounce — ${
+        health.reason === "never"
+          ? "has ever arrived"
+          : health.reason === "silent_sends"
+            ? `has arrived after the last ${health.sendsSinceLastReply} of them`
+            : `has arrived in the last ${REPLY_WATCH_WINDOW_DAYS} days`
+      }. That usually means replies (opt-outs among them) aren't reaching the app.`,
       next: `Tell your developer that replies seem to have stopped arriving, and when the last one came. ${byHand}`,
     };
   }

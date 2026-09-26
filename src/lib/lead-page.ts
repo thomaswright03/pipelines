@@ -1,6 +1,7 @@
 // Data every lead page needs besides the lead itself: its address's
 // do-not-email entry, what the send ledger knows about it, whether outbound
-// email is paused, and the latest reply (shown when it needs a look).
+// email is paused, and the latest reply (shown when it needs a look, said
+// no, or only said thanks).
 import { prisma } from "@/lib/db";
 import { getSuppression } from "@/lib/email-suppression";
 import { getAppSettings } from "@/lib/outreach/settings";
@@ -25,11 +26,11 @@ export async function loadLeadContext(pipeline: PipelineId, leadId: string, emai
     prisma.inboundReply.findFirst({
       where: { matched: { has: `${pipeline}:${leadId}` }, kind: "reply" },
       orderBy: { receivedAt: "desc" },
-      select: { text: true, subject: true, receivedAt: true },
+      select: { text: true, subject: true, receivedAt: true, verdict: true },
     }),
   ]);
   const latestReply: LatestReply | null = reply
-    ? { text: reply.text ?? reply.subject ?? "", receivedAt: formatDateTime(reply.receivedAt) }
+    ? { text: reply.text ?? reply.subject ?? "", receivedAt: formatDateTime(reply.receivedAt), verdict: reply.verdict }
     : null;
 
   const lead: LeadSuppression | null = suppression

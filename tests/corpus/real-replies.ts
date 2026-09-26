@@ -13,7 +13,7 @@
 // with these in view (they are held out).
 
 /** What the app does with a reply: suppress it, flag it for a look, or count it as a positive reply. */
-export type ReplyOutcome = "opt_out" | "needs_look" | "positive";
+export type ReplyOutcome = "opt_out" | "needs_look" | "positive" | "declined" | "acknowledged";
 
 export type RealReplyCase = { text: string; subject?: string; expected: ReplyOutcome };
 

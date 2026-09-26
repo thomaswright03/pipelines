@@ -12,11 +12,25 @@ type CorrectionKind =
   /** "Mark opted out" on a lead whose reply was recorded but not read as an opt-out (a missed one). */
   | "opt_out_missed"
   /** "Mark bounced" on an address the email lookup found (it wasn't typed in). */
-  | "wrong_address";
+  | "wrong_address"
+  /** A found address changed by hand before it was pitched (the lookup picked the wrong one). */
+  | "address_corrected"
+  /** A lead closed by a reply read as a plain no, moved back to Responded by hand. */
+  | "decline_reversed"
+  /** "Mark replied" on a lead whose reply was read as only a thank-you. */
+  | "courtesy_was_reply";
 
 export async function recordCorrection(
   db: Db,
-  entry: { kind: CorrectionKind; pipeline?: PipelineId; leadId?: string; email?: string | null; detail?: string | null },
+  entry: {
+    kind: CorrectionKind;
+    pipeline?: PipelineId;
+    leadId?: string;
+    email?: string | null;
+    detail?: string | null;
+    /** The version of the rules whose decision was corrected, when known. */
+    rulesVersion?: string | null;
+  },
 ): Promise<void> {
   await db.outreachCorrection.create({
     data: {
@@ -25,6 +39,7 @@ export async function recordCorrection(
       leadId: entry.leadId ?? null,
       email: entry.email ?? null,
       detail: entry.detail?.slice(0, 500) ?? null,
+      rulesVersion: entry.rulesVersion ?? null,
     },
   });
 }
@@ -39,6 +54,12 @@ type QualitySignals = {
   /** Replies flagged "needs a look" (possible no / complaint), and how many said "wrong person". */
   flaggedForReview: number;
   wrongPerson: number;
+  /** Replies read as a plain no (the lead closed automatically), and how many the operator reopened. */
+  declined: number;
+  declinesReversed: number;
+  /** Replies read as only a thank-you, and how many the operator then marked replied. */
+  acknowledged: number;
+  courtesyWasReply: number;
   /** Found addresses (not typed in) that bounced. */
   foundAddressesBounced: number;
 };
@@ -48,10 +69,12 @@ const QUALITY_WINDOW_DAYS = 90;
 export async function getQualitySignals(now: Date = new Date()): Promise<QualitySignals> {
   const since = new Date(now.getTime() - QUALITY_WINDOW_DAYS * 86_400_000);
   const recent = { gte: since };
-  const [autoOptOuts, flaggedForReview, wrongPerson, corrections] = await Promise.all([
+  const [autoOptOuts, flaggedForReview, wrongPerson, declined, acknowledged, corrections] = await Promise.all([
     prisma.inboundReply.count({ where: { optedOut: true, receivedAt: recent } }),
     prisma.inboundReply.count({ where: { reviewReason: { not: null }, receivedAt: recent } }),
     prisma.inboundReply.count({ where: { reviewReason: { contains: "wrong person" }, receivedAt: recent } }),
+    prisma.inboundReply.count({ where: { verdict: "declined", receivedAt: recent } }),
+    prisma.inboundReply.count({ where: { verdict: "acknowledged", receivedAt: recent } }),
     prisma.outreachCorrection.groupBy({ by: ["kind"], where: { createdAt: recent }, _count: { _all: true } }),
   ]);
   const count = (kind: CorrectionKind) => corrections.find((c) => c.kind === kind)?._count._all ?? 0;
@@ -62,6 +85,10 @@ export async function getQualitySignals(now: Date = new Date()): Promise<Quality
     optOutsMissed: count("opt_out_missed"),
     flaggedForReview,
     wrongPerson,
+    declined,
+    declinesReversed: count("decline_reversed"),
+    acknowledged,
+    courtesyWasReply: count("courtesy_was_reply"),
     foundAddressesBounced: count("wrong_address"),
   };
 }

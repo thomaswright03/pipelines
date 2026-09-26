@@ -48,8 +48,13 @@ const BOUNCE_ENDS_OUTREACH = ["contacted", "responded", "cold_call_list", "conta
 
 const LOST_REASON_CHOICES = LOST_REASONS.map((value) => ({ value, label: CALL_OUTCOME_LABEL[value] ?? value }));
 
-/** The latest reply recorded on the lead, shown in its own words when it needs a look. */
-export type LatestReply = { text: string; receivedAt: string /* already formatted in the app's time zone */ };
+/** The latest reply recorded on the lead, shown in its own words when it needs a look, said no, or only said thanks. */
+export type LatestReply = {
+  text: string;
+  receivedAt: string; // already formatted in the app's time zone
+  /** The classifier's verdict (reply-classifier.ts); null for replies recorded before verdicts were kept. */
+  verdict: string | null;
+};
 
 export type LeadSuppression = {
   source: string | null;
@@ -280,6 +285,31 @@ export default function LeadActions({
                 Keep as {statusLabel(lead.status)}
               </button>
             </div>
+          </section>
+        )}
+        {!lead.replyNeedsReview && latestReply && (latestReply.verdict === "acknowledged" || latestReply.verdict === "declined") && (
+          <section aria-labelledby="reply-read-heading" className="notice-info flex flex-col gap-2">
+            <h3 id="reply-read-heading" className="font-semibold">
+              {latestReply.verdict === "declined" ? "Replied with a plain no" : "Replied with a thank-you only"}
+            </h3>
+            {latestReply.text && (
+              <figure className="flex flex-col gap-1">
+                <blockquote className="whitespace-pre-line border-l-2 border-current pl-3 italic">{clipReply(latestReply.text)}</blockquote>
+                <figcaption className="text-xs">Received {latestReply.receivedAt}</figcaption>
+              </figure>
+            )}
+            {latestReply.verdict === "declined" ? (
+              <p>
+                Read as a no, so a lead still being worked was closed. It isn&apos;t on the do-not-email list, but no more email goes to
+                this address. If it asked to stop, use Mark opted out; if it was misread, move the lead back to Responded.
+              </p>
+            ) : (
+              <p>
+                Not counted as interest or as an opt-out, so the lead stays {statusLabel(lead.status)}
+                {lead.status === "contacted" ? " and moves to phone outreach after a week without a real reply" : ""}. No more email goes to
+                this address. If they meant more, use Mark replied.
+              </p>
+            )}
           </section>
         )}
         {moves.length > 0 ? (
