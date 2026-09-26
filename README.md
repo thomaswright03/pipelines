@@ -1,5 +1,7 @@
 # Pipelines
 
+[![CI](https://github.com/thomaswright03/pipelines/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thomaswright03/pipelines/actions/workflows/ci.yml)
+
 Thomas Wright's internal dashboard for Wright AI Solutions' email outreach. One operator, no in-app login:
 access is gated by Vercel Deployment Protection (SSO). Two pipelines live here:
 
@@ -11,7 +13,9 @@ access is gated by Vercel Deployment Protection (SSO). Two pipelines live here:
 
 Each pipeline has a lead list, a call deck for phone follow-up and Stats. **Replies** (`/replies`) tracks
 inbound mail, **Settings** holds the kill switch, connections and the do-not-email list, and **Operator
-guide** (`/help`) is the runbook.
+guide** (`/help`) is the runbook, with a glossary. To stop all outbound email without the app, set
+`OUTBOUND_EMAIL_DISABLED=1` in Vercel and redeploy ([docs/deployment.md](docs/deployment.md) → "Emergency
+stop").
 
 | Document | For | What's in it |
 | --- | --- | --- |
@@ -104,8 +108,9 @@ npm run build && npm run test:e2e   # Playwright browser tests against the produ
 npm run lint && npm run format:check
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of these on every push and pull request, with no secrets and no
-external services. Details, the per-file coverage table and the browser tests are in
+CI (`.github/workflows/ci.yml`, badge above) runs all of these on every push and pull request, with no
+secrets and no external services. Making its `CI / build-lint-test` check required before merging to `main`
+is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-only setup"). Details, the per-file coverage table and the browser tests are in
 [docs/testing.md](docs/testing.md); how the reply and address heuristics are scored is in
 [docs/measuring-rules.md](docs/measuring-rules.md).
 
@@ -118,9 +123,11 @@ external services. Details, the per-file coverage table and the browser tests ar
   catalogues, a persistent switcher and localised dates and numbers. Replies are separate: common Spanish,
   French, German, Portuguese, Italian and Dutch opt-outs are honoured, and any other reply in another
   language needs a look.
-- **Replies the rules can't read with confidence wait for the operator.** About a third of the synthetic
-  held-out replies land on "needs a look", and nothing is emailed to such an address until the operator
-  resolves it (docs/outreach-safety.md). The Replies page and the lead list show how many are waiting.
+- **Replies the rules can't read with confidence wait for the operator.** About a quarter (26%) of the
+  synthetic held-out replies land on "needs a look", and nothing is emailed to such an address until the
+  operator resolves it (docs/outreach-safety.md). A plain "no thanks" closes the lead and a "Thanks" /
+  "Got it" changes nothing, without the operator; both also stop further email to the address, and neither
+  is treated as an opt-out. The Replies page and the lead list show how many are waiting.
 - **Email finding is a heuristic.** Neither Yelp nor ADRE gives a business's website, so
   `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly (no
   search engine: those block automated queries or charge for them). A guessed site is only used when it

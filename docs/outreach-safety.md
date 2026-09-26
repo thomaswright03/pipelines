@@ -49,8 +49,11 @@ the bulk send, and the daily cron.
 - **Manual moves never overwrite a change made meanwhile.** Every status change from a lead page is
   conditional on the status the page showed; if a reply or the stale-contacts job moved the lead in the
   meantime, the change is refused with "changed status a moment ago — reload".
-- **Replies: only a confident reading acts by itself.** Every reply a person wrote gets one of three
-  verdicts (`src/lib/outreach/reply-classifier.ts`, precedence documented at the top of the file):
+- **Replies: only a confident reading acts by itself.** Every reply a person wrote gets one of five
+  verdicts (`src/lib/outreach/reply-classifier.ts`, precedence documented at the top of the file; the word
+  lists are in `src/lib/outreach/reply-rules/`). Only the first two count as an opt-out or as a reply;
+  the last three all **hold every further email to the address** (single send, bulk send, daily run, in
+  either pipeline):
   - **Opt-out**: an explicit request not to be emailed ("STOP", "Unsubscribe", "Remove me", "Please stop
     emailing me", "take me off your list", common Spanish, French, German, Portuguese, Italian and Dutch
     phrasings) with nothing else in the reply that sounds interested. The address goes on the do-not-email
@@ -58,23 +61,38 @@ the bulk send, and the daily cron.
     dataleadsell). The words that triggered it are shown on the lead page, and a wrong opt-out can be
     reversed there with **Remove from do-not-email list**.
   - **Positive**: a yes, interest, a question or a request (send details, call me, a number to call) with
-    nothing that could be a stop request or a "no". It counts as a reply and moves the lead to Responded.
+    nothing that could be a stop request, a "no" or a hedge ("I guess", "maybe" without a real question).
+    It counts as a reply and moves the lead to Responded.
+  - **Plain no** (`declined`): only a no — "Not interested", "No thanks", "We're all set", "Pass", "Not
+    for us" — with no stop request, question, complaint or interest. It is **not** an opt-out: the address
+    is not put on the do-not-email list. A lead still being worked (Contacted, on the call deck) moves to
+    Lost (Not interested in dataleadsell); a lead that got further (Responded, a customer) is flagged
+    **Reply needs a look** instead. The address is held from then on (refusal "already answered"), and a
+    New lead with it is marked **Already answered**. Moving the lead back to Responded undoes it and is
+    counted as a correction.
+  - **Thank-you only** (`acknowledged`): only a courtesy note — "Thanks", "Got it", "Received", "Thanks for
+    reaching out", optionally with a greeting and a name. It counts as neither a reply nor an opt-out and
+    changes nothing on the lead, but the address is held like a plain no. **Mark replied** counts it as a
+    reply after all (recorded as a correction).
   - **Needs a look**: everything else — a stop request that also sounds interested ("Stop! This is exactly
     what I need. Call me."), a request that names only calls or texts, words that *may* be asking not to be
-    emailed ("Kindly exclude me from future mailings", "no further contact", "Pls rmv"), a decline or
-    complaint ("not interested", "wrong person", "spam"), another language, or nothing recognisable. Every
-    lead with that address, in either pipeline, is flagged **Reply needs a look**; the reply doesn't count
-    as a reply or as an opt-out; a Contacted lead stays off the call deck; and **nothing is emailed to the
-    address** (single send, bulk send or daily run) until the operator resolves it on the lead page:
-    **Mark opted out**, **Mark replied**, a status move, or **Keep as …** (which asks for confirmation). A
-    reply that matched no lead holds its address the same way until it is attached, marked opted out or
-    dismissed on **Replies**.
+    emailed ("Kindly exclude me from future mailings", "no further contact", "Pls rmv"), a complaint
+    ("wrong person", "who is this?", "spam"), a no mixed with interest, a hedge ("Thanks, I guess?"),
+    another language, or nothing recognisable. Every lead with that address, in either pipeline, is flagged
+    **Reply needs a look**; the reply doesn't count as a reply or as an opt-out; a Contacted lead stays off
+    the call deck; and nothing is emailed to the address until the operator resolves it on the lead page:
+    **Mark opted out**, **Mark replied**, a status move, or **Keep as …** (which asks for confirmation).
+  - A reply that matched no lead holds its address the same way (needs a look, plain no or thank-you) until
+    it is attached, marked opted out or dismissed on **Replies**.
   - Only the replier's own words are read: quoted history, signatures (including a sign-off and the lines
     under it), legal and newsletter footers ("This email is confidential…", "To unsubscribe from our
     newsletter click here") and our own "Reply STOP" footer are removed first.
-  - The trade-off: the rules no longer try to read every phrasing, so more replies wait for the operator.
-    On the synthetic held-out sets about a third of replies need a look (see [measuring-rules.md](measuring-rules.md), "Measuring the reply and
-    address rules"); in exchange none of them is suppressed or counted as a yes by mistake.
+  - The trade-off: the rules don't try to read every phrasing, so some replies wait for the operator. On
+    the synthetic held-out sets 26% of replies need a look (40% before plain no's and thank-yous got their
+    own verdicts; see [measuring-rules.md](measuring-rules.md), "Measuring the reply and address rules");
+    none is suppressed or counted as a yes by mistake. The cost of the two new verdicts: a reply misread as
+    a plain no closes a lead (reversible, and counted), and a thank-you that was really interest isn't
+    counted until the operator marks it — in both cases the address gets no further email.
   - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see
     [operator.md](operator.md) → "What a reply does". An opt-out is still honoured even when it comes from an autoresponder, and a message worded
     like an out-of-office that also says yes or "interested" is treated as a reply that needs a look.
@@ -86,6 +104,12 @@ the bulk send, and the daily cron.
   Protection (see [deployment.md](deployment.md) → "Owner-only setup").
 - **Kill switch.** **Settings → Pause all outbound email** stops every send path at its next send. That
   includes a bulk send already in progress. A header pill shows while outbound email is paused.
+  - **Emergency stop without the app.** Setting the environment variable `OUTBOUND_EMAIL_DISABLED=1` on
+    the server (Vercel → Project → Settings → Environment Variables, then Redeploy) stops the same paths —
+    single send, bulk send (preview and each chunk), the daily cron run — and the mail layer itself refuses
+    to hand anything to the transport while it is set (`src/lib/outbound-switch.ts`). It needs neither the
+    app's login nor its database, and the Settings switch can't undo it. The header shows **Sending off
+    (server)** and Settings says why. Tested path by path in `tests/kill-switch.test.ts`.
 - **Bulk sends need confirmation.** The confirmation shows how many leads will be emailed, the number of
   distinct addresses, what will be skipped and why, and a sample.
   - Nothing goes out until you press **Send to N leads**.

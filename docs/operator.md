@@ -16,9 +16,15 @@ when one isn't, and a **Test connection** button for email and Yelp) and the sea
 day-to-day operation: the emergency stop, the daily checks, marking replies by hand, held-back leads and
 reading Connections.
 
-The **dashboard** (`/`) says what the tool does and shows, for each pipeline, how many leads are ready to
-email, waiting on a reply, in Responded and on the call deck (each a link), plus how many replies need a
-look.
+The **dashboard** (`/`, headed "Cold email outreach") says what the tool does and shows, for each
+pipeline, how many leads are ready to email, waiting on a reply, in Responded and on the call deck (each a
+link), plus how many replies need a look. Words like *call deck*, *held back*, *needs a look* and *ADRE* are
+explained in the Operator guide's **Glossary** (`/help#glossary`, linked from the dashboard), and each
+status badge explains itself on hover.
+
+The **header** shows up to three pills, on every page and at every width: **Sending paused** (the Settings
+switch) or **Sending off (server)** (the `OUTBOUND_EMAIL_DISABLED` environment variable), **Replies not
+arriving** (see "Is it working?" below), and, outside production, where "sent" mail really goes.
 
 Each call-deck card shows the lead's company or brokerage, city/state with the local time, when the pitch
 was emailed (or "Never emailed"), the latest history entry, and a link that opens the lead page in a new
@@ -68,10 +74,22 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
   own figures; **We replied back** is measured against genuine replies only.
 - A **Lost** or **Not interested** lead keeps its status, gets a reply time, and is flagged **Reply needs a
   look** in the lead list and on the lead page, until someone moves it or presses "Keep as …".
-- A reply that may be a "no" or a complaint ("no, thank you", "not for us", "we're all set", "who is this"),
-  or that shows no positive signal at all ([outreach-safety.md](outreach-safety.md) → "Replies"), gets the same flag, with the reason,
-  instead of moving the lead to Responded. It gets no reply time, so it isn't counted in the reply rate,
-  a Contacted lead stays off the call deck, and **nothing is emailed to the address** until the operator
+- A **plain no** ("Not interested", "No thanks", "We're all set", "Not for us") that asks nothing else is
+  not an opt-out and is not flagged: a lead still being worked (Contacted, on the call deck) moves to
+  **Lost** (Not interested in dataleadsell) with the reply time set, and a lead that got further (Responded,
+  a customer) is flagged **Reply needs a look** instead. The address is not put on the do-not-email list,
+  but it gets no more email: a later send to it from either pipeline is refused as "already answered", and
+  a New lead with the address is marked **Already answered**. If the reply was really interest, move the
+  lead back to Responded — that is counted as a correction on Replies.
+- A **thank-you only** reply ("Thanks", "Got it", "Received", "Thanks for reaching out, Jane") is recorded
+  in the lead's History and changes nothing else: no reply time, no status change, no flag. The address gets
+  no more email, as for a plain no. **Mark replied** counts it as a reply if it was one (also counted as a
+  correction).
+- A reply that may be asking to stop, a complaint ("wrong person", "who is this?", "spam"), a no mixed with
+  interest, a hedge ("Thanks, I guess?"), or one that shows no clear yes, no, question or request
+  ([outreach-safety.md](outreach-safety.md) → "Replies") is flagged **Reply needs a look**, with the reason,
+  instead of moving the lead to Responded. It gets no reply time, so it isn't counted in the reply rate, a
+  Contacted lead stays off the call deck, and **nothing is emailed to the address** until the operator
   decides (**Mark replied**, **Mark opted out**, a move, or **Keep as Contacted**).
 - A genuine opt-out goes on the do-not-email list with its evidence, whatever the lead's status, and a lead
   that was being worked (Contacted, Responded, on the call deck) moves to Lost (Not interested in
@@ -83,10 +101,16 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
 - A reply from an address that is on no lead (an assistant, a personal inbox, a forward) is kept with its
   text and listed on **Replies**, with a count next to "Replies" in the header. **Attach** records it on the
   lead you pick exactly as if it had come from the lead's own address (for an opt-out, the lead's address
-  also goes on the do-not-email list); **Dismiss** removes it from the list.
-- **Is it working?** Both pipeline pages and Replies show when the last reply arrived, and warn when emails
-  went out 2–7 days ago but no reply of any kind has been recorded for a week — usually a sign the Worker
-  isn't reaching the app.
+  also goes on the do-not-email list; a plain no closes the lead); **Dismiss** removes it from the list. An
+  unmatched reply that needs a look, says no or only says thanks holds its address until it is attached,
+  dismissed or marked opted out.
+- **Is it working?** Both pipeline pages and Replies show when the last reply arrived. Once a pitch is more
+  than 48 hours old, the dashboard shows a red **Replies don't seem to be reaching the app** warning, and the
+  header a **Replies not arriving** pill on every page, when no inbound message of any kind (reply,
+  out-of-office or bounce) has ever been recorded, none in the last 7 days, or none since the last 20
+  pitches older than 48 hours went out — usually a sign the Worker isn't reaching the app, so opt-outs
+  aren't being recorded. Until it is fixed, read the sending inbox by hand, use **Mark opted out** and
+  **Mark replied**, and pause sending if you can't keep up (`src/lib/outreach/reply-health.ts`).
 
 The reply, its effects and a record of it are written in one database transaction, so a failure leaves
 nothing half-recorded.

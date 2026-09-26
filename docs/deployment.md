@@ -103,6 +103,24 @@ Resending is always safe: a reply is recorded once no matter how many times it i
 Email Workers don't retry `fetch` on their own, so the Worker needs a retry step, such as a Cloudflare Queue
 with retries, or rejecting the message so the sending server retries it later.
 
+## Emergency stop: `OUTBOUND_EMAIL_DISABLED`
+
+The Settings switch (**Pause all outbound email**) needs the app and its database. For when they can't be
+reached, or to stop sending from outside the app, the environment variable `OUTBOUND_EMAIL_DISABLED` stops
+every send path — single send, bulk send, the daily cron run — and the mail layer refuses to hand anything
+to ZeptoMail while it is set (`src/lib/outbound-switch.ts`, tested in `tests/kill-switch.test.ts`).
+
+To stop sending:
+
+1. Vercel → the project → **Settings → Environment Variables** → **Add**: key `OUTBOUND_EMAIL_DISABLED`,
+   value `1`, environment **Production** → Save.
+2. **Deployments** → the current production deployment → **⋯ → Redeploy** (environment variables take
+   effect only in a new deployment; this takes a minute or two).
+3. Open the app: the header shows **Sending off (server)** and Settings says "Outbound email: off (server
+   setting)". A send in progress when the redeploy finishes is the last one.
+
+To send again, delete the variable (or set it to `0`) and redeploy. The Settings switch can't override it.
+
 ## Settings → Connections
 
 What each row checks, and which setting is behind a problem it reports. The screen itself is written for
@@ -120,7 +138,9 @@ the operator and names no settings; this table is for the developer they're told
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
 
 1. **Apply the migrations** in this release to production before deploying it — including
-   `20261001090000_send_log_template_version` (additive: the subject and template version of each send),
+   `20261002090000_inbound_verdict` (additive: each reply's verdict, backfilled from the stored fields, and
+   the rules version on each correction), `20261001090000_send_log_template_version` (additive: the subject
+   and template version of each send),
    `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
    `20260928090000_inbound_kind`, `20260928100000_send_failure_status`, `20260929090000_rules_version`,
    `20260929100000_connection_checks`, `20260930090000_send_attempts`, `20260930100000_send_log_lead_index`
@@ -186,4 +206,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
     handling (`suppressEmail`) is ready to be called from it.
 14. **Look at flagged replies every day.** A reply the rules can't read with confidence holds every email to
     its address until someone resolves it on the lead page (or on Replies for an unknown address). On the
-    synthetic evaluation sets that is about a third of replies; the dashboard and Replies show the count.
+    synthetic evaluation sets that is about a quarter of replies (26%, down from 40% now that plain no's and
+    thank-you-only replies are handled on their own); the dashboard and Replies show the count.
+15. **Know the emergency stop.** Add `OUTBOUND_EMAIL_DISABLED` only when you need it (steps in "Emergency
+    stop" above); it is not set in normal operation. Consider saving the steps somewhere you can reach
+    without the app.

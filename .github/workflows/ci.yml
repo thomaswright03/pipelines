@@ -85,13 +85,14 @@ jobs:
           {
             echo "### Heuristics on the labelled sets (quote the held-out split)"
             echo
-            grep -E "precision|miss:|Real replies|Reply outcomes|UNSAFE" eval.log | sed 's/^/    /'
+            grep -E "precision|miss:|Real replies|Reply outcomes|UNSAFE|held, not suppressed|interest missed" eval.log | sed 's/^/    /'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Browser smoke tests against the production build: single send, bulk
       # send with Stop, pause/resume, lead form validation, editing and
       # deleting a lead, attaching an unmatched reply, confirm-dialog focus,
-      # tab titles, and the lead list at phone-to-desktop widths. Mail goes
+      # tab titles, the lead list at phone-to-desktop widths, the one-row
+      # desktop header and the do-not-email list at 375px. Mail goes
       # to a local outbox; the app uses a separate local database.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

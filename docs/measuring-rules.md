@@ -5,7 +5,7 @@ and prints its results, with every miss, for two kinds of split:
 
 | Heuristic | Corpus | What a miss costs |
 | --- | --- | --- |
-| Reply classifier (opt-out / positive / needs a look) | `tests/corpus/replies.ts`, `review.ts`, `replies-held-out-r10.ts` | An opt-out or a "no" counted as a yes, or an interested reply suppressed (these are **unsafe** and must be 0); otherwise only operator time |
+| Reply classifier (opt-out / positive / plain no / thank-you only / needs a look) | `tests/corpus/replies.ts`, `review.ts`, `replies-held-out-r10.ts`, `replies-held-out-r11.ts` | An opt-out or a "no" counted as a yes, or an interested reply suppressed (these are **unsafe** and must be 0); an opt-out or an interested reply read as a plain no or a thank-you (must also be 0); otherwise only operator time |
 | Automatic-reply detector | `tests/corpus/auto-mail.ts` | A real reply hidden, or an out-of-office counted as a reply |
 | Bounce detector (and the failed address) | `tests/corpus/auto-mail.ts` | Someone else's send marked bounced (precision first) |
 | Brokerage-site address rule | `tests/corpus/addresses.ts` | Pitching the wrong agent (precision first) |
@@ -24,21 +24,42 @@ The reply classifier is scored on outcomes rather than precision and recall. For
 how many replies land on **needs a look** (the operator's workload), how many opt-outs were suppressed and
 how many interested replies were counted without the operator, and every **unsafe** outcome: an opt-out or
 a decline counted as a positive reply, or a reply that isn't an opt-out suppressed. Any unsafe outcome on
-any split fails the run; so does a drop below the floors on what the rules handle alone (held-out: at
-least 75% of opt-outs suppressed and 75% of interested replies counted automatically, at most 50% of
-replies needing a look). Measured on 2026-09-26, after the round-10 redesign, across the five held-out
-splits (334 synthetic replies): **0 unsafe**, 36% need a look, 107 of 118 opt-outs suppressed and 72 of 76
-interested replies counted automatically. On the round-10 batch alone (60 replies written before the
-redesign): 0 unsafe (the old rules had 3), 40% need a look. The older splits were labelled on one question
-each (opt-out or not; positive or not), so they are scored on that question only.
+any split fails the run, and so does an opt-out or an interested reply read as a plain no or a thank-you
+(those hold the address but would neither suppress it nor count the reply); so does a drop below the floors
+on what the rules handle alone (held-out: at least 75% of opt-outs suppressed and 75% of interested replies
+counted automatically, at most 30% of replies needing a look). The older splits were labelled on one
+question each (opt-out or not; positive or not), so they are scored on that question only.
+
+Scores on 2026-09-26, same corpora, round-10 rules (three verdicts) against round-11 rules (plain no and
+thank-you only added):
+
+| Split (synthetic) | Replies | Unsafe, before → after | Need a look, before → after |
+| --- | --- | --- | --- |
+| dev | 189 | 0 → 0 | 60 (32%) → 45 (24%) |
+| held-out, rounds 5-7 opt-out labels | 126 | 0 → 0 | 23 → 22 |
+| held-out, round 9 unlisted opt-outs | 26 | 0 → 0 | 5 → 5 |
+| held-out, rounds 5-7 decline labels | 78 | 0 → 0 | 45 → 22 |
+| held-out, round 9 unlisted declines | 44 | 0 → 0 | 24 → 21 |
+| held-out, round 10 batch | 60 | 0 → 0 | 24 → 22 |
+| held-out, round 11 batch | 90 | 1 → 0 | 50 (56%) → 17 (19%) |
+| **all held-out** | **424** | **1 → 0** | **171 (40%) → 109 (26%)** |
+
+Opt-outs suppressed automatically (123 of 134) and interested replies counted automatically (90 of 94) are
+the same before and after; no opt-out or interested reply is read as a plain no or a thank-you. The round-11
+batch was written before the new rules, by the same author; its one unsafe case under the old rules
+("Thanks, I guess?" counted as a yes) was also counted as a yes by the first draft of the new rules, and the
+hedge rule that now sends it to "needs a look" was written with it in view (see the corpus header). In the
+older decline-labelled splits, 23 replies labelled only "not a positive reply" are now closed as a plain no
+rather than flagged: that is the intended change, and the reason a misread "no" is now a closed lead
+rather than a flag (the operator reopens it by moving it to Responded, which is counted below).
 
 The other heuristics print precision and recall. Each split has a floor; the run (and CI) fails below it,
 so a rule change that makes things worse fails even when every unit test passes. CI also writes the scores
 to the run summary.
 
 Every set is **synthetic**, written to resemble real mail, sites and staff directories, and the eval labels
-each score "synthetic". It also scores a **real replies** split (`tests/corpus/real-replies.ts`) on the three
-outcomes the app acts on (opt-out, needs a look, positive) and fails on any unsafe outcome; that split is
+each score "synthetic". It also scores a **real replies** split (`tests/corpus/real-replies.ts`) on the five
+outcomes the app acts on (opt-out, positive, plain no, thank-you only, needs a look) and fails on any unsafe outcome; that split is
 empty until the owner supplies data, and the run says so ("Real replies [held-out]: none yet"). To measure
 production traffic, export recent inbound mail with its anonymised text and the app's decision as a
 *suggested* label:
@@ -63,5 +84,15 @@ accuracy can be traced to the rule change that caused it.
 
 In production, the **Replies** page shows how often the operator corrects the rules (last 90 days):
 opt-outs read from replies and how many were undone, opt-outs the rules missed (a reply later marked opted
-out by hand), replies flagged for a look (and how many said "wrong person"), and found addresses that
-bounced. These are recorded in `OutreachCorrection`.
+out by hand), replies flagged for a look (and how many said "wrong person"), plain no's closed
+automatically and how many were reopened (moved back to Responded), thank-you-only replies and how many
+were then marked replied, and found addresses that bounced. These are recorded in `OutreachCorrection`,
+with the version of the rules whose decision was corrected (`rulesVersion`).
+
+**How found addresses are doing** (Replies page, `src/lib/outreach/finder-quality.ts`) shows the email
+finder on real mail, per pipeline and per `emailRulesVersion`, over the last 90 days: leads emailed and
+sends, bounces, replies saying "wrong person" or "no longer works here", and found addresses the operator
+replaced before the pitch (an `address_corrected` correction) — next to the same figures for addresses
+typed in or checked by hand, as a baseline. Compare a new rules version's row with the previous one's once
+it has a few dozen sends; the labelled sets above say whether a change should help, and this says whether
+it did.

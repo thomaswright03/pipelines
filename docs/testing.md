@@ -58,9 +58,12 @@ What's covered, by file:
 | `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
 | `tests/heuristics-eval.test.ts` | The reply classifier's outcomes (unsafe, needs a look, handled automatically) and precision/recall of the other heuristics (automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
 | `tests/reply-hold.test.ts` | Interested replies with opt-out words, footers, polite opt-outs: flagged, never suppressed or counted; a reply that needs a look holds every send to its address (flagged leads, leads added later, unmatched replies) until resolved; out-of-office wording with a yes |
+| `tests/reply-verdicts.test.ts` | Plain no's and thank-you-only replies end to end: a "Thanks" isn't flagged, counted or suppressed and changes nothing on the lead; a "No thanks" closes a lead still being worked (Lost / Not interested) and flags one that got further; both hold every later send to the address ("already answered"), in either pipeline and for an unmatched reply until dismissed; attaching a plain no closes the lead; reopening or Mark replied is counted as a correction; the bulk preview's skip counts match what the send then does, reason by reason |
+| `tests/kill-switch.test.ts` | `OUTBOUND_EMAIL_DISABLED`: how the value is read; a single send, the bulk preview and a bulk chunk, the daily cron run and the mail layer itself all refuse with it set, and nothing reaches the transport; the Settings switch can't undo it; sending resumes when it is unset |
+| `tests/production-signals.test.ts` | The "replies not arriving" warning (48-hour grace, never / a silent week / 20 silent sends, cleared by any inbound message) and "How found addresses are doing" (sends, bounces, wrong-person replies and hand corrections per source and rules version) |
 | `tests/contact-card.test.ts` | The call deck's "Add to Contacts" vCard: escaping, file name, no phone, unknown pipeline or lead |
 | `tests/components/operator-controls.test.tsx` | The email lookup sweep, the ADRE import, the city searches, the Cold Outreach stage panel and both error pages: progress, Stop, success, refusal, lost connection, database outage |
-| `tests/pages.test.tsx` | Every page rendered with representative data: the dashboard's numbers, lists, lead pages (send offered, needs-a-look warning, do-not-email, 404), forms, Stats, call decks, Replies, Settings, Help, the root layout and the database-outage page |
+| `tests/pages.test.tsx` | Every page rendered with representative data: the dashboard's numbers, lists, lead pages (send offered, needs-a-look warning, do-not-email, 404), forms, Stats, call decks, Replies, Settings (paused, and switched off on the server), Help, the root layout (its paused, server-off and replies-not-arriving pills), the dashboard's replies warning and the database-outage page |
 
 **Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines,
 `src/lib/actions` below 85%, `src/components` below 85% or `src/app` (the pages) below 75%
@@ -87,7 +90,9 @@ and its place surviving a refresh, the single empty-list message, the sender add
 inside itself (375–2560 px), marking a lead Lost (one control, reason required), and Settings →
 Connections including Test connection, the phone header (one row of at most 64 px, the menu, Escape),
 the lead list on the first screen at 1440×900 with column headers that stay pinned while scrolling, and
-44 px tap targets on a phone. On CI a failed browser test is run once more so the report shows
+44 px tap targets on a phone, the desktop header staying on one row at 1024–1440 px with every status
+pill showing (whole pill text at 1440 px), and the do-not-email list at 375 px (no sideways scroll, each
+address whole and wrapping only after "@" or a hyphen or before a dot, a 44 px Remove). On CI a failed browser test is run once more so the report shows
 whether it is flaky, but a test that only passes on the retry still fails the run (`failOnFlakyTests`).
 The server uses `EMAIL_TRANSPORT=outbox` (mail is written to `test-results/e2e-outbox`, never delivered) and its own
 database, `E2E_DATABASE_URL` (default `postgresql://ci:ci@localhost:5432/pipelines_e2e`), which
