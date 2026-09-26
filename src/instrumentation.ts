@@ -3,6 +3,7 @@
 // variable surface later as a cryptic error deep inside Prisma or
 // nodemailer. See .env.example for what each variable is for.
 import { resolveTransportKind, type Env } from "@/lib/mail-transport-kind";
+import { muteClientDisconnectLogs } from "@/lib/client-disconnect-log";
 
 export function missingEnvVars(env: Env = process.env): string[] {
   const required = ["PIPELINES_DATABASE_URL"];
@@ -24,4 +25,5 @@ export function register() {
     throw new Error(`Missing required environment variable(s): ${missing.join(", ")}. See .env.example for what each one is for.`);
   }
   console.info(`[startup] email transport: ${resolveTransportKind()}`);
+  muteClientDisconnectLogs();
 }

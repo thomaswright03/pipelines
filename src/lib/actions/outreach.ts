@@ -172,7 +172,9 @@ export async function sendBulkChunkAction(pipeline: string, leadIds: string[], c
   try {
     const ids = Array.isArray(leadIds) ? leadIds.filter((id): id is string => typeof id === "string") : [];
     const result = await sendBulkChunk(p, ids, { consecutiveFailures: Number(consecutiveFailures) || 0 });
-    refresh(p);
+    // No revalidation per chunk: that re-rendered the whole list page into
+    // every one-email response. The dialog shows progress, and the browser
+    // refreshes the page once when the send ends (BulkSendButton).
     return { ok: true, result };
   } catch (err) {
     logError("action.sendBulkChunk", err, { pipeline });
