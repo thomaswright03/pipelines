@@ -16,7 +16,7 @@ import {
   setOurReplyAction,
   updateLeadStatusAction,
 } from "@/lib/actions/outreach";
-import { allowedTransitions, canMarkReplied, isBackwardMove, statusLabel } from "@/lib/lead-status";
+import { allowedTransitions, CALL_OUTCOME_LABEL, canMarkReplied, isBackwardMove, LOST_REASONS, statusLabel } from "@/lib/lead-status";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
@@ -41,6 +41,8 @@ export type LeadActionsLead = {
 
 // Mirrors BOUNCE_MOVES_TO_LOST in src/lib/outreach/lead-actions.ts.
 const BOUNCE_ENDS_OUTREACH = ["contacted", "responded", "cold_call_list", "contactless_list"];
+
+const LOST_REASON_CHOICES = LOST_REASONS.map((value) => ({ value, label: CALL_OUTCOME_LABEL[value] ?? value }));
 
 export type LeadSuppression = {
   source: string | null;
@@ -69,7 +71,7 @@ export default function LeadActions({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
-  const [dialog, confirm] = useConfirm();
+  const [dialog, confirm, choose] = useConfirm();
 
   function run(fn: () => Promise<ActionResult>) {
     setFeedback(null);
@@ -124,6 +126,19 @@ export default function LeadActions({
   const canSend = lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason;
 
   async function moveTo(to: string) {
+    if (to === "lost") {
+      // The one way to mark a lead Lost, in both pipelines: it always records why.
+      const reason = await choose({
+        title: `Mark ${lead.name} as Lost?`,
+        body: <p>From {statusLabel(lead.status)} to Lost. No further outreach goes to this lead.</p>,
+        choiceLabel: "Why was the lead lost?",
+        choices: LOST_REASON_CHOICES,
+        confirmLabel: "Mark lost",
+        danger: true,
+      });
+      if (reason) run(() => updateLeadStatusAction(pipeline, lead.id, to, reason));
+      return;
+    }
     const backward = isBackwardMove(lead.status, to);
     const confirmed = await confirm({
       title: `${backward ? "Move back" : "Move"} ${lead.name} to ${statusLabel(to)}?`,
@@ -131,11 +146,10 @@ export default function LeadActions({
         <p>
           From {statusLabel(lead.status)} to {statusLabel(to)}.
           {to === "contacted" && " This undoes “Mark replied” — the reply time is cleared."}
-          {(to === "lost" || to === "not_interested") && " No further outreach goes to this lead."}
+          {to === "not_interested" && " No further outreach goes to this lead."}
         </p>
       ),
       confirmLabel: `${backward ? "Move back" : "Move"} to ${statusLabel(to)}`,
-      danger: to === "lost",
     });
     if (confirmed) run(() => updateLeadStatusAction(pipeline, lead.id, to));
   }
@@ -338,7 +352,8 @@ export default function LeadActions({
             {lead.ourReplied ? "Clear “we replied”" : "Mark “we replied”"}
           </button>
         )}
-        {lead.emailed && !lead.bounced && (
+        {/* A reply read as an opt-out proves the email arrived, so there's no bounce to record. */}
+        {lead.emailed && !lead.bounced && suppression?.source !== "inbound_reply" && (
           <button type="button" disabled={isPending} onClick={bounced} className="btn-danger">
             Mark bounced
           </button>

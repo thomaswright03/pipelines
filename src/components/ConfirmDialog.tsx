@@ -9,18 +9,35 @@ export type ConfirmOptions = {
   danger?: boolean;
 };
 
-type Pending = ConfirmOptions & { resolve: (confirmed: boolean) => void };
+/** A confirmation that also asks for one choice (a reason); confirming needs one picked. */
+export type ChooseOptions = ConfirmOptions & {
+  choiceLabel: string;
+  choices: readonly { value: string; label: string }[];
+};
+
+type Pending = ConfirmOptions & {
+  choice?: Pick<ChooseOptions, "choiceLabel" | "choices">;
+  resolve: (value: string | null) => void;
+};
 
 /**
  * A confirmation step for consequential actions, as a real modal <dialog>
  * (focus is trapped, Esc cancels). Usage:
  *
- *   const [dialog, confirm] = useConfirm();
+ *   const [dialog, confirm, choose] = useConfirm();
  *   if (await confirm({ title: "…", confirmLabel: "Send" })) …
+ *   const reason = await choose({ title: "…", confirmLabel: "Mark lost", choiceLabel: "Why?", choices });
+ *   if (reason) …
  *   return <>{dialog}…</>;
  */
-export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<boolean>] {
+export function useConfirm(): [
+  ReactNode,
+  (options: ConfirmOptions) => Promise<boolean>,
+  (options: ChooseOptions) => Promise<string | null>,
+] {
   const [pending, setPending] = useState<Pending | null>(null);
+  const [chosen, setChosen] = useState("");
+  const [missingChoice, setMissingChoice] = useState(false);
   const ref = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -36,10 +53,23 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
     (pending.danger ? cancelRef : confirmRef).current?.focus();
   }, [pending]);
 
-  const confirm = useCallback((options: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ ...options, resolve })), []);
+  const confirm = useCallback(
+    (options: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ ...options, resolve: (value) => resolve(value !== null) })),
+    [],
+  );
+  const choose = useCallback((options: ChooseOptions) => {
+    const { choiceLabel, choices, ...rest } = options;
+    setChosen("");
+    setMissingChoice(false);
+    return new Promise<string | null>((resolve) => setPending({ ...rest, choice: { choiceLabel, choices }, resolve }));
+  }, []);
 
   function close(confirmed: boolean) {
-    pending?.resolve(confirmed);
+    if (confirmed && pending?.choice && !chosen) {
+      setMissingChoice(true);
+      return;
+    }
+    pending?.resolve(confirmed ? (pending.choice ? chosen : "") : null);
     ref.current?.close();
     setPending(null);
   }
@@ -58,6 +88,35 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
         {pending.title}
       </h2>
       {pending.body && <div className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{pending.body}</div>}
+      {pending.choice && (
+        <div className="mt-3 flex flex-col gap-1">
+          <label className="field-label">
+            {pending.choice.choiceLabel}
+            <select
+              value={chosen}
+              onChange={(e) => {
+                setChosen(e.target.value);
+                setMissingChoice(false);
+              }}
+              aria-invalid={missingChoice || undefined}
+              aria-describedby={missingChoice ? "confirm-choice-error" : undefined}
+              className="input"
+            >
+              <option value="">Choose…</option>
+              {pending.choice.choices.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {missingChoice && (
+            <p id="confirm-choice-error" role="alert" className="text-sm text-red-700 dark:text-red-400">
+              Pick one to continue.
+            </p>
+          )}
+        </div>
+      )}
       <div className="mt-5 flex flex-wrap justify-end gap-2">
         <button ref={cancelRef} type="button" onClick={() => close(false)} className="btn-secondary">
           Cancel
@@ -69,5 +128,5 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
     </dialog>
   ) : null;
 
-  return [dialog, confirm];
+  return [dialog, confirm, choose];
 }

@@ -6,11 +6,13 @@ import { prisma } from "@/lib/db";
 import { getSuppression, suppressEmail, unsuppressEmail } from "@/lib/email-suppression";
 import {
   allowedTransitions,
+  CALL_OUTCOME_LABEL,
   canMarkReplied,
   COLD_CALL_OUTCOME_LABEL,
   COLD_CALL_OUTCOMES,
   coldCallResult,
   CUSTOMER_STATUSES,
+  isLostReason,
   isStatusOf,
   statusLabel,
   type ColdCallOutcome,
@@ -34,7 +36,11 @@ const NOT_FOUND = refuse("This lead no longer exists — it may have been remove
 const changedMeanwhile = (name: string) =>
   refuse(`${name} changed status a moment ago (a reply or an automatic move) — reload the page to see it, then try again.`);
 
-export async function changeStatus(pipelineId: PipelineId, leadId: string, to: string): Promise<ActionResult> {
+/**
+ * A manual move from the lead page. A move to Lost needs a reason (one of
+ * LOST_REASONS), kept on the lead as its outcome.
+ */
+export async function changeStatus(pipelineId: PipelineId, leadId: string, to: string, reason?: string): Promise<ActionResult> {
   if (!isStatusOf(pipelineId, to)) return refuse(`"${to}" isn't a status in this pipeline.`);
   const lead = await loadLead(pipelineId, leadId);
   if (!lead) return NOT_FOUND;
@@ -42,6 +48,7 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
   if (!allowedTransitions(pipelineId, lead.status).includes(to)) {
     return refuse(`${lead.name} can't move from ${statusLabel(lead.status)} to ${statusLabel(to)}.`);
   }
+  if (to === "lost" && !isLostReason(reason)) return refuse(`Pick why ${lead.name} was lost first.`);
   const pipeline = getPipeline(pipelineId);
   if (to === "contacted") {
     // Only as "undo Mark replied": Contacted always means "was emailed".
@@ -62,10 +69,12 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
       status: to,
       replyNeedsReview: false,
       replyReviewReason: null,
+      ...(to === "lost" ? { callOutcome: reason } : {}),
     });
     if (!moved) return changedMeanwhile(lead.name);
   }
-  return ok(`Moved ${lead.name} from ${statusLabel(lead.status)} to ${statusLabel(to)}.`);
+  const why = to === "lost" && reason ? ` (${CALL_OUTCOME_LABEL[reason]})` : "";
+  return ok(`Moved ${lead.name} from ${statusLabel(lead.status)} to ${statusLabel(to)}${why}.`);
 }
 
 export async function markReplied(pipelineId: PipelineId, leadId: string): Promise<ActionResult> {

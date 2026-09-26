@@ -38,7 +38,10 @@ can be worked through.
 On a lead page, the status and action panels (Move to…, Send outreach email, Mark opted out, Edit, Delete)
 come first on a phone, straight under the name; from the `md` breakpoint up they sit in the right-hand
 column beside the details. Both pipelines' lead pages and Stats pages share one layout each
-(`LeadPageLayout` in `src/components/LeadDetailParts.tsx`, `src/components/PipelineStatsPage.tsx`).
+(`LeadPageLayout` in `src/components/LeadDetailParts.tsx`, `src/components/PipelineStatsPage.tsx`). There is one way to mark a lead Lost, in
+both pipelines: **Move to… → Lost**, which asks why (Not interested, Too busy, No answer, No need, Unable
+to contact) before it confirms, and keeps the reason on the lead. **Mark bounced** is only offered while a
+bounce is still possible (not after a reply opted the lead out).
 
 The interface is English-only: the one operator and every recipient are in the US, so all strings are
 hard-coded in the components and there is no translation layer. This is the developer's recommendation and

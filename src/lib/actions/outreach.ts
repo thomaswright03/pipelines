@@ -102,8 +102,9 @@ export async function findLeadEmailAction(pipeline: string, leadId: string): Pro
   });
 }
 
-export async function updateLeadStatusAction(pipeline: string, leadId: string, status: string): Promise<ActionResult> {
-  return guarded("updateLeadStatus", pipeline, leadId, (p) => changeStatus(p, leadId, status));
+/** Moves a lead from its page. A move to Lost needs `reason` (one of LOST_REASONS). */
+export async function updateLeadStatusAction(pipeline: string, leadId: string, status: string, reason?: string): Promise<ActionResult> {
+  return guarded("updateLeadStatus", pipeline, leadId, (p) => changeStatus(p, leadId, status, reason));
 }
 
 export async function markRepliedAction(pipeline: string, leadId: string): Promise<ActionResult> {

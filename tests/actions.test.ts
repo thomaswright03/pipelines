@@ -17,7 +17,6 @@ import { updateVaultScheduleAction } from "@/lib/actions/pipeline-schedule";
 import { attachReplyAction, dismissReplyAction, searchLeadsForReplyAction } from "@/lib/actions/replies";
 import {
   createLeadAction,
-  markLeadLostAction,
   markResponseAsNonDeliveryAction,
   runPipelineScrapeAction,
   scheduleAppointmentAction,
@@ -309,11 +308,24 @@ describe("Cold Outreach lead actions", () => {
     expect(await scheduleAppointmentAction("missing", "2026-10-01T10:30")).toEqual({ ok: false, error: "This lead no longer exists." });
   });
 
-  it("marks a lead Lost with a reason", async () => {
-    const lead = await makeColdLead({ status: "responded" });
-    expect(await markLeadLostAction(lead.id, "bored")).toEqual({ ok: false, error: "Pick a reason first." });
-    expect(await markLeadLostAction(lead.id, "too_busy")).toEqual({ ok: true, message: `Marked ${lead.name} as Lost (Too busy).` });
-    expect(await markLeadLostAction(lead.id, "too_busy")).toMatchObject({ ok: false, error: `${lead.name} is already Lost.` });
+  it.each(["cold-outreach", "dataleadsell"] as const)("marks a %s lead Lost only with a reason, and keeps the reason", async (pipeline) => {
+    const lead = pipeline === "dataleadsell" ? await makeAgentLead({ status: "responded" }) : await makeColdLead({ status: "responded" });
+    const read = () =>
+      pipeline === "dataleadsell"
+        ? prisma.agentLead.findUniqueOrThrow({ where: { id: lead.id } })
+        : prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
+    for (const reason of [undefined, "bored"]) {
+      expect(await updateLeadStatusAction(pipeline, lead.id, "lost", reason)).toEqual({
+        ok: false,
+        error: `Pick why ${lead.name} was lost first.`,
+      });
+    }
+    expect((await read()).status).toBe("responded");
+    expect(await updateLeadStatusAction(pipeline, lead.id, "lost", "too_busy")).toEqual({
+      ok: true,
+      message: `Moved ${lead.name} from Responded to Lost (Too busy).`,
+    });
+    expect(await read()).toMatchObject({ status: "lost", callOutcome: "too_busy" });
   });
 
   it("turns a 'reply' that was really a bounce notice into a bounce", async () => {

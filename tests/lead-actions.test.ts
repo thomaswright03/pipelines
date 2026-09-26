@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { confirmColdCallAction, markRepliedAction, setOurReplyAction, updateLeadStatusAction } from "@/lib/actions/outreach";
-import { markLeadLostAction, scheduleAppointmentAction } from "@/lib/actions/vault-pipeline";
+import { scheduleAppointmentAction } from "@/lib/actions/vault-pipeline";
 import { updateVaultScheduleAction } from "@/lib/actions/pipeline-schedule";
 import { getPipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { addSuppressionAction, removeSuppressionByEmailAction } from "@/lib/actions/settings";
@@ -62,7 +62,10 @@ describe("status changes", () => {
       ok: false,
       error: "Yara hasn't replied yet, so there's nothing to answer.",
     });
-    expect(await markLeadLostAction(lead.id, "too_busy")).toEqual({ ok: true, message: "Marked Yara as Lost (Too busy)." });
+    expect(await updateLeadStatusAction("cold-outreach", lead.id, "lost", "too_busy")).toEqual({
+      ok: true,
+      message: "Moved Yara from New to Lost (Too busy).",
+    });
   });
 });
 
@@ -129,8 +132,8 @@ describe("manual moves never overwrite a change made meanwhile", () => {
     await prisma.lead.update({ where: { id: lead.id }, data: { status: "responded", repliedAt: new Date() } });
 
     for (const attempt of [
-      () => updateLeadStatusAction("cold-outreach", lead.id, "lost"),
-      () => markLeadLostAction(lead.id, "not_interested"),
+      () => updateLeadStatusAction("cold-outreach", lead.id, "lost", "not_interested"),
+      () => updateLeadStatusAction("cold-outreach", lead.id, "cold_call_list"),
       () => scheduleAppointmentAction(lead.id, "2030-01-02T10:00"),
     ]) {
       const spy = vi.spyOn(pipeline, "findLead").mockResolvedValueOnce(stale);
@@ -141,9 +144,12 @@ describe("manual moves never overwrite a change made meanwhile", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("responded");
   });
 
-  it("Mark lost follows the stage machine", async () => {
+  it("Lost follows the stage machine", async () => {
     const lead = await makeColdLead({ name: "Lossy", status: "lost" });
-    expect(await markLeadLostAction(lead.id, "no_need")).toEqual({ ok: false, error: "Lossy is already Lost." });
+    expect(await updateLeadStatusAction("cold-outreach", lead.id, "lost", "no_need")).toEqual({
+      ok: true,
+      message: "Lossy is already Lost.",
+    });
   });
 });
 

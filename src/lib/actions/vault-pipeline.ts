@@ -14,7 +14,7 @@ import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { parseZonedInputValue, formatDateTime } from "@/lib/time";
-import { allowedTransitions, APPOINTMENT_FROM, statusLabel, CALL_OUTCOME_LABEL } from "@/lib/lead-status";
+import { APPOINTMENT_FROM, statusLabel } from "@/lib/lead-status";
 import {
   coldOutreachLeadSchema,
   coldOutreachLeadEditSchema,
@@ -207,27 +207,6 @@ export async function scheduleAppointmentAction(leadId: string, localDateTime: s
     return { ok: true, message: `Appointment with ${lead.name} set for ${formatDateTime(date)} — moved to Appointment set.` };
   } catch (err) {
     logError("action.scheduleAppointment", err, { leadId });
-    return { ok: false, error: failureMessage(err, UNEXPECTED) };
-  }
-}
-
-const LOST_REASONS = ["not_interested", "too_busy", "no_answer", "no_need", "unable_to_contact"] as const;
-
-export async function markLeadLostAction(leadId: string, reason: string): Promise<ActionResult> {
-  if (!(LOST_REASONS as readonly string[]).includes(reason)) return { ok: false, error: "Pick a reason first." };
-  try {
-    const lead = await pipeline.findLead(prisma, leadId);
-    if (!lead) return { ok: false, error: "This lead no longer exists." };
-    if (lead.status === "lost") return { ok: false, error: `${lead.name} is already Lost.` };
-    if (!allowedTransitions("cold-outreach", lead.status).includes("lost")) {
-      return { ok: false, error: `${lead.name} can't move from ${statusLabel(lead.status)} to Lost.` };
-    }
-    const moved = await pipeline.updateIfStatus(prisma, leadId, [lead.status], { status: "lost", callOutcome: reason });
-    if (!moved) return { ok: false, error: CHANGED_MEANWHILE(lead.name) };
-    revalidate(leadId);
-    return { ok: true, message: `Marked ${lead.name} as Lost (${CALL_OUTCOME_LABEL[reason] ?? reason}).` };
-  } catch (err) {
-    logError("action.markLeadLost", err, { leadId });
     return { ok: false, error: failureMessage(err, UNEXPECTED) };
   }
 }

@@ -4,7 +4,7 @@
 // when it succeeds, when the server refuses it, and when the server can't
 // be reached.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { deferred } from "./dom";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
@@ -149,5 +149,63 @@ describe("LeadActions: what is offered", () => {
     renderLead({ email: null });
     fireEvent.click(screen.getByRole("button", { name: "Find email" }));
     expect(await screen.findByText("No address found on acme.test.")).toBeTruthy();
+  });
+});
+
+describe("LeadActions: marking a lead Lost", () => {
+  function chooseLost() {
+    fireEvent.change(screen.getByRole("combobox", { name: "Move to…" }), { target: { value: "lost" } });
+  }
+
+  it("is offered once, and asks why before it confirms", async () => {
+    actions.updateLeadStatusAction.mockResolvedValue({ ok: true, message: "Moved Acme Plumbing from Contacted to Lost (Too busy)." });
+    renderLead({ status: "contacted", emailed: true });
+    expect(screen.getAllByRole("option", { name: "Lost" })).toHaveLength(1);
+    chooseLost();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mark lost" }));
+    expect(await within(dialog).findByRole("alert")).toHaveProperty("textContent", "Pick one to continue.");
+    expect(actions.updateLeadStatusAction).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Why was the lead lost?" }), { target: { value: "too_busy" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mark lost" }));
+    expect(await screen.findByText("Moved Acme Plumbing from Contacted to Lost (Too busy).")).toBeTruthy();
+    expect(actions.updateLeadStatusAction).toHaveBeenCalledWith("cold-outreach", "lead-1", "lost", "too_busy");
+  });
+
+  it("changes nothing when cancelled", async () => {
+    renderLead({ status: "contacted", emailed: true });
+    chooseLost();
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(actions.updateLeadStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("asks why on the dataleadsell lead page too", async () => {
+    render(
+      <LeadActions
+        pipeline="dataleadsell"
+        lead={{ ...NEW_LEAD, status: "responded", emailed: true, replied: true }}
+        suppression={null}
+        paused={false}
+      />,
+    );
+    chooseLost();
+    expect(within(await screen.findByRole("dialog")).getByRole("combobox", { name: "Why was the lead lost?" })).toBeTruthy();
+  });
+});
+
+describe("LeadActions: bounces", () => {
+  it("offers Mark bounced for an emailed lead", () => {
+    renderLead({ status: "contacted", emailed: true });
+    expect(screen.getByRole("button", { name: "Mark bounced" })).toBeTruthy();
+  });
+
+  it("doesn't offer Mark bounced once a reply opted the lead out (the email arrived)", () => {
+    renderLead(
+      { status: "lost", emailed: true, replied: true },
+      { suppression: { source: "inbound_reply", evidence: "STOP", reason: null, since: "Sep 25, 2026" } },
+    );
+    expect(screen.queryByRole("button", { name: "Mark bounced" })).toBeNull();
   });
 });

@@ -202,6 +202,20 @@ test("a reply from an unknown address can be attached to the right lead", async 
   expect(await leadStatus(id!)).toBe("responded");
 });
 
+test("a lead is marked Lost in one place, and only with a reason", async ({ page }) => {
+  const [id] = await seedColdLeads(1, { status: "contacted" });
+  await page.goto(`/vault-pipeline/${id}`);
+  await expect(page.getByRole("option", { name: "Lost" })).toHaveCount(1);
+  await page.getByRole("combobox", { name: "Move to…" }).selectOption("lost");
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Mark lost" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Pick one to continue.");
+  await dialog.getByRole("combobox", { name: "Why was the lead lost?" }).selectOption("no_need");
+  await dialog.getByRole("button", { name: "Mark lost" }).click();
+  await expect(page.getByText(/to Lost \(No need\)\./)).toBeVisible();
+  expect(await leadStatus(id!)).toBe("lost");
+});
+
 test("starting another control clears the previous control's message", async ({ page }) => {
   await page.goto("/vault-pipeline");
   // No Yelp key in the browser tests, so this fails straight away with a message.
