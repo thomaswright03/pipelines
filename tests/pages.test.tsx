@@ -160,10 +160,23 @@ describe("a lead page", () => {
     await prisma.agentLeadActivity.create({
       data: { leadId: lead.id, type: "email", notes: "Reply received — how did you get my email?" },
     });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "k1",
+        fromEmail: lead.email!,
+        kind: "reply",
+        optedOut: false,
+        text: "How did you get my email?",
+        reviewReason: "The reply sounds like a complaint.",
+        matched: [`dataleadsell:${lead.id}`],
+        rulesVersion: "test",
+      },
+    });
     const page = await renderPage(AgentLead(pageProps({ id: lead.id })));
-    expect(page.text).toContain("Reply needs a look.");
+    expect(page.text).toContain("Reply needs a look");
+    expect(page.text).toContain("How did you get my email?");
     expect(page.text).toContain("The reply sounds like a complaint.");
-    expect(page.text).toContain("Until you do, the lead stays in Contacted and off the call deck.");
+    expect(page.text).toContain("Until you choose, nothing is emailed to this address and the lead stays in Contacted, off the call deck.");
     expect(page.text).toContain("Template old-v1 (an earlier wording)");
     expect(page.text).toContain("how did you get my email?");
   });

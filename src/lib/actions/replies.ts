@@ -1,7 +1,8 @@
 "use server";
 
 // Unmatched replies: find the lead a reply belongs to, attach it (which
-// applies the normal reply rules to that lead), or dismiss it.
+// applies the normal reply rules to that lead), mark its address opted out,
+// or dismiss it.
 import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
@@ -9,7 +10,7 @@ import { logError } from "@/lib/log";
 import { statusLabel } from "@/lib/lead-status";
 import { ALL_PIPELINES } from "@/lib/outreach/pipelines";
 import { parsePipelineId, PIPELINE_BASE_PATH } from "@/lib/outreach/pipeline-id";
-import { attachReplyToLead, dismissReply } from "@/lib/outreach/inbound";
+import { attachReplyToLead, dismissReply, optOutUnmatchedReply } from "@/lib/outreach/inbound";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
 export type LeadMatch = { pipeline: string; pipelineLabel: string; id: string; name: string; email: string | null; status: string };
@@ -63,5 +64,16 @@ export async function dismissReplyAction(replyId: string): Promise<ActionResult>
   } catch (err) {
     logError("action.dismissReply", err, { replyId });
     return { ok: false, error: failureMessage(err, "Couldn't dismiss the reply — try again in a moment.") };
+  }
+}
+
+export async function optOutReplyAction(replyId: string): Promise<ActionResult> {
+  try {
+    const result = await optOutUnmatchedReply(String(replyId));
+    refreshAll();
+    return result;
+  } catch (err) {
+    logError("action.optOutReply", err, { replyId });
+    return { ok: false, error: failureMessage(err, "Couldn't add the address to the do-not-email list — nothing was changed. Try again.") };
   }
 }

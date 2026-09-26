@@ -52,7 +52,11 @@ const NEW_LEAD: Lead = {
 
 function renderLead(
   lead: Partial<Lead> = {},
-  props: { paused?: boolean; suppression?: Parameters<typeof LeadActions>[0]["suppression"] } = {},
+  props: {
+    paused?: boolean;
+    suppression?: Parameters<typeof LeadActions>[0]["suppression"];
+    latestReply?: Parameters<typeof LeadActions>[0]["latestReply"];
+  } = {},
 ) {
   return render(
     <LeadActions
@@ -60,6 +64,7 @@ function renderLead(
       lead={{ ...NEW_LEAD, ...lead }}
       suppression={props.suppression ?? null}
       paused={props.paused ?? false}
+      latestReply={props.latestReply ?? null}
     />,
   );
 }
@@ -142,6 +147,39 @@ describe("LeadActions: what is offered", () => {
     expect(screen.getByText(/The reply says no thanks\./)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Mark replied" }));
     expect(await screen.findByText("Marked Acme Plumbing as replied.")).toBeTruthy();
+  });
+
+  it("shows the reply's own words, why it was flagged once, and the choices as buttons", async () => {
+    actions.dismissReplyReviewAction.mockResolvedValue({ ok: true, message: "Marked the reply from Acme Plumbing as reviewed." });
+    renderLead(
+      {
+        status: "contacted",
+        emailed: true,
+        replyNeedsReview: true,
+        replyReviewReason: "It may be asking not to be emailed (“exclude”).",
+      },
+      { latestReply: { text: "Kindly exclude me from future mailings.", receivedAt: "Sep 26, 2026, 9:00 AM" } },
+    );
+    const banner = screen.getByRole("region", { name: "Reply needs a look" });
+    expect(within(banner).getByText("Kindly exclude me from future mailings.")).toBeTruthy();
+    expect(within(banner).getAllByText(/may be asking not to be emailed/)).toHaveLength(1);
+    // Each choice appears once on the page: in the banner.
+    expect(screen.getAllByRole("button", { name: "Mark replied" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Mark opted out" })).toHaveLength(1);
+    expect(within(banner).getByRole("button", { name: "Mark opted out" })).toBeTruthy();
+
+    // Keeping it asks first, since the reply may be an opt-out.
+    fireEvent.click(within(banner).getByRole("button", { name: "Keep as Contacted" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/doesn.t ask to stop emails/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep as Contacted" }));
+    expect(await screen.findByText("Marked the reply from Acme Plumbing as reviewed.")).toBeTruthy();
+  });
+
+  it("offers no send while a reply from a New lead needs a look", () => {
+    renderLead({ replyNeedsReview: true, replyReviewReason: "It shows no clear yes, question or request." });
+    expect(screen.queryByRole("button", { name: "Send outreach email" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Keep as New" })).toBeTruthy();
   });
 
   it("offers Find email when there is no address", async () => {

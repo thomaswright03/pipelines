@@ -91,7 +91,7 @@ describe("/api/email-inbound", () => {
   it.each([
     ["I'd rather not receive these", "opt-out"],
     ["I would rather not receive these.", "opt-out"],
-    ["Lose my number", "opt-out"],
+    ["Lose my number", "look"],
     ["F off", "opt-out"],
     ["Bitte keine E-Mails mehr", "opt-out"],
     ["Pass.", "look"],
@@ -134,13 +134,13 @@ describe("/api/email-inbound", () => {
     expect(await prisma.suppressedEmail.count()).toBe(0);
   });
 
-  it("records an unclear reply from a customer without flagging it", async () => {
+  it("flags an unclear reply from a customer for a look, keeping the customer's status", async () => {
     const lead = await makeColdLead({ email: "client@shop.test", status: "paying_client", lastEmailedAt: new Date() });
     await inbound({ from: "client@shop.test", text: "Thanks for the invoice." });
     const after = await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
-    expect(after).toMatchObject({ status: "paying_client", replyNeedsReview: false });
+    expect(after).toMatchObject({ status: "paying_client", replyNeedsReview: true });
     const activity = await prisma.leadActivity.findFirstOrThrow({ where: { leadId: lead.id } });
-    expect(activity.notes).toContain("Not counted as a reply by itself");
+    expect(activity.notes).toContain("Needs a look");
   });
 
   it("flags a Spanish reply it doesn't understand for a look instead of moving the lead to Responded", async () => {

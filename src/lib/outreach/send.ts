@@ -5,6 +5,9 @@
 //   first-touch pitch.
 // - Nothing is sent while outbound email is paused (Settings).
 // - Nothing is sent to a suppressed (opted-out) address.
+// - Nothing is sent to an address whose reply is waiting for the operator
+//   ("Reply needs a look", on any lead in either pipeline, or unmatched on
+//   the Replies page): the reply may be asking not to be emailed.
 // - Each address gets at most one pitch per pipeline — and, unless the
 //   owner allows it in Settings, at most one pitch across both pipelines.
 // - The lead and the address are claimed atomically *before* the SMTP call
@@ -16,7 +19,7 @@ import { prisma } from "@/lib/db";
 import { logError, logWarn } from "@/lib/log";
 import { classifySendError, sendOutreachEmail } from "@/lib/send-email";
 import { getAppSettings, PAUSED_MESSAGE, recordSendFailure } from "@/lib/outreach/settings";
-import { getPipeline, type Db, type OutreachLead } from "@/lib/outreach/pipelines";
+import { ALL_PIPELINES, getPipeline, type Db, type OutreachLead } from "@/lib/outreach/pipelines";
 import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { statusLabel } from "@/lib/lead-status";
 
@@ -47,7 +50,9 @@ type SendRefusal =
   | "suppressed"
   | "duplicate_address"
   /** The recipient's mail server refused the address (now, or on an earlier send). */
-  | "address_refused";
+  | "address_refused"
+  /** A reply from this address is waiting for the operator to read it. */
+  | "reply_needs_look";
 
 export type SendOutcome =
   | { ok: true; leadId: string; leadName: string; email: string; message: string; warning?: string }
@@ -85,6 +90,23 @@ export async function findExistingPitch(
   return { pipeline: other, leadId: row.leadId, leadName: lead?.name ?? null, refused: row.state === "refused" };
 }
 
+/**
+ * Where a reply from `email` is waiting for the operator, if anywhere: a lead
+ * flagged "Reply needs a look" in either pipeline, or a reply on the Replies
+ * page that matched no lead and hasn't been dealt with.
+ */
+export async function pendingReplyHold(db: Db, email: string): Promise<string | null> {
+  for (const pipeline of ALL_PIPELINES) {
+    const flagged = (await pipeline.findLeadsByEmail(db, email)).find((l) => l.replyNeedsReview);
+    if (flagged) return `on ${flagged.name}'s page in ${pipeline.label}`;
+  }
+  const unmatched = await db.inboundReply.findFirst({
+    where: { fromEmail: email, kind: "reply", reviewReason: { not: null }, matched: { isEmpty: true }, resolvedAt: null },
+    select: { id: true },
+  });
+  return unmatched ? "on the Replies page" : null;
+}
+
 function describeExistingPitch(existing: { pipeline: PipelineId; leadName: string | null }, self: PipelineId): string {
   const via = existing.leadName ? `via ${existing.leadName}` : "earlier";
   return existing.pipeline === self ? via : `${via} in ${PIPELINE_LABEL[existing.pipeline]}`;
@@ -120,6 +142,12 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
     );
   }
   if (lead.sendBlockedReason) return fail("blocked", `${lead.name} isn't sendable: ${lead.sendBlockedReason}`);
+  if (lead.replyNeedsReview) {
+    return fail(
+      "reply_needs_look",
+      `A reply from ${lead.name} needs a look — nothing was sent. Read it on the lead's page and resolve it first.`,
+    );
+  }
 
   const claimedAt = new Date();
   let recipientId: string;
@@ -131,6 +159,13 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
 
       if (await tx.suppressedEmail.findUnique({ where: { email } })) {
         throw new Refusal("suppressed", `${email} opted out of our emails — nothing was sent.`);
+      }
+      const hold = await pendingReplyHold(tx, email);
+      if (hold) {
+        throw new Refusal(
+          "reply_needs_look",
+          `A reply from ${email} is waiting for a look ${hold} — nothing was sent to ${lead.name}. Resolve that reply first.`,
+        );
       }
 
       const existing = await findExistingPitch(tx, pipelineId, email, settings.allowCrossPipelineRepeats);

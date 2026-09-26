@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { attachReplyAction, dismissReplyAction, searchLeadsForReplyAction, type LeadMatch } from "@/lib/actions/replies";
+import { attachReplyAction, dismissReplyAction, optOutReplyAction, searchLeadsForReplyAction, type LeadMatch } from "@/lib/actions/replies";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -12,6 +12,8 @@ export type UnmatchedReplyView = {
   subject: string | null;
   text: string | null;
   optedOut: boolean;
+  /** Why the reply needs a look (nothing is emailed to the address until it's dealt with), or null. */
+  reviewReason: string | null;
   /** A delivery-failure notice whose failed address couldn't be matched to a lead. */
   bounce: boolean;
   kindReason: string | null;
@@ -116,10 +118,25 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
   async function dismiss() {
     const confirmed = await confirm({
       title: reply.bounce ? `Dismiss this bounce notice?` : `Dismiss the reply from ${reply.fromEmail}?`,
-      body: <p>It leaves this list without changing any lead.</p>,
+      body: (
+        <p>
+          It leaves this list without changing any lead.
+          {reply.reviewReason && " The address can then be emailed again — if the reply asks to stop, use Mark opted out instead."}
+        </p>
+      ),
       confirmLabel: "Dismiss",
     });
     if (confirmed) act(() => dismissReplyAction(reply.id));
+  }
+
+  async function optOut() {
+    const confirmed = await confirm({
+      title: `Stop emailing ${reply.fromEmail}?`,
+      body: <p>Adds the address to the do-not-email list and removes the reply from this list. Neither pipeline will email it again.</p>,
+      confirmLabel: "Add to do-not-email list",
+      danger: true,
+    });
+    if (confirmed) act(() => optOutReplyAction(reply.id));
   }
 
   return (
@@ -140,6 +157,16 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
         {reply.text ?? <span className="muted">(The text of replies from before this list existed wasn&apos;t kept.)</span>}
       </p>
       {reply.optedOut && <p className="notice-warning">Read as an opt-out: {reply.fromEmail} is already on the do-not-email list.</p>}
+      {reply.reviewReason && (
+        <div className="notice-warning flex flex-col gap-2">
+          <p>
+            <strong>Needs a look.</strong> {reply.reviewReason} Nothing is emailed to this address until you attach, opt out or dismiss it.
+          </p>
+          <button type="button" disabled={isPending} onClick={optOut} className="btn-danger self-start">
+            Mark opted out
+          </button>
+        </div>
+      )}
       <form onSubmit={search} className="flex flex-wrap items-end gap-2">
         <label className="field-label min-w-0 flex-1">
           {reply.bounce ? "Find the lead whose email bounced" : "Find the lead it belongs to"}

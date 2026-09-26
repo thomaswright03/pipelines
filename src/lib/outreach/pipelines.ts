@@ -40,6 +40,8 @@ export type OutreachLead = {
   notes: string | null;
   /** Why the address is believed to be the lead's (see AgentLead.emailEvidence). */
   emailEvidence: string | null;
+  /** A reply from this lead is waiting for the operator ("Reply needs a look"); nothing is sent to it until resolved. */
+  replyNeedsReview: boolean;
   company: string | null; // Cold Outreach only
   brokerage: string | null; // dataleadsell only
   county: string | null; // dataleadsell only
@@ -126,10 +128,10 @@ export type PipelineAdapter = {
   ): Promise<void>;
   markLatestSendBounced(db: Db, leadId: string, at: Date): Promise<boolean>;
   hasBeenEmailed(db: Db, leadId: string): Promise<boolean>;
-  /** Leads the bulk send may pitch: new, with an address, not flagged. */
+  /** Leads the bulk send may pitch: new, with an address, not flagged, no reply waiting for a look. */
   listSendable(db: Db, limit: number): Promise<OutreachLead[]>;
   countSendable(db: Db): Promise<number>;
-  /** New leads with an address that can't be sent (flagged), for the "why nothing to send" hint. */
+  /** New leads with an address that can't be sent (flagged, or a reply waiting for a look), for the "why nothing to send" hint. */
   countBlockedNew(db: Db): Promise<number>;
   /**
    * Moves every lead still Contacted and last emailed at or before `cutoff`
@@ -181,10 +183,18 @@ const STALE_NOTE = {
   days: String(STALE_CONTACT_DAYS),
 };
 
-const SENDABLE = { status: "new", email: { not: null }, sendBlockedReason: null } as const satisfies Prisma.LeadWhereInput &
-  Prisma.AgentLeadWhereInput;
-const BLOCKED_NEW = { status: "new", email: { not: null }, sendBlockedReason: { not: null } } as const satisfies Prisma.LeadWhereInput &
-  Prisma.AgentLeadWhereInput;
+// A lead whose reply needs a look is held until the operator resolves it.
+const SENDABLE = {
+  status: "new",
+  email: { not: null },
+  sendBlockedReason: null,
+  replyNeedsReview: false,
+} as const satisfies Prisma.LeadWhereInput & Prisma.AgentLeadWhereInput;
+const BLOCKED_NEW = {
+  status: "new",
+  email: { not: null },
+  OR: [{ sendBlockedReason: { not: null } }, { replyNeedsReview: true }],
+} as const satisfies Prisma.LeadWhereInput & Prisma.AgentLeadWhereInput;
 function needsLookup(retryBefore?: Date): Prisma.LeadWhereInput & Prisma.AgentLeadWhereInput {
   return {
     email: null,
@@ -262,6 +272,7 @@ function toOutreach(row: Row): OutreachLead {
     repliedAt: row.repliedAt,
     notes: row.notes,
     emailEvidence: row.emailEvidence,
+    replyNeedsReview: row.replyNeedsReview,
     company: row.company ?? null,
     brokerage: row.brokerage ?? null,
     county: row.county ?? null,
@@ -326,7 +337,7 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     },
     async claimForSend(db, leadId, email, at) {
       const { count } = await leads(db).updateMany({
-        where: { id: leadId, status: "new", email, sendBlockedReason: null },
+        where: { id: leadId, status: "new", email, sendBlockedReason: null, replyNeedsReview: false },
         data: { status: "contacted", lastEmailedAt: at, repliedAt: null },
       });
       return count === 1;

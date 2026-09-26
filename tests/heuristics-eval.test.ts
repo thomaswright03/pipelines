@@ -16,11 +16,12 @@ import { classifyReply } from "@/lib/outreach/reply-classifier";
 import { addressFilterFor } from "@/lib/outreach/email-policy";
 import { detectAutoReply, detectBounce } from "@/lib/outreach/auto-mail";
 import { siteEvidence } from "@/lib/outreach/site-evidence";
-import { REPLY_CORPUS, REPLY_HELD_OUT, REPLY_UNLISTED_HELD_OUT } from "./corpus/replies";
+import { REPLY_CORPUS, REPLY_DEV_OUTCOMES, REPLY_HELD_OUT, REPLY_UNLISTED_HELD_OUT } from "./corpus/replies";
 import { ADDRESS_CORPUS, ADDRESS_HELD_OUT } from "./corpus/addresses";
 import { AUTO_REPLY_DEV, AUTO_REPLY_HELD_OUT, BOUNCE_DEV, BOUNCE_HELD_OUT } from "./corpus/auto-mail";
 import { REVIEW_DEV, REVIEW_HELD_OUT, REVIEW_UNLISTED_HELD_OUT } from "./corpus/review";
 import { REAL_REPLY_HELD_OUT, type ReplyOutcome } from "./corpus/real-replies";
+import { REPLY_HELD_OUT_R10 } from "./corpus/replies-held-out-r10";
 import { SITE_DEV, SITE_HELD_OUT } from "./corpus/sites";
 
 type Score = { precision: number; recall: number; tp: number; fp: number; fn: number; tn: number };
@@ -62,40 +63,129 @@ function evaluate(
 
 const firstLine = (text: string) => JSON.stringify(text.split("\n")[0]);
 
-describe("heuristics on the labelled evaluation sets", () => {
-  // Opt-out detection: a missed opt-out means emailing someone who asked us
-  // to stop, so recall matters most; a false opt-out only loses one prospect.
-  it(`reply opt-out classifier (${REPLY_CORPUS.length} dev, ${REPLY_HELD_OUT.length} + ${REPLY_UNLISTED_HELD_OUT.length} held-out)`, () => {
-    expect(REPLY_CORPUS.length).toBeGreaterThanOrEqual(100);
-    const run = (cases: typeof REPLY_CORPUS) =>
-      cases.map((c) => ({
-        expected: c.optOut,
-        actual: classifyReply({ subject: c.subject ?? "Re: hello", text: c.text }).optOut,
-        label: (c.subject ? `[${c.subject}] ` : "") + firstLine(c.text),
-      }));
-    const words = { fp: "false opt-out", fn: "missed opt-out" };
-    evaluate("Reply opt-outs", "dev", run(REPLY_CORPUS), { precision: 0.95, recall: 0.95 }, words);
-    evaluate("Reply opt-outs", "held-out", run(REPLY_HELD_OUT), { precision: 0.95, recall: 0.95 }, words);
-    // Round 9 (26 cases): 50.0% / 11.8% before the rule change, 94.4% / 100% after.
-    evaluate("Reply opt-outs", "held-out, unlisted phrasings", run(REPLY_UNLISTED_HELD_OUT), { precision: 0.9, recall: 0.95 }, words);
-  });
+/**
+ * What a labelled reply is. The older sets were labelled on one question
+ * only: "not_opt_out" (anything but an opt-out) and "needs_look" (a decline
+ * or complaint, never an opt-out) come from them.
+ */
+type Intent = ReplyOutcome | "not_opt_out";
+type IntentCase = { text: string; subject?: string; intent: Intent };
+type ReplySplitScore = {
+  name: string;
+  total: number;
+  needsLook: number;
+  optOuts: number;
+  autoOptOuts: number;
+  positives: number;
+  autoPositives: number;
+  unsafe: string[];
+};
 
-  // "Not counted as a positive reply" (flagged for a look, or an opt-out):
-  // a miss moves a brush-off to Responded (inflating the reply rate, and
-  // the operator may phone someone who declined); a false flag only asks
-  // the operator to glance at a real yes.
-  it(`reply "needs a look" flag (${REVIEW_DEV.length} dev, ${REVIEW_HELD_OUT.length} + ${REVIEW_UNLISTED_HELD_OUT.length} held-out)`, () => {
-    const run = (cases: typeof REVIEW_DEV) =>
-      cases.map((c) => {
-        const verdict = classifyReply({ subject: "Re: hello", text: c.text });
-        return { expected: c.review, actual: verdict.optOut || verdict.review !== null, label: firstLine(c.text) };
-      });
-    const words = { fp: "flagged a positive reply", fn: "missed a brush-off" };
-    evaluate("Needs-a-look replies", "dev", run(REVIEW_DEV), { precision: 0.95, recall: 0.95 }, words);
-    // Raised from 0.85/0.85 in round 7 (measured 97.8% / 100% on 78 cases).
-    evaluate("Needs-a-look replies", "held-out", run(REVIEW_HELD_OUT), { precision: 0.9, recall: 0.9 }, words);
-    // Round 9 (44 cases): 100% / 8.3% before a positive signal was required, 100% / 100% after.
-    evaluate("Needs-a-look replies", "held-out, unlisted phrasings", run(REVIEW_UNLISTED_HELD_OUT), { precision: 0.9, recall: 0.9 }, words);
+/** An outcome the app must never reach for a reply of this intent. */
+function isUnsafe(intent: Intent, verdict: ReplyOutcome): boolean {
+  if (verdict === "opt_out") return intent !== "opt_out"; // suppressed someone who didn't ask
+  if (verdict === "positive") return intent === "opt_out" || intent === "needs_look"; // counted a stop or a no as a yes
+  return false; // needs_look is always safe: the operator decides
+}
+
+/** Scores one split of labelled replies on the three outcomes, and prints it with every unsafe or needs-a-look case. */
+function scoreReplies(name: string, cases: IntentCase[]): ReplySplitScore {
+  const result: ReplySplitScore = {
+    name,
+    total: cases.length,
+    needsLook: 0,
+    optOuts: 0,
+    autoOptOuts: 0,
+    positives: 0,
+    autoPositives: 0,
+    unsafe: [],
+  };
+  const lines: string[] = [];
+  for (const c of cases) {
+    const verdict = classifyReply({ subject: c.subject ?? "Re: hello", text: c.text }).verdict;
+    const label = (c.subject ? `[${c.subject}] ` : "") + firstLine(c.text);
+    if (verdict === "needs_look") result.needsLook++;
+    if (c.intent === "opt_out") {
+      result.optOuts++;
+      if (verdict === "opt_out") result.autoOptOuts++;
+    }
+    if (c.intent === "positive") {
+      result.positives++;
+      if (verdict === "positive") result.autoPositives++;
+    }
+    if (isUnsafe(c.intent, verdict)) {
+      result.unsafe.push(label);
+      lines.push(`  UNSAFE: ${c.intent} read as ${verdict}: ${label}`);
+    } else if (verdict === "needs_look" && c.intent !== "needs_look") {
+      lines.push(`  needs a look: ${c.intent}: ${label}`);
+    }
+  }
+  const rate = (n: number, d: number) => (d === 0 ? "—" : `${n} of ${d} (${pct(n / d)})`);
+  console.log(
+    [
+      `Reply outcomes [${name}, synthetic]: ${result.total} replies; unsafe ${result.unsafe.length}; ` +
+        `needs a look ${rate(result.needsLook, result.total)}; opt-outs suppressed automatically ${rate(result.autoOptOuts, result.optOuts)}; ` +
+        `interested replies counted automatically ${rate(result.autoPositives, result.positives)}`,
+      ...lines,
+    ].join("\n"),
+  );
+  return result;
+}
+
+describe("heuristics on the labelled evaluation sets", () => {
+  // The reply classifier acts on its own only when it is confident; anything
+  // else goes to "needs a look" (the operator decides, and nothing is
+  // emailed to the address meanwhile). So each split is scored on:
+  // - UNSAFE outcomes, which must stay at zero: an opt-out or a decline
+  //   counted as a positive reply, or a reply that isn't an opt-out
+  //   suppressed as one;
+  // - how much the rules handle by themselves: opt-outs suppressed, and
+  //   interested replies counted, automatically;
+  // - how many replies land on "needs a look" — the operator's workload.
+  it(`reply classifier outcomes (${REPLY_CORPUS.length + REVIEW_DEV.length + REPLY_DEV_OUTCOMES.length} dev, ${
+    REPLY_HELD_OUT.length +
+    REPLY_UNLISTED_HELD_OUT.length +
+    REVIEW_HELD_OUT.length +
+    REVIEW_UNLISTED_HELD_OUT.length +
+    REPLY_HELD_OUT_R10.length
+  } held-out)`, () => {
+    expect(REPLY_CORPUS.length).toBeGreaterThanOrEqual(100);
+    const fromOptOutLabels = (cases: typeof REPLY_CORPUS): IntentCase[] =>
+      cases.map((c) => ({ text: c.text, subject: c.subject, intent: c.optOut ? "opt_out" : "not_opt_out" }));
+    const fromReviewLabels = (cases: typeof REVIEW_DEV): IntentCase[] =>
+      cases.map((c) => ({ text: c.text, intent: c.review ? "needs_look" : "positive" }));
+    const fromOutcomes = (cases: { text: string; subject?: string; expected: ReplyOutcome }[]): IntentCase[] =>
+      cases.map((c) => ({ text: c.text, subject: c.subject, intent: c.expected }));
+
+    const dev = scoreReplies("dev", [
+      ...fromOptOutLabels(REPLY_CORPUS),
+      ...fromReviewLabels(REVIEW_DEV),
+      ...fromOutcomes(REPLY_DEV_OUTCOMES),
+    ]);
+    const heldOut = [
+      scoreReplies("held-out, rounds 5-7 opt-out labels", fromOptOutLabels(REPLY_HELD_OUT)),
+      scoreReplies("held-out, round 9 unlisted opt-out phrasings", fromOptOutLabels(REPLY_UNLISTED_HELD_OUT)),
+      scoreReplies("held-out, rounds 5-7 decline labels", fromReviewLabels(REVIEW_HELD_OUT)),
+      scoreReplies("held-out, round 9 unlisted declines", fromReviewLabels(REVIEW_UNLISTED_HELD_OUT)),
+      scoreReplies("held-out, round 10 batch", fromOutcomes(REPLY_HELD_OUT_R10)),
+    ];
+    const all = [dev, ...heldOut];
+
+    // Never an unsafe outcome, on any split.
+    for (const split of all) expect(split.unsafe, `unsafe outcomes on the ${split.name} split`).toEqual([]);
+    // Floors on what the rules handle alone, a little under the scores
+    // measured on 2026-09-26 (round 10), so the rules can't quietly slide
+    // into sending everything to the operator. Lowering one needs a reason
+    // in the commit message.
+    const sum = (key: "optOuts" | "autoOptOuts" | "positives" | "autoPositives" | "total" | "needsLook") =>
+      heldOut.reduce((n, split) => n + split[key], 0);
+    expect(sum("autoOptOuts") / sum("optOuts"), "held-out opt-outs suppressed automatically").toBeGreaterThanOrEqual(0.75);
+    expect(sum("autoPositives") / sum("positives"), "held-out interested replies counted automatically").toBeGreaterThanOrEqual(0.75);
+    expect(sum("needsLook") / sum("total"), "held-out share of replies needing a look").toBeLessThanOrEqual(0.5);
+    console.log(
+      `Reply outcomes [held-out, all splits, synthetic]: ${sum("total")} replies — ${sum("needsLook")} (${pct(sum("needsLook") / sum("total"))}) need a look; ` +
+        `${sum("autoOptOuts")} of ${sum("optOuts")} opt-outs suppressed automatically, ${sum("autoPositives")} of ${sum("positives")} interested replies counted automatically; 0 unsafe.`,
+    );
   });
 
   // Anonymised real replies (tests/corpus/real-replies.ts), scored on the
@@ -104,28 +194,16 @@ describe("heuristics on the labelled evaluation sets", () => {
   it(`reply outcomes on real replies (${REAL_REPLY_HELD_OUT.length} held-out)`, () => {
     if (REAL_REPLY_HELD_OUT.length === 0) {
       console.log(
-        "Real replies [held-out]: none yet — every score above is on SYNTHETIC cases written by the rules' author. " +
-          "See README → “Measuring the reply and address rules” to add anonymised real replies.",
+        "Real replies [held-out]: none yet — every reply score above is on SYNTHETIC cases written by the rules' author. " +
+          "See docs/measuring-rules.md to add anonymised real replies.",
       );
       return;
     }
-    const outcome = (text: string, subject?: string): ReplyOutcome => {
-      const verdict = classifyReply({ subject: subject ?? "Re: hello", text });
-      return verdict.optOut ? "opt_out" : verdict.review ? "needs_look" : "positive";
-    };
-    const results = REAL_REPLY_HELD_OUT.map((c) => ({ ...c, actual: outcome(c.text, c.subject) }));
-    const right = results.filter((r) => r.actual === r.expected).length;
-    const missedOptOuts = results.filter((r) => r.expected === "opt_out" && r.actual !== "opt_out").length;
-    console.log(
-      [
-        `Real replies [held-out, ${results.length} cases${results.length < 50 ? " — fewer than 50, read as indicative only" : ""}]: ` +
-          `${pct(right / results.length)} right, ${missedOptOuts} missed opt-out(s)`,
-        ...results
-          .filter((r) => r.actual !== r.expected)
-          .map((r) => `  miss: expected ${r.expected}, got ${r.actual}: ${firstLine(r.text)}`),
-      ].join("\n"),
+    const split = scoreReplies(
+      `real replies${REAL_REPLY_HELD_OUT.length < 50 ? " (fewer than 50, read as indicative only)" : ""}`,
+      REAL_REPLY_HELD_OUT.map((c) => ({ text: c.text, subject: c.subject, intent: c.expected })),
     );
-    expect(missedOptOuts, "missed opt-outs on real replies").toBe(0);
+    expect(split.unsafe, "unsafe outcomes on real replies").toEqual([]);
   });
 
   // Automatic replies: a false "automatic" hides a real reply (the lead

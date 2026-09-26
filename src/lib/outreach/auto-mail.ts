@@ -68,29 +68,38 @@ const AUTO_BODY_PATTERNS: RegExp[] = [
   /\bupon\s+my\s+return\b/i,
 ];
 
+/** Why a message was read as automatic, and whether that came from its headers, subject or wording. */
+export type AutoReplySignal = { reason: string; basis: "header" | "subject" | "wording" };
+
 /**
- * Why this message is an automatic reply, in words for the lead's history
- * ("Auto-Submitted: auto-replied header", "subject “Automatic reply: …”"),
- * or null when a person seems to have written it.
+ * Why this message is an automatic reply ("Auto-Submitted: auto-replied
+ * header", "subject “Automatic reply: …”", "wording “out of the office
+ * until”"), or null when a person seems to have written it.
+ *
+ * Wording alone is the weakest sign: a person can write "I'm out of the
+ * office this week but call me Monday". inbound.ts therefore treats a
+ * wording-only match that also says yes or "interested" as a real reply that
+ * needs a look (see showsClearInterest in reply-classifier.ts).
  */
-export function detectAutoReply(input: AutoMailInput): string | null {
+export function autoReplySignal(input: AutoMailInput): AutoReplySignal | null {
   const h = input.headers;
+  const header = (reason: string): AutoReplySignal => ({ reason, basis: "header" });
   const autoSubmitted = headerValue(h, "auto-submitted")?.trim().toLowerCase();
-  if (autoSubmitted && !autoSubmitted.startsWith("no")) return `Auto-Submitted: ${autoSubmitted} header`;
+  if (autoSubmitted && !autoSubmitted.startsWith("no")) return header(`Auto-Submitted: ${autoSubmitted} header`);
   for (const name of ["X-Autoreply", "X-Autorespond", "X-Autoresponder"]) {
     const value = headerValue(h, name);
-    if (value !== null && !/^\s*(?:no|false|0)\s*$/i.test(value)) return `${name} header`;
+    if (value !== null && !/^\s*(?:no|false|0)\s*$/i.test(value)) return header(`${name} header`);
   }
   // "Precedence: auto_reply" is specific; "bulk"/"junk" are also set by
   // some ordinary mail clients and gateways, so on its own it doesn't make
   // a short reply like "Sure." automatic (the wording checks below still run).
   const precedence = headerValue(h, "precedence")?.trim().toLowerCase();
-  if (precedence === "auto_reply") return `Precedence: ${precedence} header`;
+  if (precedence === "auto_reply") return header(`Precedence: ${precedence} header`);
   const suppress = headerValue(h, "x-auto-response-suppress");
-  if (suppress && /\b(?:all|oof|autoreply)\b/i.test(suppress)) return `X-Auto-Response-Suppress: ${suppress.trim()} header`;
+  if (suppress && /\b(?:all|oof|autoreply)\b/i.test(suppress)) return header(`X-Auto-Response-Suppress: ${suppress.trim()} header`);
 
   const subject = (input.subject ?? "").trim();
-  if (subject && AUTO_SUBJECT_RE.test(subject)) return `subject “${subject.slice(0, 120)}”`;
+  if (subject && AUTO_SUBJECT_RE.test(subject)) return { reason: `subject “${subject.slice(0, 120)}”`, basis: "subject" };
 
   // Only the top of the message: an out-of-office quoted inside a real
   // reply ("I got your auto-reply…") is rare, but a pitch quoted below one
@@ -98,9 +107,14 @@ export function detectAutoReply(input: AutoMailInput): string | null {
   const body = (input.text ?? "").slice(0, 2_000);
   for (const re of AUTO_BODY_PATTERNS) {
     const match = re.exec(body);
-    if (match) return `wording “${match[0].replace(/\s+/g, " ").trim()}”`;
+    if (match) return { reason: `wording “${match[0].replace(/\s+/g, " ").trim()}”`, basis: "wording" };
   }
   return null;
+}
+
+/** autoReplySignal's reason alone, or null when a person seems to have written the message. */
+export function detectAutoReply(input: AutoMailInput): string | null {
+  return autoReplySignal(input)?.reason ?? null;
 }
 
 // --- Bounces (delivery-status notifications) -------------------------------
@@ -188,7 +202,7 @@ export function detectBounce(input: AutoMailInput, ownDomains: string[] = []): B
  * on every InboundReply. Bump the revision when the logic changes without a
  * pattern changing.
  */
-export const AUTO_MAIL_RULES_VERSION = rulesVersion("auto", 1, [
+export const AUTO_MAIL_RULES_VERSION = rulesVersion("auto", 2, [
   AUTO_SUBJECT_RE,
   AUTO_BODY_PATTERNS,
   BOUNCE_SENDER_RE,

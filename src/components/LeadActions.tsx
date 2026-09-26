@@ -39,10 +39,17 @@ export type LeadActionsLead = {
   replyReviewReason: string | null;
 };
 
+/** Long replies are shown up to this many characters; the full text is in the history below. */
+const REPLY_PREVIEW_CHARS = 600;
+const clipReply = (text: string) => (text.length > REPLY_PREVIEW_CHARS ? `${text.slice(0, REPLY_PREVIEW_CHARS)}…` : text);
+
 // Mirrors BOUNCE_MOVES_TO_LOST in src/lib/outreach/lead-actions.ts.
 const BOUNCE_ENDS_OUTREACH = ["contacted", "responded", "cold_call_list", "contactless_list"];
 
 const LOST_REASON_CHOICES = LOST_REASONS.map((value) => ({ value, label: CALL_OUTCOME_LABEL[value] ?? value }));
+
+/** The latest reply recorded on the lead, shown in its own words when it needs a look. */
+export type LatestReply = { text: string; receivedAt: string /* already formatted in the app's time zone */ };
 
 export type LeadSuppression = {
   source: string | null;
@@ -62,11 +69,13 @@ export default function LeadActions({
   lead,
   suppression,
   paused,
+  latestReply = null,
 }: {
   pipeline: PipelineId;
   lead: LeadActionsLead;
   suppression: LeadSuppression | null;
   paused: boolean;
+  latestReply?: LatestReply | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -123,7 +132,23 @@ export default function LeadActions({
       }
     });
   }
-  const canSend = lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason;
+  const canSend = lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason && !lead.replyNeedsReview;
+  const showMarkReplied = canMarkReplied(lead.status) && (lead.status === "contacted" || lead.emailed);
+
+  async function keep() {
+    const confirmed = await confirm({
+      title: `Keep ${lead.name} as ${statusLabel(lead.status)}?`,
+      body: (
+        <p>
+          Only if the reply doesn&apos;t ask to stop emails — otherwise use Mark opted out.
+          {lead.status === "contacted" && " Without a reply counted, the lead moves to phone outreach a week after the pitch."}
+          {lead.status === "new" && " The lead can then be emailed."}
+        </p>
+      ),
+      confirmLabel: `Keep as ${statusLabel(lead.status)}`,
+    });
+    if (confirmed) run(() => dismissReplyReviewAction(pipeline, lead.id));
+  }
 
   async function moveTo(to: string) {
     if (to === "lost") {
@@ -219,24 +244,43 @@ export default function LeadActions({
           <StatusBadge status={lead.status} />
         </div>
         {lead.replyNeedsReview && (
-          <div className="notice-warning flex flex-col gap-2">
-            <p>
-              <strong>Reply needs a look.</strong>{" "}
-              {lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`} Read it in the history on this
-              page, then mark them opted out, use Mark replied if it is a real reply (only then does it count toward the reply rate), move
-              the lead, or keep it as it is.
-              {lead.status === "contacted" && " Until you do, the lead stays in Contacted and off the call deck."}
-              {lead.status === "cold_call_list" && " The call deck shows this warning on the lead's card until you do."}
+          <section aria-labelledby="reply-look-heading" className="notice-warning flex flex-col gap-2">
+            <h3 id="reply-look-heading" className="font-semibold">
+              Reply needs a look
+            </h3>
+            {latestReply?.text && (
+              <figure className="flex flex-col gap-1">
+                <blockquote className="whitespace-pre-line border-l-2 border-current pl-3 italic">{clipReply(latestReply.text)}</blockquote>
+                <figcaption className="text-xs">Received {latestReply.receivedAt}</figcaption>
+              </figure>
+            )}
+            <p>{lead.replyReviewReason ?? `A reply arrived while this lead was ${statusLabel(lead.status)}.`}</p>
+            <p className="text-xs">
+              Until you choose, nothing is emailed to this address
+              {lead.status === "contacted" ? " and the lead stays in Contacted, off the call deck" : ""}
+              {lead.status === "cold_call_list" ? " and the call deck shows this warning on the lead's card" : ""}.
             </p>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => run(() => dismissReplyReviewAction(pipeline, lead.id))}
-              className="btn-secondary self-start"
-            >
-              Keep as {statusLabel(lead.status)}
-            </button>
-          </div>
+            <div className="flex flex-wrap gap-2">
+              {showMarkReplied && (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => run(() => markRepliedAction(pipeline, lead.id))}
+                  className="btn-secondary"
+                >
+                  Mark replied
+                </button>
+              )}
+              {lead.email && !suppression && (
+                <button type="button" disabled={isPending} onClick={optOut} className="btn-danger">
+                  Mark opted out
+                </button>
+              )}
+              <button type="button" disabled={isPending} onClick={keep} className="btn-secondary">
+                Keep as {statusLabel(lead.status)}
+              </button>
+            </div>
+          </section>
         )}
         {moves.length > 0 ? (
           <label className="field-label">
@@ -332,7 +376,7 @@ export default function LeadActions({
           </p>
         )}
 
-        {canMarkReplied(lead.status) && (lead.status === "contacted" || lead.emailed) && (
+        {showMarkReplied && !lead.replyNeedsReview && (
           <button
             type="button"
             disabled={isPending}
@@ -358,7 +402,7 @@ export default function LeadActions({
             Mark bounced
           </button>
         )}
-        {lead.email && !suppression && (
+        {lead.email && !suppression && !lead.replyNeedsReview && (
           <button type="button" disabled={isPending} onClick={optOut} className="btn-danger">
             Mark opted out
           </button>

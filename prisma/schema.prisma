@@ -136,12 +136,14 @@ model InboundReply {
   text            String?
   receivedAt      DateTime  @default(now())
   // Set when the operator attached an unmatched reply to a lead
-  // ("attached:<pipeline>:<leadId>") or dismissed it ("dismissed").
+  // ("attached:<pipeline>:<leadId>"), marked its address opted out
+  // ("opted_out") or dismissed it ("dismissed").
   resolvedAt      DateTime?
   resolution      String?
-  // Set when the reply wasn't read as an opt-out but may be one ("not
-  // interested", "wrong person"…): the lead is flagged for a look instead
-  // of being moved to Responded.
+  // Set when the reply "needs a look": the rules weren't confident it is a
+  // positive reply or an opt-out (reply-classifier.ts). Its leads are
+  // flagged, and nothing is emailed to the address until the operator
+  // resolves it; the reason is one sentence for the lead page.
   reviewReason    String?
   // What kind of message this was: "reply" (a person wrote it),
   // "auto_reply" (out-of-office/autoresponder — recorded in the lead's

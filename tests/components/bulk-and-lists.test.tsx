@@ -14,7 +14,12 @@ const outreach = vi.hoisted(() => ({ previewBulkSendAction: vi.fn(), sendBulkChu
 vi.mock("@/lib/actions/outreach", () => outreach);
 const settings = vi.hoisted(() => ({ addSuppressionAction: vi.fn(), removeSuppressionByEmailAction: vi.fn() }));
 vi.mock("@/lib/actions/settings", () => settings);
-const replies = vi.hoisted(() => ({ attachReplyAction: vi.fn(), dismissReplyAction: vi.fn(), searchLeadsForReplyAction: vi.fn() }));
+const replies = vi.hoisted(() => ({
+  attachReplyAction: vi.fn(),
+  dismissReplyAction: vi.fn(),
+  optOutReplyAction: vi.fn(),
+  searchLeadsForReplyAction: vi.fn(),
+}));
 vi.mock("@/lib/actions/replies", () => replies);
 
 const { default: BulkSendButton } = await import("@/components/BulkSendButton");
@@ -183,6 +188,7 @@ describe("Unmatched replies", () => {
     subject: "Re: hello",
     text: "Forwarding to the owner.",
     optedOut: false,
+    reviewReason: null,
     bounce: false,
     kindReason: null,
     receivedAt: "Sep 25, 2026",
@@ -217,6 +223,16 @@ describe("Unmatched replies", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add reply" }));
     expect(await screen.findByText("Added the reply to Acme Plumbing.")).toBeTruthy();
     expect(replies.attachReplyAction).toHaveBeenCalledWith("r1", "cold-outreach", "lead-1");
+  });
+
+  it("says why a reply needs a look, and can put its address on the do-not-email list", async () => {
+    replies.optOutReplyAction.mockResolvedValue({ ok: true, message: "Added assistant@acme.test to the do-not-email list." });
+    render(<UnmatchedReplies replies={[{ ...reply, text: "Pls rmv", reviewReason: "It may be asking not to be emailed (“rmv”)." }]} />);
+    expect(screen.getByText(/may be asking not to be emailed/).textContent).toMatch(/Nothing is emailed to this address/);
+    fireEvent.click(screen.getByRole("button", { name: "Mark opted out" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add to do-not-email list" }));
+    expect(await screen.findByText("Added assistant@acme.test to the do-not-email list.")).toBeTruthy();
+    expect(replies.optOutReplyAction).toHaveBeenCalledWith("r1");
   });
 
   it("reports a failed search and a failed dismiss plainly", async () => {

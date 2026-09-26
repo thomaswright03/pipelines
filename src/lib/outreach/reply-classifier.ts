@@ -1,70 +1,78 @@
-// Decides whether an inbound reply is a genuine opt-out request.
+// Reads an inbound reply and decides what the app may do with it by itself.
 //
-// Both outreach templates end with "Reply STOP and we won't email you
-// again", and most mail clients quote the original message below a reply.
-// Matching opt-out words anywhere in the body therefore flagged nearly
-// every reply — including enthusiastic ones — as an opt-out. So:
+// Only a CONFIDENT reading acts automatically. Every reply gets one of:
 //
-// 1. Only the replier's own new text counts: quoted history (">" lines,
-//    "On … wrote:", Outlook's "From:/Sent:" header blocks, "Original
-//    Message" separators), signatures and our own template footer are cut.
-// 2. What's left must *ask* not to be contacted: a line that is just the
-//    command ("STOP", "Unsubscribe", "Please remove me"), or an explicit
-//    phrase ("take me off your list", "don't email me", "quit contacting
-//    us", "delete my email address", "leave me alone"), including curt ones
-//    ("knock it off", "enough with the emails", "lose my email"). Ordinary uses of the
-//    words ("stop by the office", "can't stop thinking about it") and
-//    negated ones ("please don't stop sending these") don't count.
-//    Polite and rude ones count ("I'd rather not receive these", "lose my
-//    number", "F off"), and so do common Spanish, French, German,
-//    Portuguese, Italian and Dutch ones ("no me envíe más correos",
-//    "désabonnez-moi", "keine E-Mails mehr").
-//    A stop request that isn't about email ("stop calling my cell") in a
-//    reply that also sounds interested, or a question about unsubscribing
-//    ("can I unsubscribe later if it doesn't work out?"), is flagged for a
-//    look instead: suppressing it would silently lose an interested lead.
-// 3. A reply that isn't an opt-out but reads like a brush-off or a
-//    complaint ("not interested", "no, thank you", "we're all set", "not
-//    for us", "who is this", "wrong person", "how did you get my email"),
-//    or is mainly in another language, is flagged for a human
-//    look (`review`) instead of being treated as an ordinary positive reply.
-// 4. Everything else counts as a positive reply only when it shows a
-//    positive signal: a yes, interest, a question, or a request (send
-//    details, call me, let's talk). A reply the rules can't place ("We'll
-//    stick with what we have", "Hmm.") is flagged for a look as `unclear`
-//    rather than counted as a yes.
+//   opt_out    — the reply asks not to be emailed, and nothing in it pulls
+//                the other way. The address is suppressed at once (CAN-SPAM).
+//   positive   — the reply shows interest (a yes, a question, a request)
+//                and nothing in it could be asking us to stop or saying no.
+//                It counts as a reply and moves the lead to Responded.
+//   needs_look — anything else. The lead is flagged "Reply needs a look",
+//                it doesn't count as a reply or as an opt-out, and no email
+//                goes to the address until the operator resolves it (see
+//                inbound.ts and send.ts). The operator can mark it opted out.
 //
+// Earlier versions tried to read every reply and added a phrasing each time
+// one was misread; each round found new misreadings in both directions. The
+// design now makes an unrecognised phrasing land on needs_look rather than
+// on a wrong automatic action: the rules only need to be *sure* before
+// acting, not to understand everything.
+//
+// Precedence (the first step that applies decides):
+//
+//   0. Only the replier's own words are read: quoted history (">" lines,
+//      "On … wrote:", Outlook header blocks), signatures ("-- ", "Sent from
+//      my iPhone", a sign-off such as "Best," and the lines under it), legal
+//      and newsletter footers ("This email is confidential…", "To
+//      unsubscribe from our newsletter click here") and our own template's
+//      "Reply STOP" footer are removed first (extractNewReplyText).
+//   1. STOP REQUEST (STOP_COMMANDS, STOP_REQUESTS): an explicit request not
+//      to be emailed ("STOP", "Remove me", "Please stop emailing me").
+//        - it names only calls or texts ("stop calling my cell") → needs_look
+//        - the reply also shows INTEREST anywhere                → needs_look,
+//          with a reason naming both
+//        - otherwise                                             → opt_out
+//   2. STOP WORDS (STOP_CUES): a broad list of words that *can* be part of
+//      asking not to be emailed ("exclude", "desist", "no further",
+//      "didn't … email", "off … list", "rmv"). Never enough to opt out on
+//      their own, but they keep a reply from counting as positive
+//                                                                → needs_look
+//                                                   ("may be asking not to be emailed")
+//   3. DECLINE (DECLINE_PHRASES): "not interested", "wrong person", "who is
+//      this", "spam"…                                            → needs_look
+//   4. ANOTHER LANGUAGE: mostly not English                      → needs_look
+//   5. INTEREST (INTEREST_SIGNALS, a question, a phone number, an email
+//      address to use instead)                                   → positive
+//   6. Nothing recognised                                        → needs_look
+//
+// Each rule group has example phrasings in RULE_EXAMPLES at the bottom of
+// this file; tests/reply-classifier.test.ts asserts every one of them.
 // REPLY_RULES_VERSION identifies these rules on every stored verdict.
-//
-// tests/reply-classifier.test.ts holds the development cases;
-// tests/heuristics-eval.test.ts measures precision and recall on a
-// separate labelled set and fails the build if they drop.
+// tests/heuristics-eval.test.ts scores the rules on labelled sets and
+// reports how many replies land on needs_look.
 
 import { rulesVersion } from "@/lib/outreach/rules-version";
 
+export type ReplyVerdict = "opt_out" | "positive" | "needs_look";
+
 export type ReplyClassification = {
+  verdict: ReplyVerdict;
+  /** verdict === "opt_out". */
   optOut: boolean;
-  /** The words that were read as an opt-out, for display on the lead. */
+  /** For an opt-out: the words that were read as one, for display on the lead. */
   trigger: string | null;
-  /**
-   * Not an opt-out, but worth a human look before treating it as a
-   * positive reply: why, in words for the lead page. Null otherwise.
-   */
+  /** For needs_look: one sentence saying why, for the lead page. Null otherwise. */
   review: string | null;
-  /**
-   * True when `review` is set only because the reply showed no positive
-   * signal (no yes, question or request) — not because it reads like a no.
-   * Such a reply is only worth flagging on a lead we're waiting to hear
-   * from; from a customer it's just conversation.
-   */
-  unclear: boolean;
-  /** The replier's own text with quoted history and signatures removed. */
+  /** For needs_look: the reply has words that may be asking not to be emailed. */
+  mayBeOptOut: boolean;
+  /** The replier's own text with quoted history, signatures and footers removed. */
   newText: string;
 };
 
+// --- 1. Stop requests (confident) ------------------------------------------
 // A line on its own that means "opt me out" once filler words and
 // punctuation are stripped.
-const COMMAND_WORDS = new Set([
+const STOP_COMMANDS = new Set([
   "stop",
   "stop all",
   "stopall",
@@ -119,8 +127,10 @@ const NEG = String.raw`(?:do\s+not|don'?t|dont|never|please\s+don'?t)`;
 const LIST = String.raw`(?:(?:your|the|this|all|any|every|ur)\s+)?(?:(?:e-?mail(?:ing)?|mailing|contact|distribution|marketing|call)\s+)?lists?`;
 
 // Explicit requests anywhere in the new text.
-const OPT_OUT_PHRASES: RegExp[] = [
-  /\bunsubscribe\b/i,
+const STOP_REQUESTS: RegExp[] = [
+  // "Unsubscribe me", "Please unsubscribe", "I want to be unsubscribed" — the
+  // word as a request, not "your unsubscribe link didn't work".
+  /(?:^|[.!?]\s+|\b(?:please|pls|plz|kindly)\s+)unsubscribe\b(?!\s+(?:link|button|page|option|url))|\bunsubscribe\s+(?:me|us|this|my|our)\b|\b(?:want|like|wish|need)\s+to\s+(?:be\s+)?unsubscribed?\b/im,
   /\bopt(?:ing)?[\s-]?(?:me\s+)?out\b/i,
   // "remove me", "remove my email", "please remove from list"
   /\bremove\s+(?:me|us|my\s+(?:e-?mail|address|name|info)|this\s+(?:e-?mail|address))\b/i,
@@ -135,7 +145,7 @@ const OPT_OUT_PHRASES: RegExp[] = [
     "im",
   ),
   new RegExp(
-    String.raw`\b${NEG}\s+(?:ever\s+)?(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to)\s+${ME}\b(?!\s+(?:until|till|before|after|about|regarding|with\s+questions))`,
+    String.raw`\b${NEG}\s+(?:ever\s+)?(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to)\s+${ME}\b(?=\s+(?:at\s+(?:this|that|my|our)|here|going\s+forward|in\s+(?:the\s+)?future|from\s+now|with\s+(?:this|these|offers?|marketing)))`,
     "i",
   ),
   new RegExp(String.raw`\b${NEG}\s+(?:e-?mail|contact|message|reach\s+out|write)\s+(?:again|anymore|any\s+more)\b`, "i"),
@@ -217,22 +227,44 @@ const OPT_OUT_PHRASES: RegExp[] = [
   /\b(?:cancellatemi|cancellami|disiscrivetemi|disiscrivimi|rimuovetemi|rimuovimi)\b/i,
 ];
 
-// A matched stop request that names only another channel ("stop calling
-// my cell", "lose my number") and no email word. In a reply that also
-// sounds interested it isn't read as an email opt-out: the lead is flagged
-// for a look instead.
+// A stop request that names only another channel ("stop calling my cell",
+// "lose my number") and no email word isn't read as an email opt-out: it
+// needs a look.
 const OTHER_CHANNEL_RE = /\b(?:call(?:s|ing)?|phon(?:e|ing)|ring(?:ing)?|text(?:s|ing)?|sms|cell|mobile|number|voicemails?)\b/i;
 const EMAIL_WORD_RE = /\b(?:e-?mails?|e-?mailing|mail(?:s|ing)?|messages?|messaging|list|unsubscribe|contact(?:ing)?|spam(?:ming)?)\b/i;
 
 // "Can I unsubscribe later?", "can we opt out any time if it doesn't work?"
-// ask about stopping in the future; they don't ask to stop.
+// ask about stopping in the future; they don't ask to stop (a stop word).
 const ASKS_ABOUT_STOPPING_BEFORE_RE =
   /\b(?:(?:can|could|may|will)\s+(?:i|we)|is\s+(?:there\s+(?:a|any)\s+way|it\s+(?:possible|easy))|how\s+(?:easy|hard)\s+is\s+it|(?:am\s+i|are\s+we)\s+able)\s+(?:(?:to|still|always|easily|just)\s+)*$/i;
 const LATER_RE = /\b(?:later|any\s*time|whenever|if|once|after|when|down\s+the\s+road)\b/i;
 
-// Not an opt-out on their own, but not a "yes" either: the lead is flagged
-// for a look instead of being moved to Responded.
-const REVIEW_PHRASES: { re: RegExp; reason: string }[] = [
+// --- 2. Stop words (a safety net, never an opt-out on their own) ---------------
+// Deliberately broad: words and constructions that can be part of asking not
+// to be emailed, however it is phrased. A reply containing one (not negated,
+// as in "don't stop") never counts as positive; it needs a look, and the
+// reason says it may be asking not to be emailed. Over-matching costs the
+// operator a glance; under-matching could count an opt-out as a yes.
+const STOP_CUES: RegExp[] = [
+  // Verbs of stopping, removing and excluding ("stop by" is a visit).
+  /\b(?:stop(?!\s+(?:by|in|over)\b)|quit|cease|desist|refrain|discontinue|halt|remove|removal|rmv|delete|erase|purge|scrub|exclude|unlist|blacklist|blocklist)\w*/i,
+  /\bunsub\w*|\bopt(?:ed|ing)?[\s-]?out\b|\bcancel\w*/i,
+  // "take me off", "want off this list", "off your mailing list"
+  /\b(?:me|us|it|this|name|address|e-?mail|want)\s+off\b|\boff\s+(?:of\s+)?(?:your|the|this|that|ur|any|all|whatever)\s+(?:\w+\s+){0,2}lists?\b/i,
+  // Lists and do-not-contact registers.
+  /\b(?:mailing|e-?mail|distribution|contact|marketing|call)\s+lists?\b|\bdo[\s-]+not[\s-]+(?:contact|call|e-?mail|mail)\b|\bdnc\b/i,
+  // A negated contact verb: "ask that you not contact me", "didn't email me",
+  // "don't write again", "no further contact", "I do not wish to be contacted".
+  /\b(?:not|never|don'?t|dont|didn'?t|did\s+not|do\s+not|nor|no\s+(?:more|further|longer))\b[^.!?\n]{0,30}?\b(?:e-?mail(?:s|ed|ing)?|contact(?:s|ed|ing)?|messag\w*|writ(?:e|ing)|send(?:ing)?|reach(?:ing)?\s+out|correspond\w*|solicit\w*|hear\s+from|mailings?|communications?)\b/i,
+  /\bno\s+(?:more|further)\b/i,
+  // "I never signed up for this", "I did not opt in".
+  /\b(?:never|not|didn'?t|did\s+not)\s+(?:sign(?:ed)?\s+up|opt(?:ed)?[\s-]in|subscribed?|ask(?:ed)?\s+for\s+(?:this|these|it))\b/i,
+  /\bleave\s+(?:me|us)\s+alone\b|\bharass\w*/i,
+];
+
+// --- 3. Declines and complaints -------------------------------------------------
+// Not a request to stop, but not a yes either.
+const DECLINE_PHRASES: { re: RegExp; reason: string }[] = [
   { re: /\bnot\s+(?:at\s+all\s+|really\s+)?interested\b/i, reason: "says they're not interested" },
   // "No thanks", "No, thank you.", "Thanks but no thanks", "No thank you!"
   {
@@ -310,9 +342,12 @@ function isNegated(text: string, index: number): boolean {
   return NEGATION_BEFORE_RE.test(clause);
 }
 
+// --- 0. The replier's own words ---------------------------------------------------
+
 // Our own footer, in case a client quotes it without ">" markers.
 const TEMPLATE_FOOTER_RE = /don'?t want to hear from us again\?\s*reply stop and we won'?t email you again\.?/gi;
 
+// Where quoted history starts: everything from here down is cut.
 const QUOTE_HEADER_PATTERNS: RegExp[] = [
   /^\s*On\b[^\n]{0,300}?\bwrote:\s*$/im, // Gmail/Apple: "On Thu, Sep 25 … wrote:"
   /^\s*On\b[^\n]{0,300}\n[^\n]{0,300}\bwrote:\s*$/im, // same, wrapped onto two lines
@@ -322,13 +357,30 @@ const QUOTE_HEADER_PATTERNS: RegExp[] = [
   /^\s*Le\s.+a\s+écrit\s*:\s*$/im,
 ];
 
+// Where a signature or a mail footer starts: everything from here down is
+// cut. A footer is boilerplate the replier's mail system adds (legal
+// notices, a newsletter's unsubscribe line), so its "unsubscribe" or
+// "confidential" is never the replier asking for anything.
 const SIGNATURE_PATTERNS: RegExp[] = [
   /^--\s*$/m, // RFC 3676 signature delimiter
   /^\s*Sent from my\s.+$/im,
   /^\s*Get Outlook for\s.+$/im,
+  /^\s*(?:confidentiality|privacy|legal)\s+(?:notice|statement|note|disclaimer)\b/im,
+  /^\s*disclaimer\s*:/im,
+  /^\s*(?:this|the\s+information\s+(?:contained\s+)?in\s+this)\s+(?:e-?mail|message|communication|transmission)\b[^\n]{0,200}?\b(?:confidential|privileged|intended\s+(?:only|solely)|intended\s+recipient)/im,
+  /^\s*if\s+you\s+(?:are\s+not\s+the\s+intended|(?:have\s+)?received\s+this\s+(?:\S+\s+){0,2}in\s+error)/im,
+  /^\s*(?:to\s+unsubscribe|unsubscribe|to\s+stop\s+receiving|you\s+(?:are\s+receiving|received)\s+this)\b[^\n]*\b(?:click|tap|link|preferences|manage\s+your|because\s+you)\b/im,
+  /^\s*please\s+consider\s+the\s+environment\b/im,
 ];
 
-/** The replier's own text: everything above quoted history or a signature. */
+// A sign-off line ("Best,", "Thanks,", "Regards") ends the message: the
+// name, title and phone lines under it are a signature. A "P.S." after it
+// is kept, since people put requests there.
+const SIGN_OFF_RE =
+  /^\s*(?:best|best\s+regards|kind\s+regards|warm\s+regards|warmly|regards|thanks|thank\s+you|many\s+thanks|thx|cheers|sincerely|respectfully|all\s+the\s+best|talk\s+soon)\s*[,.!]?\s*$/im;
+const POSTSCRIPT_RE = /^\s*p\.?\s?s\.?\b/im;
+
+/** The replier's own text: everything above quoted history, a signature or a footer. */
 export function extractNewReplyText(raw: string): string {
   let text = (raw ?? "").replace(/\r\n?/g, "\n");
 
@@ -344,6 +396,14 @@ export function extractNewReplyText(raw: string): string {
     .filter((line) => !/^\s*>/.test(line))
     .join("\n")
     .replace(TEMPLATE_FOOTER_RE, "");
+
+  // A sign-off after some text of the reply's own ends it (bar a P.S.).
+  const signOff = SIGN_OFF_RE.exec(text);
+  if (signOff && text.slice(0, signOff.index).trim()) {
+    const after = text.slice(signOff.index + signOff[0].length);
+    const ps = POSTSCRIPT_RE.exec(after);
+    text = text.slice(0, signOff.index) + (ps ? `\n${after.slice(ps.index)}` : "");
+  }
 
   return text.trim();
 }
@@ -362,7 +422,8 @@ function stripReplyPrefix(subject: string): string {
   return subject.replace(/^\s*((re|fw|fwd|aw)\s*:\s*)+/i, "").trim();
 }
 
-// Common words that are distinctly Spanish or French (not also English), and
+// --- 4. Another language ------------------------------------------------------------
+// Common words that are distinctly another language (not also English), and
 // common English words: a reply mostly in another language is flagged for a
 // look rather than counted as a positive reply the rules didn't understand.
 const FOREIGN_WORDS = new Set(
@@ -415,19 +476,19 @@ function looksForeign(text: string): boolean {
   return words.some((w) => FOREIGN_WORDS.has(w)) && !words.some((w) => ENGLISH_WORDS.has(w));
 }
 
-// What makes a reply count as positive. Without one of these, a reply that
-// is neither an opt-out nor a recognised brush-off is flagged for a look.
-const POSITIVE_SIGNALS: RegExp[] = [
+// --- 5. Interest ---------------------------------------------------------------
+// Signs of interest. A reply needs one of these (or a question) to count as positive.
+const INTEREST_SIGNALS: RegExp[] = [
   // A yes: "Yes", "Sure", "OK", "Absolutely", "Sí", "Oui" opening a line, or "yes"/"yeah" anywhere.
   /^[\s"'(¡¿]*(?:y|ya|yes+|yeah|yep|yup|yea|sure|ok(?:ay)?|k|absolutely|definitely|certainly|of\s+course|please\s+do|go\s+ahead|deal|s[ií]|oui|ja|claro|d'accord)(?![\p{L}\p{N}])/imu,
   /\b(?:yes|yeah|yep|yup|absolutely|definitely)\b/i,
-  /\binterest(?:ed|ing)\b/i,
+  // Interest in any of the languages we get replies in ("interested", "me interesa", "intéressé", "interessiert").
+  /\bint[eé]r[eé]s(?:ted|ting|a|ado|ada|s[eé]e?|s[eé]es?|siert|sato|sati)(?![\p{L}\p{N}])/iu,
   // Asking for something: details, a sample, a call, pricing.
   /\b(?:send|e-?mail|forward|share|shoot)\s+(?:me|us|my|our|it|them|over|the|a|an|some|more|your|pricing|prices|details|info)\b/i,
   // Asking to be followed up with: "remind me in two weeks", "try me in January".
   /\bremind\s+(?:me|us)\b|\btry\s+(?:me|us)\s+(?:again|in|next|after)\b|\b(?:follow\s+up|check\s+back|circle\s+back)\s+(?:with\s+(?:me|us)\s+)?(?:in|next|after)\b/i,
   /\b(?:call|ring|phone|text)\s+(?:me|us|my|our|at|on|back|any\s*time|tomorrow|today|this|next|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b/i,
-  /\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/, // a number to call
   /\btell\s+(?:me|us)\s+more\b|\b(?:more|some|the)\s+(?:info|information|details)\b|\blearn\s+more\b|\bnext\s+steps?\b/i,
   /\b(?:pricing|prices|rates|a\s+quote|sample)\s+(?:please|pls|plz)\b/i,
   // Agreement and enthusiasm.
@@ -442,131 +503,187 @@ const POSITIVE_SIGNALS: RegExp[] = [
   // Wanting it: "I want to see a sample", "we need a new site".
   /\b(?:i|we)\s+(?:want|need)\s+(?:to\s+(?:see|try|know|learn|hear|talk|get|start|sign|buy|order)|(?:a|an|the|some|more|this|that|it|one|pricing|details))\b/i,
 ];
+// A number to reach them on, or an address to use instead, is a sign of interest too.
+const CONTACT_DETAIL_RE = /\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 // Asking something counts too ("What does it cost?", "Do you cover Mesa?").
 const QUESTION_RE = /\?|^\s*(?:what|how|when|where|which|do|does|can|could|would|will|is|are)\b[^.!\n]*$/im;
 
 // A positive signal right after one of these, in the same clause, is negated ("not that interested").
 const NEGATION_WORD_RE =
-  /\b(?:not|no|never|don'?t|dont|doesn'?t|isn'?t|aren'?t|won'?t|wouldn'?t|can'?t|cannot|nor|neither|without|hardly)\b/i;
+  /\b(?:not|no|never|don'?t|dont|doesn'?t|didn'?t|did\s+not|isn'?t|aren'?t|won'?t|wouldn'?t|can'?t|cannot|nor|neither|without|hardly)\b/i;
 
 // "Don't hesitate to email me the sample" and "don't forget to call me" aren't negations.
 const NOT_A_NEGATION_RE = /\b(?:don'?t|dont|do\s+not|never)\s+(?:hesitate|forget|miss|wait)\b/gi;
 
-/** Whether `text` shows interest: a positive signal not negated in its clause, or (optionally) a question. */
-function hasPositiveSignal(text: string, { countQuestions }: { countQuestions: boolean }): boolean {
-  if (countQuestions && QUESTION_RE.test(text)) return true;
-  for (const re of POSITIVE_SIGNALS) {
+// --- Deciding ---------------------------------------------------------------------
+
+type Found = { index: number; text: string; /** How to name it in a reason, when not by quoting `text`. */ label?: string };
+
+/** The first match of any of `patterns` in `text` that `accept` allows. */
+function firstMatch(text: string, patterns: readonly RegExp[], accept: (m: Found) => boolean = () => true): Found | null {
+  let best: Found | null = null;
+  for (const re of patterns) {
     const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
     for (const match of text.matchAll(new RegExp(re.source, flags))) {
-      const clause =
-        text
-          .slice(Math.max(0, match.index - 80), match.index)
-          .split(/[.!?;,:\n—–]|\bbut\b/)
-          .pop() ?? "";
-      if (!NEGATION_WORD_RE.test(clause.replace(NOT_A_NEGATION_RE, ""))) return true;
+      const found = { index: match.index, text: match[0] };
+      if (!accept(found)) continue;
+      if (!best || found.index < best.index) best = found;
+      break;
     }
   }
-  return false;
+  return best;
 }
 
-/** `text` with the matched span blanked out, so the rest can be checked for interest. */
-function without(text: string, index: number, length: number): string {
-  return text.slice(0, index) + " ".repeat(length) + text.slice(index + length);
+/** A sign of interest not negated in its own clause ("not that interested" isn't one). */
+function findInterest(text: string, { countQuestions }: { countQuestions: boolean }): Found | null {
+  const signal = firstMatch(text, INTEREST_SIGNALS, ({ index }) => {
+    const clause =
+      text
+        .slice(Math.max(0, index - 80), index)
+        .split(/[.!?;,:\n—–]|\bbut\b/)
+        .pop() ?? "";
+    return !NEGATION_WORD_RE.test(clause.replace(NOT_A_NEGATION_RE, ""));
+  });
+  if (signal) return signal;
+  const detail = CONTACT_DETAIL_RE.exec(text);
+  if (detail) return { index: detail.index, text: detail[0], label: "gives a number or address to use" };
+  if (countQuestions) {
+    const question = QUESTION_RE.exec(text);
+    if (question) return { index: question.index, text: question[0], label: "asks a question" };
+  }
+  return null;
+}
+
+/**
+ * Whether `text` says yes or "interested" in so many words (not negated) —
+ * a stronger sign than a question or a phone number, which out-of-office
+ * messages also contain. Used to keep a reply that merely mentions being
+ * out of the office from being filed as automatic (see inbound.ts).
+ */
+export function showsClearInterest(text: string): boolean {
+  const own = extractNewReplyText(text).replace(/[‘’ʼ]/g, "'");
+  return (
+    firstMatch(own, INTEREST_SIGNALS.slice(0, 3), ({ index }) => {
+      const clause =
+        own
+          .slice(Math.max(0, index - 80), index)
+          .split(/[.!?;,:\n—–]|\bbut\b/)
+          .pop() ?? "";
+      return !NEGATION_WORD_RE.test(clause);
+    }) !== null
+  );
+}
+
+/** The first explicit stop request, or null. Negated ones and questions about stopping later don't count. */
+function findStopRequest(text: string, subject: string): Found | null {
+  // A line or sentence that is just the command ("STOP", "Remove me.").
+  let lineStart = 0;
+  for (const line of text.split("\n")) {
+    for (const part of [line, ...line.split(/(?<=[.!?,;])\s+/)]) {
+      if (STOP_COMMANDS.has(normalizeCommandLine(part))) return { index: lineStart + line.indexOf(part), text: part };
+    }
+    lineStart += line.length + 1;
+  }
+  const phrase = firstMatch(
+    text,
+    STOP_REQUESTS,
+    ({ index, text: words }) =>
+      !isNegated(text, index) && !(/^(?:unsubscribe|opt)/i.test(words.trim()) && asksAboutStoppingLater(text, index, words.length)),
+  );
+  if (phrase) return phrase;
+  // A reply whose subject was changed to just "STOP"/"Unsubscribe".
+  const bare = stripReplyPrefix(subject);
+  if (bare && STOP_COMMANDS.has(normalizeCommandLine(bare))) return { index: -1, text: `Subject: ${bare}` };
+  return null;
+}
+
+/** The first stop word that isn't negated ("don't stop sending these"). */
+function findStopCue(text: string): Found | null {
+  return firstMatch(text, STOP_CUES, ({ index, text: words }) => {
+    // "Don't hesitate to email me" isn't a negation; otherwise the
+    // negated-contact cue carries its own negation.
+    if (new RegExp(`^${NOT_A_NEGATION_RE.source}`, "i").test(words)) return false;
+    if (/^(?:not|never|don|dont|didn|did|do|nor|no)\b/i.test(words)) return true;
+    return !isNegated(text, index);
+  });
 }
 
 export function classifyReply(input: { subject?: string | null; text?: string | null }): ReplyClassification {
   const newText = extractNewReplyText(input.text ?? "");
   // Phones send curly apostrophes ("don’t"); the rules are written with
   // straight ones. Same length, so match positions still line up.
-  const matchText = newText.replace(/[\u2018\u2019\u02BC]/g, "'");
-  const optOut = (trigger: string): ReplyClassification => ({ optOut: true, trigger, review: null, unclear: false, newText });
-  const review = (reason: string, index: number, length: number, unclear = false): ReplyClassification => ({
+  const text = newText.replace(/[‘’ʼ]/g, "'");
+  const interest = findInterest(text, { countQuestions: true });
+  const quote = (found: Found) => (found.index < 0 ? found.text : sentenceAround(newText, found.index, found.text.length));
+  const interested = (found: Found) => (found.label ? `also ${found.label}` : `also sounds interested (“${clip(found.text)}”)`);
+  const base = { trigger: null, review: null, mayBeOptOut: false, newText };
+  const needsLook = (review: string, mayBeOptOut = false): ReplyClassification => ({
+    ...base,
+    verdict: "needs_look",
     optOut: false,
-    trigger: null,
-    review: `${reason}: “${sentenceAround(newText, index, length)}”`,
-    unclear,
-    newText,
+    review,
+    mayBeOptOut,
   });
 
-  // A line, or a sentence of one ("Not interested. Remove."), that is just
-  // the command. One clause of a sentence ("Please stop, not interested")
-  // counts too, unless the rest of the line sounds interested.
-  for (const line of matchText.split("\n")) {
-    const lineStart = matchText.indexOf(line);
-    for (const part of [line, ...line.split(/(?<=[.!?])\s+/)]) {
-      if (COMMAND_WORDS.has(normalizeCommandLine(part))) return optOut(line.trim());
+  // 1. An explicit stop request.
+  const stop = findStopRequest(text, input.subject ?? "");
+  if (stop) {
+    // Interest elsewhere in the reply — not the lead-in to the request
+    // itself ("I'd like to be removed…" asks for nothing else).
+    const clauseStart =
+      stop.index < 0
+        ? 0
+        : Math.max(
+            ...[".", "!", "?", ";", ",", "\n", "—", "–"].map((c) => text.lastIndexOf(c, stop.index - 1) + 1),
+            text.lastIndexOf(" but ", stop.index) + 1,
+            0,
+          );
+    const rest =
+      stop.index < 0
+        ? text
+        : text.slice(0, clauseStart) + " ".repeat(stop.index + stop.text.length - clauseStart) + text.slice(stop.index + stop.text.length);
+    const interest = findInterest(rest, { countQuestions: true });
+    const email = stop.index < 0 || EMAIL_WORD_RE.test(stop.text) || !OTHER_CHANNEL_RE.test(stop.text);
+    if (!email) {
+      return needsLook(`It asks us to stop calls or texts (“${clip(stop.text)}”) — check whether it also means email.`, true);
     }
-    for (const clause of line.split(/(?<=[,;])\s*/)) {
-      if (!COMMAND_WORDS.has(normalizeCommandLine(clause))) continue;
-      const at = line.indexOf(clause);
-      if (hasPositiveSignal(without(line, at, clause.length), { countQuestions: false })) {
-        return review("says stop but also sounds interested — check whether it's asking not to be emailed", lineStart, 0);
-      }
-      return optOut(line.trim());
+    if (interest) {
+      return needsLook(
+        `It reads like a request not to be emailed (“${clip(stop.text)}”) but ${interested(interest)} — check which they mean.`,
+        true,
+      );
     }
+    return { ...base, verdict: "opt_out", optOut: true, trigger: quote(stop) };
   }
 
-  let asksAboutStopping: { index: number; length: number } | null = null;
-  for (const re of OPT_OUT_PHRASES) {
-    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
-    for (const match of matchText.matchAll(new RegExp(re.source, flags))) {
-      if (isNegated(matchText, match.index)) continue;
-      const phrase = match[0];
-      // "Can I unsubscribe later if it doesn't work out?" asks about stopping.
-      if (/^(?:unsubscribe|opt)/i.test(phrase.trim()) && asksAboutStoppingLater(matchText, match.index, phrase.length)) {
-        asksAboutStopping ??= { index: match.index, length: phrase.length };
-        continue;
-      }
-      // "How much for a website? Also please stop calling my cell" asks to
-      // stop phone calls, not email, from someone who sounds interested.
-      if (
-        OTHER_CHANNEL_RE.test(phrase) &&
-        !EMAIL_WORD_RE.test(phrase) &&
-        hasPositiveSignal(without(matchText, match.index, phrase.length), { countQuestions: true })
-      ) {
-        return review(
-          "asks us to stop phone calls or texts but also sounds interested — check whether it's asking not to be emailed",
-          match.index,
-          phrase.length,
-        );
-      }
-      return optOut(sentenceAround(newText, match.index, phrase.length));
-    }
-  }
+  if (!text.trim()) return needsLook("It has no text of its own (only the quoted email, a signature or a footer).");
 
-  // A reply whose subject was changed to just "STOP"/"Unsubscribe".
-  const subject = stripReplyPrefix(input.subject ?? "");
-  if (subject && COMMAND_WORDS.has(normalizeCommandLine(subject))) return optOut(`Subject: ${subject}`);
-
-  if (asksAboutStopping) {
-    return review(
-      "asks about unsubscribing without asking to stop — check whether it's asking not to be emailed",
-      asksAboutStopping.index,
-      asksAboutStopping.length,
+  // 2. Words that may be part of asking not to be emailed.
+  const cue = findStopCue(text);
+  if (cue) {
+    return needsLook(
+      interest
+        ? `It may be asking not to be emailed (“${clip(cue.text)}”), though it ${interested(interest)}.`
+        : `It may be asking not to be emailed (“${clip(cue.text)}”).`,
+      true,
     );
   }
 
-  for (const { re, reason } of REVIEW_PHRASES) {
-    const match = re.exec(matchText);
-    if (match) return review(reason, match.index, match[0].length);
+  // 3. A decline or complaint.
+  for (const { re, reason } of DECLINE_PHRASES) {
+    if (re.test(text)) return needsLook(`It ${reason}.`);
   }
 
-  if (isMainlyForeign(matchText)) {
-    return review("is written in another language — check whether it asks to stop", 0, 0);
+  // 4. Another language.
+  if (isMainlyForeign(text) || (!interest && looksForeign(text))) {
+    return needsLook("It is written in another language, so the rules can't read it — check whether it asks to stop.");
   }
 
-  if (hasPositiveSignal(matchText, { countQuestions: true })) {
-    return { optOut: false, trigger: null, review: null, unclear: false, newText };
-  }
+  // 5. Interest.
+  if (interest) return { ...base, verdict: "positive", optOut: false };
 
-  // Nothing places it: don't count it as a yes.
-  if (!matchText.trim()) {
-    return { optOut: false, trigger: null, review: "has no text of its own (only the quoted email)", unclear: true, newText };
-  }
-  if (looksForeign(matchText)) {
-    return review("may be written in another language — check whether it asks to stop", 0, 0, true);
-  }
-  return review("shows no clear sign of interest (no yes, question or request), so it may be a polite no", 0, 0, true);
+  // 6. Nothing recognised.
+  return needsLook("It shows no clear yes, question or request.");
 }
 
 /** Whether the unsubscribe at `index` is asked about for later ("can I unsubscribe later if…?") rather than requested. */
@@ -583,6 +700,11 @@ function asksAboutStoppingLater(text: string, index: number, length: number): bo
   return LATER_RE.test(rest.slice(0, end));
 }
 
+function clip(words: string): string {
+  const flat = words.replace(/\s+/g, " ").trim();
+  return flat.length > 80 ? `${flat.slice(0, 80)}…` : flat;
+}
+
 function sentenceAround(text: string, index: number, length: number): string {
   const start = Math.max(text.lastIndexOf("\n", index) + 1, 0);
   const endNewline = text.indexOf("\n", index + length);
@@ -592,27 +714,111 @@ function sentenceAround(text: string, index: number, length: number): string {
 }
 
 /**
+ * Example phrasings for each rule group, asserted by
+ * tests/reply-classifier.test.ts: `verdict` is what classifyReply must
+ * return for each. Add an example here whenever a group changes.
+ */
+export const RULE_EXAMPLES: { group: string; verdict: ReplyVerdict; examples: string[] }[] = [
+  {
+    group: "0. footers and signatures are not read",
+    verdict: "positive",
+    examples: [
+      "Interested! Can you call me Thursday?\n\nThis email and any attachments are confidential. If you received this in error, please notify the sender and delete it. To unsubscribe from our newsletter click here.",
+      "Yes, send it over.\n\nBest,\nJane Doe\nDesert Realty | Unsubscribe from our listings alerts",
+      "Sounds good.\n\nDon't want to hear from us again? Reply STOP and we won't email you again.",
+    ],
+  },
+  {
+    group: "1. a stop request alone is an opt-out",
+    verdict: "opt_out",
+    examples: [
+      "STOP",
+      "unsubscribe",
+      "Remove me.",
+      "Please stop emailing me. I am not interested in this at all.",
+      "Take me off your list.",
+    ],
+  },
+  {
+    group: "1. a stop request with interest needs a look",
+    verdict: "needs_look",
+    examples: [
+      "Sure — but don't email me at this address, use jane@other.test instead.",
+      "Please unsubscribe my old address and use this one going forward — send the pricing here.",
+      "Stop! This is exactly what I need. Call me.",
+      "Take me off the waitlist at my current vendor, I'd rather go with you. What's the price?",
+      "How much for a website? Also please stop calling my cell, email only.",
+    ],
+  },
+  {
+    group: "2. stop words keep a reply from counting as positive",
+    verdict: "needs_look",
+    examples: [
+      "I'd appreciate it if you didn't email me again.",
+      "Kindly exclude me from future mailings.",
+      "I do not wish to be contacted.",
+      "Please no further contact.",
+      "Put me on your do not contact list",
+      "Take this address off whatever list you bought.",
+      "cancel my subscription to these emails",
+      "Kindly desist from sending further emails.",
+      "Pls rmv",
+    ],
+  },
+  {
+    group: "3. declines need a look",
+    verdict: "needs_look",
+    examples: ["Not interested.", "No thanks.", "You have the wrong person.", "How did you get my email?"],
+  },
+  {
+    group: "4. another language needs a look",
+    verdict: "needs_look",
+    examples: ["Gracias, me interesa. Llámeme mañana.", "Nein danke."],
+  },
+  {
+    group: "5. interest counts as positive",
+    verdict: "positive",
+    examples: [
+      "Yes, interested — what does it cost?",
+      "Tell me more.",
+      "Call me at 480-555-0199.",
+      "Sure, stop by the office Tuesday.",
+      "👍",
+    ],
+  },
+  {
+    group: "6. nothing recognised needs a look",
+    verdict: "needs_look",
+    examples: ["We'll stick with what we have.", "Hmm.", "Please don't take this personally."],
+  },
+];
+
+/**
  * Identifies this version of the reply rules; stored on every InboundReply.
  * Bump the revision when the logic above changes without a pattern or word
  * list changing.
  */
-export const REPLY_RULES_VERSION = rulesVersion("reply", 3, [
-  COMMAND_WORDS,
+export const REPLY_RULES_VERSION = rulesVersion("reply", 4, [
+  STOP_COMMANDS,
   FILLER_RE,
-  OPT_OUT_PHRASES,
+  STOP_REQUESTS,
   OTHER_CHANNEL_RE,
   EMAIL_WORD_RE,
   ASKS_ABOUT_STOPPING_BEFORE_RE,
   LATER_RE,
-  POSITIVE_SIGNALS,
+  STOP_CUES,
+  DECLINE_PHRASES.map(({ re, reason }) => ({ re, reason })),
+  INTEREST_SIGNALS,
+  CONTACT_DETAIL_RE,
   QUESTION_RE,
   NEGATION_WORD_RE,
   NOT_A_NEGATION_RE,
-  REVIEW_PHRASES.map(({ re, reason }) => ({ re, reason })),
   NEGATION_BEFORE_RE,
   TEMPLATE_FOOTER_RE,
   QUOTE_HEADER_PATTERNS,
   SIGNATURE_PATTERNS,
+  SIGN_OFF_RE,
+  POSTSCRIPT_RE,
   FOREIGN_WORDS,
   ENGLISH_WORDS,
   MIN_WORDS_FOR_LANGUAGE,

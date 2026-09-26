@@ -68,6 +68,7 @@ export default async function RepliesPage() {
             subject: r.subject,
             text: r.text,
             optedOut: r.optedOut,
+            reviewReason: r.reviewReason,
             bounce: r.kind === "bounce",
             kindReason: r.kindReason,
             receivedAt: formatDateTime(r.receivedAt),

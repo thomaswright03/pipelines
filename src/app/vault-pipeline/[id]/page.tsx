@@ -30,7 +30,7 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
   });
   if (!lead) notFound();
 
-  const { suppression, paused, ledgerNote } = await loadLeadContext("cold-outreach", lead.id, lead.email);
+  const { suppression, paused, ledgerNote, latestReply } = await loadLeadContext("cold-outreach", lead.id, lead.email);
   // Exactly what a send would use.
   const preview = getPipeline("cold-outreach").buildEmail({ name: lead.name, company: lead.company, county: null });
 
@@ -69,6 +69,7 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
             pipeline="cold-outreach"
             paused={paused}
             suppression={suppression}
+            latestReply={latestReply}
             lead={{
               id: lead.id,
               name: lead.name,

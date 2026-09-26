@@ -58,10 +58,12 @@ export default function HelpPage() {
             search for the lead it belongs to and press <strong>Attach</strong> — or <strong>Dismiss</strong> if it belongs to nobody.
           </li>
           <li>
-            <strong>Look at flagged replies.</strong> In each pipeline&apos;s list, leads marked <em>Reply needs a look</em> got a reply
-            that might be a &ldquo;no&rdquo; or a request to stop (for example &ldquo;not interested&rdquo;, or a reply in Spanish). Open
-            the lead, read the reply in its history, then either press <strong>Mark opted out</strong> if they asked not to be emailed, or
-            move the lead to the right stage.
+            <strong>Look at flagged replies — every day.</strong> The app only acts on a reply by itself when it is sure: a plain
+            &ldquo;STOP&rdquo; goes on the do-not-email list, a clear &ldquo;yes, call me&rdquo; moves the lead to Responded. Everything
+            else is marked <em>Reply needs a look</em> in the lead list (for example &ldquo;not interested&rdquo;, &ldquo;please no further
+            contact&rdquo;, or a reply in Spanish). Nothing is emailed to that address until you decide, so a reply asking to stop is never
+            ignored — but it waits for you. Open the lead: the reply is shown with the reason, and <strong>Mark opted out</strong>,{" "}
+            <strong>Mark replied</strong> and <strong>Keep as …</strong> are right under it.
           </li>
           <li>
             <strong>Work the call deck.</strong> Leads that didn&apos;t reply within a week move to the call deck (the <em>Call deck</em>{" "}

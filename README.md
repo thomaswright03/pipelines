@@ -105,41 +105,35 @@ the bulk send, and the daily cron.
 - **Manual moves never overwrite a change made meanwhile.** Every status change from a lead page is
   conditional on the status the page showed; if a reply or the stale-contacts job moved the lead in the
   meantime, the change is refused with "changed status a moment ago — reload".
-- **Opt-outs.** A reply that asks not to be contacted puts the address on the do-not-email list, and every
-  send checks that list. That covers "STOP"/"Unsubscribe", "remove me (from your list)", "take me off",
-  "don't/do not email|contact|message|reach out to me/us" (with or without "again"), "quit/cease
-  emailing", "delete my email address", "cease and desist", "leave me alone", "I don't want these/your/any
-  emails", "we don't want to receive your emails", "no longer wish to receive these messages", "I'd
-  rather not receive these", "refrain from contacting me", "lose my number", rude dismissals ("F off",
-  "get lost") and similar, plus common Spanish ("no me envíe más correos", "denme de baja"), French
-  ("désabonnez-moi", "ne m'envoyez plus"), German ("keine E-Mails mehr", "abmelden"), Portuguese, Italian
-  and Dutch phrasings; negated phrasings ("please don't stop sending these", "I don't want
-  these emails to stop") don't count. The reply check reads only the new text of
-  the reply: quoted history and signatures are ignored, so an interested reply that quotes our "Reply
-  STOP" footer is not an opt-out.
-  - A stop request that isn't about email ("please stop calling my cell, email only") in a reply that also
-    sounds interested, and a question about unsubscribing later ("can I unsubscribe later if it doesn't work
-    out?"), are flagged **Reply needs a look** instead of suppressing the address. A stop request about
-    email ("stop emailing me") is always an opt-out.
-  - A reply counts as positive only when it shows a positive signal: a yes, interest, a question, or a
-    request (send details, call me, let's talk). A reply that isn't an opt-out but reads like a "no" or a
-    complaint ("not interested", "wrong person", "how did you get my email", "spam", "pass"), is in another
-    language, or that the rules can't place at all ("We'll stick with what we have", "Hmm.") is not counted
-    as a positive response: the lead keeps its status and is flagged **Reply needs a look** with the reason, for the
-    operator to decide. While the flag is open, a Contacted lead is **not** moved to the call deck by the
-    stale-contacts job, so nobody who complained or said no is cold-called by default. The operator
-    resolves it on the lead page: **Mark opted out**, **Mark replied**, move the lead, or **Keep as
-    Contacted** (which clears the flag; the next stale-contacts run then moves the lead to the call deck as
-    usual if the week is up). A lead already on the call deck when such a reply arrives keeps its place, and
-    its card shows the warning.
-  - A reply of fewer than three words ("Y", "Si", "Oui") is never read as "written in another language".
-  - A reply the rules merely can't place is only flagged on a lead we were waiting to hear from (Contacted,
-    on the call deck). From a lead that already replied, or a customer, it's added to the History and
-    changes nothing.
+- **Replies: only a confident reading acts by itself.** Every reply a person wrote gets one of three
+  verdicts (`src/lib/outreach/reply-classifier.ts`, precedence documented at the top of the file):
+  - **Opt-out**: an explicit request not to be emailed ("STOP", "Unsubscribe", "Remove me", "Please stop
+    emailing me", "take me off your list", common Spanish, French, German, Portuguese, Italian and Dutch
+    phrasings) with nothing else in the reply that sounds interested. The address goes on the do-not-email
+    list at once, every send checks that list, and a lead we were working moves to Lost (Not interested in
+    dataleadsell). The words that triggered it are shown on the lead page, and a wrong opt-out can be
+    reversed there with **Remove from do-not-email list**.
+  - **Positive**: a yes, interest, a question or a request (send details, call me, a number to call) with
+    nothing that could be a stop request or a "no". It counts as a reply and moves the lead to Responded.
+  - **Needs a look**: everything else — a stop request that also sounds interested ("Stop! This is exactly
+    what I need. Call me."), a request that names only calls or texts, words that *may* be asking not to be
+    emailed ("Kindly exclude me from future mailings", "no further contact", "Pls rmv"), a decline or
+    complaint ("not interested", "wrong person", "spam"), another language, or nothing recognisable. Every
+    lead with that address, in either pipeline, is flagged **Reply needs a look**; the reply doesn't count
+    as a reply or as an opt-out; a Contacted lead stays off the call deck; and **nothing is emailed to the
+    address** (single send, bulk send or daily run) until the operator resolves it on the lead page:
+    **Mark opted out**, **Mark replied**, a status move, or **Keep as …** (which asks for confirmation). A
+    reply that matched no lead holds its address the same way until it is attached, marked opted out or
+    dismissed on **Replies**.
+  - Only the replier's own words are read: quoted history, signatures (including a sign-off and the lines
+    under it), legal and newsletter footers ("This email is confidential…", "To unsubscribe from our
+    newsletter click here") and our own "Reply STOP" footer are removed first.
+  - The trade-off: the rules no longer try to read every phrasing, so more replies wait for the operator.
+    On the synthetic held-out sets about a third of replies need a look (see "Measuring the reply and
+    address rules"); in exchange none of them is suppressed or counted as a yes by mistake.
   - Automatic replies (out-of-office, autoresponders) and bounce notices are not replies; see "Reply
-    tracking". An opt-out is still honoured even when it comes from an autoresponder.
-  - The words that triggered an opt-out are stored and shown on the lead page.
-  - A wrong opt-out can be reversed there with **Remove from do-not-email list**.
+    tracking". An opt-out is still honoured even when it comes from an autoresponder, and a message worded
+    like an out-of-office that also says yes or "interested" is treated as a reply that needs a look.
 - **Kill switch.** **Settings → Pause all outbound email** stops every send path at its next send. That
   includes a bulk send already in progress. A header pill shows while outbound email is paused.
 - **Bulk sends need confirmation.** The confirmation shows how many leads will be emailed, the number of
@@ -277,7 +271,8 @@ What's covered, by file:
 | `tests/actions.test.ts` | Every server action in `src/lib/actions/`: validation, happy path, Yelp and database failures |
 | `tests/review-findings.test.ts` | Plain opt-out phrasings end to end, "needs a look" replies, reply/call history vs. the notes limit, unreachable websites, Find email guards, bouncing after the stale-contacts move, correction counts |
 | `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
-| `tests/heuristics-eval.test.ts` | Precision/recall of every heuristic (opt-outs, needs-a-look, automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
+| `tests/heuristics-eval.test.ts` | The reply classifier's outcomes (unsafe, needs a look, handled automatically) and precision/recall of the other heuristics (automatic replies, bounces, brokerage addresses, guessed sites) on development and held-out splits in `tests/corpus/` (see below) |
+| `tests/reply-hold.test.ts` | Interested replies with opt-out words, footers, polite opt-outs: flagged, never suppressed or counted; a reply that needs a look holds every send to its address (flagged leads, leads added later, unmatched replies) until resolved; out-of-office wording with a yes |
 | `tests/contact-card.test.ts` | The call deck's "Add to Contacts" vCard: escaping, file name, no phone, unknown pipeline or lead |
 | `tests/components/operator-controls.test.tsx` | The email lookup sweep, the ADRE import, the city searches, the Cold Outreach stage panel and both error pages: progress, Stop, success, refusal, lost connection, database outage |
 | `tests/pages.test.tsx` | Every page rendered with representative data: the dashboard's numbers, lists, lead pages (send offered, needs-a-look warning, do-not-email, 404), forms, Stats, call decks, Replies, Settings, Help, the root layout and the database-outage page |
@@ -297,12 +292,11 @@ unit-tested. The confirm dialog's focus and Escape handling need a real browser 
 ### Measuring the reply and address rules
 
 `tests/heuristics-eval.test.ts` scores each heuristic on labelled sets kept apart from the unit-test cases
-and prints precision and recall, with every miss, for two splits:
+and prints its results, with every miss, for two kinds of split:
 
 | Heuristic | Corpus | What a miss costs |
 | --- | --- | --- |
-| Opt-out classifier | `tests/corpus/replies.ts` | Emailing someone who asked us to stop (recall first) |
-| "Needs a look" flag | `tests/corpus/review.ts` | A brush-off counted as a positive reply |
+| Reply classifier (opt-out / positive / needs a look) | `tests/corpus/replies.ts`, `review.ts`, `replies-held-out-r10.ts` | An opt-out or a "no" counted as a yes, or an interested reply suppressed (these are **unsafe** and must be 0); otherwise only operator time |
 | Automatic-reply detector | `tests/corpus/auto-mail.ts` | A real reply hidden, or an out-of-office counted as a reply |
 | Bounce detector (and the failed address) | `tests/corpus/auto-mail.ts` | Someone else's send marked bounced (precision first) |
 | Brokerage-site address rule | `tests/corpus/addresses.ts` | Pitching the wrong agent (precision first) |
@@ -317,15 +311,25 @@ and prints precision and recall, with every miss, for two splits:
   a fresh held-out batch for the same family is written *before* the rules change and scored before and
   after (both scores are in the corpus headers).
 
-The reply rules also have a **held-out, unlisted phrasings** split each (opt-outs 26, needs-a-look 44):
-declines, brush-offs and stop requests worded in ways no rule listed, which before round 9 were counted as
-positive replies. The other held-out splits have at least 50 cases (opt-outs 126, needs-a-look 78). A
-"needs a look" hit means *not counted as a positive reply* (flagged, or an opt-out). Each split has a floor; the run (and CI) fails below it, so a rule change that makes things worse fails
-even when every unit test passes. CI also writes the scores to the run summary.
+The reply classifier is scored on outcomes rather than precision and recall. For each split the run prints
+how many replies land on **needs a look** (the operator's workload), how many opt-outs were suppressed and
+how many interested replies were counted without the operator, and every **unsafe** outcome: an opt-out or
+a decline counted as a positive reply, or a reply that isn't an opt-out suppressed. Any unsafe outcome on
+any split fails the run; so does a drop below the floors on what the rules handle alone (held-out: at
+least 75% of opt-outs suppressed and 75% of interested replies counted automatically, at most 50% of
+replies needing a look). Measured on 2026-09-26, after the round-10 redesign, across the five held-out
+splits (334 synthetic replies): **0 unsafe**, 36% need a look, 107 of 118 opt-outs suppressed and 72 of 76
+interested replies counted automatically. On the round-10 batch alone (60 replies written before the
+redesign): 0 unsafe (the old rules had 3), 40% need a look. The older splits were labelled on one question
+each (opt-out or not; positive or not), so they are scored on that question only.
+
+The other heuristics print precision and recall. Each split has a floor; the run (and CI) fails below it,
+so a rule change that makes things worse fails even when every unit test passes. CI also writes the scores
+to the run summary.
 
 Every set is **synthetic**, written to resemble real mail, sites and staff directories, and the eval labels
 each score "synthetic". It also scores a **real replies** split (`tests/corpus/real-replies.ts`) on the three
-outcomes the app acts on (opt-out, needs a look, positive) and fails on any missed opt-out; that split is
+outcomes the app acts on (opt-out, needs a look, positive) and fails on any unsafe outcome; that split is
 empty until the owner supplies data, and the run says so ("Real replies [held-out]: none yet"). To measure
 production traffic, export recent inbound mail with its anonymised text and the app's decision as a
 *suggested* label:

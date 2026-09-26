@@ -72,10 +72,12 @@ jobs:
             console.log(["### Unit/integration test coverage (src/)", "", "| Metric | Covered |", "| --- | --- |", ...rows, "", "| Lines by area | Covered |", "| --- | --- |", ...areaRows].join("\n"));
           ' >> "$GITHUB_STEP_SUMMARY"
 
-      # Precision/recall of every heuristic (opt-outs, needs-a-look,
-      # automatic replies, bounces, brokerage addresses, guessed sites) on
+      # The reply classifier's outcomes (unsafe, needs a look, handled
+      # automatically) and precision/recall of the other heuristics
+      # (automatic replies, bounces, brokerage addresses, guessed sites) on
       # the development and held-out splits in tests/corpus/ (also part of
-      # the run above, where a drop below any floor fails the build).
+      # the run above, where an unsafe outcome or a drop below any floor
+      # fails the build).
       - name: Heuristic scores
         if: always()
         run: |
@@ -83,7 +85,7 @@ jobs:
           {
             echo "### Heuristics on the labelled sets (quote the held-out split)"
             echo
-            grep -E "precision|miss:|Real replies" eval.log | sed 's/^/    /'
+            grep -E "precision|miss:|Real replies|Reply outcomes|UNSAFE" eval.log | sed 's/^/    /'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Browser smoke tests against the production build: single send, bulk

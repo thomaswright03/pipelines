@@ -2,35 +2,34 @@
 // /api/email-inbound) against whichever leads have that address, in both
 // pipelines, and enforces a genuine opt-out.
 //
-// What a reply does to a lead that was pitched:
-// - Contacted, Cold call list, Contactless list → Responded, reply time set
-//   (a reply after the stale-contacts job moved the lead to phone outreach
-//   still counts as a reply and takes the lead off the call deck).
-// - Lost, Not interested → status kept, reply time set, and the lead is
-//   flagged "Replied — needs review" (it may have got there by a bounce or
-//   an old call outcome rather than a decision about this reply).
-// - Any other status → reply time set if missing; status kept.
-// Only a reply with a positive signal (a yes, a question, a request — see
-// reply-classifier.ts) counts as a reply by itself. One that reads like a
-// brush-off or complaint ("not interested", "no thanks", "who is this"), or
-// that the rules can't place at all ("We'll stick with what we have"),
-// flags the lead "Reply needs a look" with the reason and leaves its status
-// and reply time alone, so it neither leaves the call deck nor counts toward
-// the reply rate; the operator decides ("Mark replied" counts it). A reply
-// the rules merely can't place is only flagged on a lead we're waiting to
-// hear from (Contacted, on the call deck); from a lead that already replied
-// or is a customer it is just recorded.
-// An opt-out reply suppresses the address (from any status) and moves a
-// lead we were working — Contacted, Responded, on the call deck — to Lost
-// (Not interested in dataleadsell). New leads just become unsendable;
-// customers keep their status.
+// The reply classifier (reply-classifier.ts) gives every reply one of three
+// verdicts, and only a confident one acts on its own:
+// - opt_out: the address is suppressed (from any status) and a lead we were
+//   working — Contacted, Responded, on the call deck — moves to Lost (Not
+//   interested in dataleadsell). New leads just become unsendable;
+//   customers keep their status. The reply counts as a reply.
+// - positive: the reply time is set and, on a lead that was pitched,
+//   Contacted / Cold call list / Contactless list → Responded (a reply
+//   after the stale-contacts job moved the lead to phone outreach still
+//   counts and takes it off the call deck). Lost / Not interested keep their
+//   status and are flagged "Replied — needs review" (they may have got there
+//   by a bounce or an old call outcome). Other statuses keep theirs.
+// - needs_look: every lead with the address, in either pipeline and whatever
+//   its status, is flagged "Reply needs a look" with the reason. Its status
+//   and reply time stay as they were, so it neither counts toward the reply
+//   rate nor leaves Contacted for the call deck, and send.ts sends nothing
+//   to the address until the operator resolves the flag (Mark replied, Mark
+//   opted out, a status move, or Keep as it is).
 //
 // Mail no person wrote is told apart first (auto-mail.ts):
 // - An automatic reply (out-of-office, autoresponder) is added to the
 //   lead's history, marked as automatic, and changes nothing else: status,
 //   reply time and the reply rate are untouched, so the lead still moves to
 //   phone outreach after a week. A real reply later counts as usual. One
-//   that matches no lead is filed away rather than listed on Replies.
+//   that matches no lead is filed away rather than listed on Replies. A
+//   message read as automatic only from its wording that also says yes or
+//   "interested" ("I'm out this week, but yes — call me Monday") is treated
+//   as a reply that needs a look instead.
 // - A bounce notice marks the failed recipient's latest send bounced, with
 //   the same rules as "Mark bounced". One whose address can't be read, or
 //   matches no lead, is listed on Replies as a bounce for the operator.
@@ -49,8 +48,8 @@ import { prisma } from "@/lib/db";
 import { suppressEmail } from "@/lib/email-suppression";
 import { formatDateTime } from "@/lib/time";
 import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@/lib/lead-status";
-import { classifyReply, REPLY_RULES_VERSION } from "@/lib/outreach/reply-classifier";
-import { AUTO_MAIL_RULES_VERSION, detectAutoReply, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
+import { classifyReply, REPLY_RULES_VERSION, showsClearInterest, type ReplyVerdict } from "@/lib/outreach/reply-classifier";
+import { AUTO_MAIL_RULES_VERSION, autoReplySignal, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
 import { applyBounce } from "@/lib/outreach/lead-actions";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
@@ -115,12 +114,23 @@ const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL].map
 
 export async function handleInboundReply(message: InboundEmail, now: Date = new Date()): Promise<InboundResult> {
   const fromEmail = extractEmailAddress(message.from);
-  const classification = classifyReply({ subject: message.subject, text: message.text });
+  let classification = classifyReply({ subject: message.subject, text: message.text });
   const dedupeKey = inboundDedupeKey(message);
   // A bounce is recognised on the raw text (DSN fields sit below what the
   // reply classifier would keep); an opt-out always wins over "automatic".
   const bounce = classification.optOut ? null : detectBounce({ ...message, from: fromEmail }, OWN_DOMAINS);
-  const autoReason = classification.optOut || bounce ? null : detectAutoReply(message);
+  const auto = classification.optOut || bounce ? null : autoReplySignal(message);
+  // Out-of-office wording alone, in a message that also says yes: a person
+  // may have written it, so it isn't filed away as automatic.
+  const autoButInterested = auto?.basis === "wording" && showsClearInterest(message.text ?? "");
+  const autoReason = auto && !autoButInterested ? auto.reason : null;
+  if (autoButInterested && classification.verdict === "positive") {
+    classification = {
+      ...classification,
+      verdict: "needs_look",
+      review: `It reads partly like an out-of-office message (${auto.reason}) but also says yes or interested — check it.`,
+    };
+  }
   const kind: InboundKind = bounce ? "bounce" : autoReason ? "auto_reply" : "reply";
 
   const replyText = (bounce ? (message.text ?? "").trim() : classification.newText).slice(0, MAX_STORED_REPLY_CHARS);
@@ -181,9 +191,8 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
               continue;
             }
             const flagged = await recordOnLead(tx, pipeline, lead, {
-              optOut: classification.optOut,
+              verdict: classification.verdict,
               review: classification.review,
-              unclear: classification.unclear,
               fromEmail,
               note,
               now,
@@ -254,25 +263,29 @@ async function recordBounceOnLead(
   return true;
 }
 
-/** What a reply does to one lead's fields, given its current status. */
+/** What a reply does to one lead's fields, given its verdict and the lead's current status. */
 function replyUpdateFor(
   pipelineId: PipelineAdapter["id"],
   lead: Pick<OutreachLead, "status" | "repliedAt">,
-  reply: { optOut: boolean; review?: string | null; unclear?: boolean; pitched: boolean; fromEmail: string; now: Date },
+  reply: { verdict: ReplyVerdict; review: string | null; pitched: boolean; fromEmail: string; now: Date },
 ): { data: LeadUpdate; needsReview: boolean } {
   const data: LeadUpdate = {};
-  // A possible "no" (see below) isn't counted as a reply until the operator
-  // decides it is one ("Mark replied"), so it can't inflate the reply rate.
-  // A reply that is merely unclear is only a possible "no" from a lead we
-  // were waiting on; from one that already replied, or a customer, it's
-  // ordinary conversation.
-  const possibleNo =
-    Boolean(reply.review) && !reply.optOut && lead.status !== "new" && (!reply.unclear || REPLY_MOVES_TO_RESPONDED.includes(lead.status));
-  // Only a lead that was actually emailed counts toward the reply rate.
-  if (reply.pitched && !lead.repliedAt && !possibleNo) data.repliedAt = reply.now;
 
-  if (reply.optOut) {
+  if (reply.verdict === "needs_look") {
+    // Not a reply, not an opt-out, until the operator decides. The flag also
+    // holds every send to the address (send.ts) — whatever the lead's status.
+    data.replyNeedsReview = true;
+    data.replyReviewReason = reply.review ?? "The rules couldn't read this reply.";
+    return { data, needsReview: true };
+  }
+
+  // Only a lead that was actually emailed counts toward the reply rate.
+  if (reply.pitched && !lead.repliedAt) data.repliedAt = reply.now;
+
+  if (reply.verdict === "opt_out") {
     data.sendBlockedReason = `${OPTED_OUT_BLOCK_PREFIX} — ${reply.fromEmail} is on the suppression list.`;
+    data.replyNeedsReview = false;
+    data.replyReviewReason = null;
     // A lead we were actively working (emailing, or about to call) is done;
     // a New lead just can't be emailed, and a customer stays a customer.
     if (REPLY_MOVES_TO_RESPONDED.includes(lead.status) || lead.status === "responded") {
@@ -282,14 +295,6 @@ function replyUpdateFor(
   }
 
   if (!reply.pitched) return { data, needsReview: false };
-  if (possibleNo) {
-    // Possibly a "no" or a complaint: the operator decides, the status stays.
-    data.replyNeedsReview = true;
-    data.replyReviewReason = reply.unclear
-      ? `The reply ${reply.review}. Read it: mark them opted out if it asks not to be emailed, or use Mark replied if it's interested.`
-      : `The reply ${reply.review}. It may be asking not to be emailed.`;
-    return { data, needsReview: true };
-  }
   if (REPLY_MOVES_TO_RESPONDED.includes(lead.status)) {
     data.status = "responded";
     return { data, needsReview: false };
@@ -316,17 +321,15 @@ function replyNote(
   receivedAt: Date,
   subject: string | null,
   text: string | null,
-  verdict: { optOut: boolean; trigger: string | null; review: string | null; unclear?: boolean },
+  verdict: { verdict: ReplyVerdict; trigger: string | null; review: string | null },
   from?: string,
 ): string {
   return [
     `Reply received ${formatDateTime(receivedAt)}${from ? ` from ${from}` : ""}${subject ? ` — ${subject}` : ""}`,
     text,
-    verdict.optOut && verdict.trigger ? `→ Read as an opt-out because of: "${verdict.trigger}"` : null,
-    !verdict.optOut && verdict.review
-      ? verdict.unclear
-        ? `→ Not counted as a reply by itself: it ${verdict.review}`
-        : `→ Flagged for a look: the reply ${verdict.review}`
+    verdict.verdict === "opt_out" && verdict.trigger ? `→ Read as an opt-out because of: "${verdict.trigger}"` : null,
+    verdict.verdict === "needs_look"
+      ? `→ Needs a look, so not counted as a reply or an opt-out yet, and nothing is emailed to this address until you resolve it. ${verdict.review ?? ""}`.trim()
       : null,
   ]
     .filter(Boolean)
@@ -348,6 +351,8 @@ export type UnmatchedReply = {
   kind: string;
   kindReason: string | null;
   failedRecipient: string | null;
+  /** Why the reply needs a look, when it does (nothing is emailed to the address until it's dealt with). */
+  reviewReason: string | null;
   receivedAt: Date;
 };
 
@@ -367,6 +372,7 @@ export async function listUnmatchedReplies(take = 20): Promise<UnmatchedReply[]>
       kind: true,
       kindReason: true,
       failedRecipient: true,
+      reviewReason: true,
       receivedAt: true,
     },
   });
@@ -427,12 +433,15 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
         };
       }
 
-      // The stored text is what the classifier kept, so re-reading it gives
-      // the same verdict's details (the trigger words, whether it was unclear).
-      const again = classifyReply({ subject: reply.subject, text: reply.text });
-      const trigger = reply.optedOut ? again.trigger : null;
-      const review = reply.optedOut ? null : reply.reviewReason;
-      const verdict = { optOut: reply.optedOut, trigger, review, unclear: Boolean(review) && again.unclear };
+      // The stored verdict stands (the rules may have changed since); the
+      // stored text is what the classifier kept, so re-reading it recovers
+      // an opt-out's trigger words.
+      const trigger = reply.optedOut ? classifyReply({ subject: reply.subject, text: reply.text }).trigger : null;
+      const verdict = {
+        verdict: (reply.optedOut ? "opt_out" : reply.reviewReason ? "needs_look" : "positive") as ReplyVerdict,
+        trigger,
+        review: reply.optedOut ? null : reply.reviewReason,
+      };
       if (reply.optedOut && lead.email) {
         await suppressEmail(
           lead.email,
@@ -446,9 +455,8 @@ export async function attachReplyToLead(replyId: string, pipelineId: PipelineAda
       }
       const note = replyNote(reply.receivedAt, reply.subject, reply.text, verdict, reply.fromEmail);
       await recordOnLead(tx, pipeline, lead, {
-        optOut: reply.optedOut,
+        verdict: verdict.verdict,
         review: verdict.review,
-        unclear: verdict.unclear,
         fromEmail: lead.email ?? reply.fromEmail,
         note,
         now: reply.receivedAt,
@@ -477,11 +485,30 @@ export async function dismissReply(replyId: string): Promise<AttachResult> {
     : { ok: false, error: "That reply was already dealt with — reload the page." };
 }
 
+/**
+ * The operator read an unmatched reply as a request not to be emailed: its
+ * address goes on the do-not-email list (and every lead with it is flagged),
+ * and the reply leaves the list.
+ */
+export async function optOutUnmatchedReply(replyId: string): Promise<AttachResult> {
+  return prisma.$transaction(async (tx) => {
+    const reply = await tx.inboundReply.findFirst({ where: { id: replyId, ...UNMATCHED } });
+    if (!reply) return { ok: false as const, error: "That reply was already dealt with — reload the page." };
+    await suppressEmail(
+      reply.fromEmail,
+      { reason: "A reply read by the operator as asking not to be emailed", source: "manual", evidence: reply.text?.slice(0, 300) ?? null },
+      tx,
+    );
+    await tx.inboundReply.update({ where: { id: reply.id }, data: { resolvedAt: new Date(), resolution: "opted_out" } });
+    return { ok: true as const, message: `Added ${reply.fromEmail} to the do-not-email list. Neither pipeline will email it.` };
+  });
+}
+
 async function recordOnLead(
   tx: Db,
   pipeline: PipelineAdapter,
   initial: OutreachLead,
-  reply: { optOut: boolean; review: string | null; unclear: boolean; fromEmail: string; note: string; now: Date },
+  reply: { verdict: ReplyVerdict; review: string | null; fromEmail: string; note: string; now: Date },
 ): Promise<boolean> {
   // Contacted always means "was emailed" (only a send puts a lead there).
   const pitched = initial.status === "contacted" || initial.lastEmailedAt !== null || (await pipeline.hasBeenEmailed(tx, initial.id));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyReply, extractNewReplyText } from "@/lib/outreach/reply-classifier";
+import { classifyReply, extractNewReplyText, RULE_EXAMPLES, showsClearInterest } from "@/lib/outreach/reply-classifier";
 import { buildOutreachEmail } from "@/lib/vault-email-template";
 import { buildAgentOutreachEmail } from "@/lib/dataleadsell-email-template";
 
@@ -204,22 +204,18 @@ describe("classifyReply — replies that need a human look", () => {
 });
 
 describe("classifyReply — a reply counts as positive only with a positive signal", () => {
-  it.each([
-    "I'd rather not receive these",
-    "Lose my number",
-    "F off",
-    "Bitte keine E-Mails mehr",
-    "Get lost.",
-    "Kindly refrain from contacting me.",
-  ])("reads the polite, rude or non-English stop request %j as an opt-out", (text) => {
-    expect(classifyReply({ text })).toMatchObject({ optOut: true, review: null });
-  });
+  it.each(["I'd rather not receive these", "F off", "Bitte keine E-Mails mehr", "Get lost.", "Kindly refrain from contacting me."])(
+    "reads the polite, rude or non-English stop request %j as an opt-out",
+    (text) => {
+      expect(classifyReply({ text })).toMatchObject({ optOut: true, review: null });
+    },
+  );
 
   it.each([
     ["Pass.", /pass/],
     ["We are not the right business for this", /isn't for them/],
-    ["We'll stick with what we have.", /no clear sign of interest/],
-    ["Hmm.", /no clear sign of interest/],
+    ["We'll stick with what we have.", /no clear yes, question or request/],
+    ["Hmm.", /no clear yes, question or request/],
     ["Nein danke.", /another language/],
     ["Спасибо, не интересно.", /another language/],
   ])("flags %j for a look instead of counting it as a yes", (text, reason) => {
@@ -228,10 +224,14 @@ describe("classifyReply — a reply counts as positive only with a positive sign
     expect(result.review).toMatch(reason);
   });
 
-  it("marks a reply it merely can't place as unclear, and a recognised brush-off as not", () => {
-    expect(classifyReply({ text: "We'll stick with what we have." }).unclear).toBe(true);
-    expect(classifyReply({ text: "Not interested." }).unclear).toBe(false);
-    expect(classifyReply({ text: "Yes, interested — what does it cost?" }).unclear).toBe(false);
+  it("says when a reply that needs a look may be asking not to be emailed", () => {
+    expect(classifyReply({ text: "Kindly exclude me from future mailings." })).toMatchObject({
+      verdict: "needs_look",
+      mayBeOptOut: true,
+      review: expect.stringMatching(/may be asking not to be emailed/),
+    });
+    expect(classifyReply({ text: "Not interested." })).toMatchObject({ verdict: "needs_look", mayBeOptOut: false });
+    expect(classifyReply({ text: "Yes, interested — what does it cost?" })).toMatchObject({ verdict: "positive", review: null });
   });
 
   it("flags a reply with no text of its own", () => {
@@ -259,31 +259,124 @@ describe("classifyReply — a reply counts as positive only with a positive sign
 describe("classifyReply — a stop word in an interested reply", () => {
   it("flags 'stop calling my cell' in an interested reply for a look instead of opting out", () => {
     const result = classifyReply({ text: "How much for a website? Also please stop calling my cell, email only." });
-    expect(result.optOut).toBe(false);
-    expect(result.review).toMatch(/stop phone calls/);
+    expect(result).toMatchObject({ verdict: "needs_look", optOut: false, mayBeOptOut: true });
+    expect(result.review).toMatch(/stop calls or texts/);
   });
 
-  it("still opts out a stop request about email, even from someone who sounds interested", () => {
-    expect(classifyReply({ text: "Stop emailing me" }).optOut).toBe(true);
-    expect(classifyReply({ text: "Interesting product, but stop emailing me." }).optOut).toBe(true);
+  it("opts out a stop request about email only when nothing in the reply sounds interested", () => {
+    expect(classifyReply({ text: "Stop emailing me" }).verdict).toBe("opt_out");
+    const mixed = classifyReply({ text: "Interesting product, but stop emailing me." });
+    expect(mixed).toMatchObject({ verdict: "needs_look", mayBeOptOut: true });
+    // The reason names both the request and the interest.
+    expect(mixed.review).toMatch(/stop emailing.*Interesting/);
   });
 
-  it("still opts out 'stop calling me' when nothing in the reply sounds interested", () => {
-    expect(classifyReply({ text: "Stop calling me." }).optOut).toBe(true);
+  it("never opts out on a request that names only calls or texts", () => {
+    for (const text of ["Stop calling me.", "Lose my number"]) {
+      expect(classifyReply({ text }), text).toMatchObject({ verdict: "needs_look", mayBeOptOut: true });
+    }
   });
 
-  it("flags a question about unsubscribing later for a look instead of opting out", () => {
-    const result = classifyReply({ text: "Can I unsubscribe later if it doesn't work out?" });
-    expect(result.optOut).toBe(false);
-    expect(result.review).toMatch(/asks about unsubscribing/);
-  });
-
-  it("treats 'Can I unsubscribe?' on its own as a request", () => {
-    expect(classifyReply({ text: "Can I unsubscribe?" }).optOut).toBe(true);
+  it("flags a question about unsubscribing for a look instead of opting out", () => {
+    for (const text of ["Can I unsubscribe later if it doesn't work out?", "Can I unsubscribe?"]) {
+      expect(classifyReply({ text }), text).toMatchObject({ verdict: "needs_look", mayBeOptOut: true });
+    }
   });
 
   it("reads 'Please stop, not interested' as an opt-out but 'Stop, I'm interested' as needing a look", () => {
     expect(classifyReply({ text: "Please stop, not interested." }).optOut).toBe(true);
     expect(classifyReply({ text: "Stop, I'm interested — send pricing." })).toMatchObject({ optOut: false, review: expect.any(String) });
+  });
+
+  it("doesn't read 'your unsubscribe link' or 'don't email me the PDF' as a request", () => {
+    expect(classifyReply({ text: "Your unsubscribe link didn't work but I want to stay on anyway." }).optOut).toBe(false);
+    expect(classifyReply({ text: "Don't email me the PDF, just the link." }).optOut).toBe(false);
+  });
+});
+
+describe("classifyReply — the review's examples (round 10)", () => {
+  it.each([
+    "Sure — but don't email me at this address, use jane@other.test instead.",
+    "Please unsubscribe my old address and use this one going forward — send the pricing here.",
+    "Stop! This is exactly what I need. Call me.",
+    "Take me off the waitlist at my current vendor, I'd rather go with you. What's the price?",
+  ])("an interested reply with opt-out words needs a look and names both: %j", (text) => {
+    const result = classifyReply({ text });
+    expect(result).toMatchObject({ verdict: "needs_look", optOut: false, mayBeOptOut: true });
+    expect(result.review).toMatch(/request not to be emailed .* but also/);
+  });
+
+  it("reads past a legal and newsletter footer", () => {
+    const text =
+      "Interested! Can you call me Thursday?\n\nThis email and any attachments are confidential. If you received this in error, please notify the sender and delete it. To unsubscribe from our newsletter click here.";
+    expect(classifyReply({ text })).toMatchObject({ verdict: "positive", newText: "Interested! Can you call me Thursday?" });
+  });
+
+  it.each(["STOP", "unsubscribe", "Remove me.", "Please stop emailing me. I am not interested in this at all."])(
+    "still suppresses the unambiguous opt-out %j",
+    (text) => {
+      expect(classifyReply({ text }).verdict).toBe("opt_out");
+    },
+  );
+
+  it.each([
+    "I'd appreciate it if you didn't email me again.",
+    "Kindly exclude me from future mailings.",
+    "I do not wish to be contacted.",
+    "Please no further contact.",
+    "Put me on your do not contact list",
+    "Take this address off whatever list you bought.",
+    "cancel my subscription to these emails",
+    "Kindly desist from sending further emails.",
+    "Pls rmv",
+  ])("never counts the polite or abbreviated opt-out %j as positive, and says it may be one", (text) => {
+    const result = classifyReply({ text });
+    expect(result.verdict).not.toBe("positive");
+    if (result.verdict === "needs_look") expect(result.review).toMatch(/may be asking not to be emailed/);
+  });
+});
+
+describe("extractNewReplyText — signatures and footers", () => {
+  it("cuts a sign-off and the signature under it, but keeps a P.S.", () => {
+    expect(extractNewReplyText("Send the pricing.\n\nBest,\nDana Whitfield\nWhitfield Realty\n(602) 555-0142")).toBe("Send the pricing.");
+    expect(extractNewReplyText("Sounds good.\nThanks,\nJo\nP.S. remove my old address from your list")).toBe(
+      "Sounds good.\n\nP.S. remove my old address from your list",
+    );
+  });
+
+  it("keeps a sign-off word that is the whole reply", () => {
+    expect(extractNewReplyText("Thanks!")).toBe("Thanks!");
+  });
+
+  it.each([
+    "CONFIDENTIALITY NOTICE: This e-mail message is for the sole use of the intended recipient.",
+    "This message and any attachments are confidential and intended solely for the addressee.",
+    "If you have received this email in error please notify the sender.",
+    "To unsubscribe from the Desert Realty newsletter, click here.",
+    "Please consider the environment before printing this email.",
+  ])("cuts the footer line %j", (footer) => {
+    expect(extractNewReplyText(`Yes, call me.\n\n${footer}`)).toBe("Yes, call me.");
+  });
+
+  it("doesn't mistake a request to unsubscribe for a newsletter footer", () => {
+    expect(extractNewReplyText("Not interested.\nUnsubscribe me from your newsletter.")).toBe(
+      "Not interested.\nUnsubscribe me from your newsletter.",
+    );
+  });
+});
+
+describe("rule groups", () => {
+  for (const { group, verdict, examples } of RULE_EXAMPLES) {
+    it.each(examples)(`${group}: %j → ${verdict}`, (text) => {
+      expect(classifyReply({ text }).verdict).toBe(verdict);
+    });
+  }
+});
+
+describe("showsClearInterest", () => {
+  it("is true for a yes or 'interested', not for a phone number or a negated one", () => {
+    expect(showsClearInterest("Yes I'm interested, I'm out of the office this week but call me Monday")).toBe(true);
+    expect(showsClearInterest("I am out of the office until Monday. For urgent matters call 480-555-0100.")).toBe(false);
+    expect(showsClearInterest("Out of office. Not interested in solicitations.")).toBe(false);
   });
 });

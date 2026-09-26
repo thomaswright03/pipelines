@@ -25,7 +25,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
   });
   if (!lead) notFound();
 
-  const { suppression, paused, ledgerNote } = await loadLeadContext("dataleadsell", lead.id, lead.email);
+  const { suppression, paused, ledgerNote, latestReply } = await loadLeadContext("dataleadsell", lead.id, lead.email);
   // Exactly what a send would use.
   const preview = getPipeline("dataleadsell").buildEmail({ name: lead.name, company: null, county: lead.county });
 
@@ -61,6 +61,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
           pipeline="dataleadsell"
           paused={paused}
           suppression={suppression}
+          latestReply={latestReply}
           lead={{
             id: lead.id,
             name: lead.name,

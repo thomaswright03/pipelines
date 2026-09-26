@@ -213,6 +213,37 @@ export const REPLY_CORPUS: LabelledReply[] = [
   { text: "How much for a website? Also please stop calling my cell, email only.", optOut: false },
 ];
 
+// Round 10, from the review, with the outcome the app should reach (the
+// three-outcome labels scored since the round-10 redesign). Development
+// cases: the redesign was checked against these.
+export const REPLY_DEV_OUTCOMES: { text: string; subject?: string; expected: "opt_out" | "positive" | "needs_look" }[] = [
+  // Interested replies that contain opt-out words: never suppressed.
+  {
+    text: "Interested! Can you call me Thursday?\n\nThis email and any attachments are confidential. If you received this in error, please notify the sender and delete it. To unsubscribe from our newsletter click here.",
+    expected: "positive",
+  },
+  { text: "Sure — but don't email me at this address, use jane@other.test instead.", expected: "needs_look" },
+  { text: "Please unsubscribe my old address and use this one going forward — send the pricing here.", expected: "needs_look" },
+  { text: "Stop! This is exactly what I need. Call me.", expected: "needs_look" },
+  { text: "Take me off the waitlist at my current vendor, I'd rather go with you. What's the price?", expected: "needs_look" },
+  // Unambiguous opt-outs: still suppressed automatically.
+  { text: "STOP", expected: "opt_out" },
+  { text: "unsubscribe", expected: "opt_out" },
+  { text: "Remove me.", expected: "opt_out" },
+  { text: "Please stop emailing me. I am not interested in this at all.", expected: "opt_out" },
+  // Polite, formal and abbreviated opt-outs: never positive; at least a look
+  // that says they may be asking not to be emailed.
+  { text: "I'd appreciate it if you didn't email me again.", expected: "needs_look" },
+  { text: "Kindly exclude me from future mailings.", expected: "needs_look" },
+  { text: "I do not wish to be contacted.", expected: "needs_look" },
+  { text: "Please no further contact.", expected: "needs_look" },
+  { text: "Put me on your do not contact list", expected: "needs_look" },
+  { text: "Take this address off whatever list you bought.", expected: "needs_look" },
+  { text: "cancel my subscription to these emails", expected: "needs_look" },
+  { text: "Kindly desist from sending further emails.", expected: "needs_look" },
+  { text: "Pls rmv", expected: "needs_look" },
+];
+
 // --- Held-out split ------------------------------------------------------
 // Written on 2026-09-25 after the rules above were last changed, and scored
 // once as-is. First run: precision 100%, recall 80% (4 of 20 opt-outs

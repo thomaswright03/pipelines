@@ -1,12 +1,12 @@
 // Data every lead page needs besides the lead itself: its address's
-// do-not-email entry, what the send ledger knows about it, and whether
-// outbound email is paused.
+// do-not-email entry, what the send ledger knows about it, whether outbound
+// email is paused, and the latest reply (shown when it needs a look).
 import { prisma } from "@/lib/db";
 import { getSuppression } from "@/lib/email-suppression";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { formatDate, formatDateTime } from "@/lib/time";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
-import type { LeadSuppression } from "@/components/LeadActions";
+import type { LatestReply, LeadSuppression } from "@/components/LeadActions";
 
 export type LedgerNote = { tone: "warning" | "info"; text: string } | null;
 
@@ -18,11 +18,19 @@ export type LedgerNote = { tone: "warning" | "info"; text: string } | null;
 const STALE_CLAIM_MS = 2 * 60_000;
 
 export async function loadLeadContext(pipeline: PipelineId, leadId: string, email: string | null, now: Date = new Date()) {
-  const [suppression, settings, ledger] = await Promise.all([
+  const [suppression, settings, ledger, reply] = await Promise.all([
     email ? getSuppression(email) : null,
     getAppSettings(),
     email ? prisma.outreachRecipient.findMany({ where: { email: email.toLowerCase() } }) : [],
+    prisma.inboundReply.findFirst({
+      where: { matched: { has: `${pipeline}:${leadId}` }, kind: "reply" },
+      orderBy: { receivedAt: "desc" },
+      select: { text: true, subject: true, receivedAt: true },
+    }),
   ]);
+  const latestReply: LatestReply | null = reply
+    ? { text: reply.text ?? reply.subject ?? "", receivedAt: formatDateTime(reply.receivedAt) }
+    : null;
 
   const lead: LeadSuppression | null = suppression
     ? {
@@ -64,5 +72,5 @@ export async function loadLeadContext(pipeline: PipelineId, leadId: string, emai
     };
   }
 
-  return { suppression: lead, paused: settings.outboundPaused, ledgerNote };
+  return { suppression: lead, paused: settings.outboundPaused, ledgerNote, latestReply };
 }
