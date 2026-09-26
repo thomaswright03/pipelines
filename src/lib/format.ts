@@ -13,6 +13,11 @@ export function centsToInput(cents: number | null | undefined): string {
   return `${Math.trunc(cents / 100)}.${String(Math.abs(cents % 100)).padStart(2, "0")}`;
 }
 
+/** 1234 → "1,234". */
+export function formatCount(count: number): string {
+  return count.toLocaleString("en-US");
+}
+
 export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 }

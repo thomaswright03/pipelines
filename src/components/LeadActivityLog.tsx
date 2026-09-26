@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { addLeadActivityAction } from "@/lib/actions/outreach";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import CharacterCount from "@/components/CharacterCount";
+import { formatCount } from "@/lib/format";
+
+/** The most one history entry can hold (the server keeps the same cap). */
+const ENTRY_LIMIT = 2_000;
 
 type Activity = { id: string; type: string; notes: string; date: string };
 
@@ -36,6 +41,10 @@ export default function LeadActivityLog({
     e.preventDefault();
     if (!notes.trim()) {
       setFeedback({ ok: false, text: "Write what happened first." });
+      return;
+    }
+    if (notes.trim().length > ENTRY_LIMIT) {
+      setFeedback({ ok: false, text: `An entry can be at most ${formatCount(ENTRY_LIMIT)} characters — shorten it first.` });
       return;
     }
     setFeedback(null);
@@ -79,8 +88,8 @@ export default function LeadActivityLog({
         <input
           id="activity-notes"
           value={notes}
-          maxLength={2000}
           onChange={(e) => setNotes(e.target.value)}
+          aria-describedby="activity-notes-count"
           placeholder="What happened…"
           className="input flex-1"
         />
@@ -88,6 +97,7 @@ export default function LeadActivityLog({
           {isPending ? "Adding…" : "Add"}
         </button>
       </form>
+      <CharacterCount id="activity-notes-count" value={notes} limit={ENTRY_LIMIT} />
       <div className="mt-2">
         <ActionMessage feedback={feedback} />
       </div>

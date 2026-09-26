@@ -8,6 +8,11 @@ import { COLD_CALL_OUTCOMES, COLD_CALL_OUTCOME_LABEL, type ColdCallOutcome } fro
 import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { getTimezoneForState, formatLocalTime } from "@/lib/us-timezones";
 import type { CallDeck } from "@/lib/call-deck";
+import { formatCount, plural } from "@/lib/format";
+import CharacterCount from "@/components/CharacterCount";
+
+/** The most a call's notes can hold (the server keeps the same cap). */
+const CALL_NOTES_LIMIT = 2_000;
 import { firstUnhandled, readSavedDeck, recordCall, sessionDeckStorage, writeSavedDeck, type LoggedCall } from "@/lib/call-deck-session";
 
 const CLOCK_TICK_MS = 30_000;
@@ -94,6 +99,10 @@ export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: Pipel
       setError("Pick how the call went first.");
       return;
     }
+    if (notes.trim().length > CALL_NOTES_LIMIT) {
+      setError(`Call notes can be at most ${formatCount(CALL_NOTES_LIMIT)} characters — shorten them first.`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -111,7 +120,7 @@ export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: Pipel
     return (
       <div className="card p-8 text-center">
         <p className="text-sm muted">
-          No cards left after this point — {total} {total === 1 ? "lead is" : "leads are"} on the call list.
+          No cards left after this point — {formatCount(total)} {total === 1 ? "lead is" : "leads are"} on the call list.
         </p>
         <button type="button" onClick={startOver} className="btn-secondary mt-3">
           Start from the top
@@ -143,7 +152,7 @@ export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: Pipel
     <div className="flex flex-col items-center gap-4">
       <div className="flex items-center gap-3">
         <p className="text-xs font-medium muted">
-          Card {offset + index + 1} of {total}
+          Card {formatCount(offset + index + 1)} of {formatCount(total)}
         </p>
         <div
           className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-200 ring-1 ring-inset ring-zinc-500 dark:bg-zinc-800 dark:ring-zinc-400"
@@ -167,7 +176,7 @@ export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: Pipel
 
       {total > leads.length && (
         <p className="text-center text-xs muted">
-          This deck holds cards {offset + 1}–{offset + leads.length} of the {total} on the list
+          This deck holds cards {formatCount(offset + 1)}–{formatCount(offset + leads.length)} of the {formatCount(total)} on the list
           {nextAfter ? " — finish these to load the next ones." : "."}
         </p>
       )}
@@ -259,11 +268,12 @@ export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: Pipel
           id="call-notes"
           className="input mt-4"
           rows={3}
-          maxLength={2000}
           placeholder="Notes from the call…"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
+          aria-describedby="call-notes-count"
         />
+        <CharacterCount id="call-notes-count" value={notes} limit={CALL_NOTES_LIMIT} />
 
         <div aria-live="polite">{error && <p className="notice-error mt-2">{error}</p>}</div>
 
@@ -303,15 +313,13 @@ function Summary({
     <div className="card mx-auto flex w-full max-w-md flex-col gap-4 p-6 sm:p-8">
       <div className="text-center">
         <h2 className="text-xl font-bold">Deck finished</h2>
-        <p className="mt-1 text-sm muted">
-          You worked through {log.length} card{log.length === 1 ? "" : "s"}.
-        </p>
+        <p className="mt-1 text-sm muted">You worked through {plural(log.length, "card")}.</p>
       </div>
       <dl className="grid grid-cols-2 gap-2 text-sm">
         {rows.map((r) => (
           <div key={r.key} className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/60">
             <dt>{r.label}</dt>
-            <dd className="font-semibold">{counts.get(r.key) ?? 0}</dd>
+            <dd className="font-semibold">{formatCount(counts.get(r.key) ?? 0)}</dd>
           </div>
         ))}
       </dl>
@@ -333,7 +341,7 @@ function Summary({
       {more ? (
         <div className="flex flex-col items-center gap-2">
           <p className="text-sm">
-            {more.count} more {more.count === 1 ? "lead is" : "leads are"} on the call list after this deck.
+            {formatCount(more.count)} more {more.count === 1 ? "lead is" : "leads are"} on the call list after this deck.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <a href={more.href} className="btn-primary">

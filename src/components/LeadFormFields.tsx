@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
+import CharacterCount from "@/components/CharacterCount";
 import type { z } from "zod";
 import { fieldErrorsOf, type FieldErrors, type FormState } from "@/lib/lead-forms";
 
@@ -149,7 +150,7 @@ export function TextField({
   onBlur,
   type = "text",
   required,
-  maxLength,
+  limit,
   placeholder,
   hint,
   inputMode,
@@ -164,7 +165,8 @@ export function TextField({
   onBlur: () => void;
   type?: string;
   required?: boolean;
-  maxLength?: number;
+  /** The most characters the field takes. A live count appears near it; no native maxLength, which cuts pasted text silently. */
+  limit?: number;
   placeholder?: string;
   hint?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
@@ -173,7 +175,8 @@ export function TextField({
   errorLink?: { href: string; label: string };
 }) {
   const id = `field-${name}`;
-  const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ") || undefined;
+  const describedBy =
+    [error ? `${id}-error` : null, hint ? `${id}-hint` : null, limit ? `${id}-count` : null].filter(Boolean).join(" ") || undefined;
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="field-label">
@@ -188,7 +191,6 @@ export function TextField({
         type={type}
         value={value}
         required={required}
-        maxLength={maxLength}
         placeholder={placeholder}
         inputMode={inputMode}
         autoComplete={autoComplete}
@@ -198,6 +200,7 @@ export function TextField({
         aria-describedby={describedBy}
         className="input"
       />
+      {limit && <CharacterCount id={`${id}-count`} value={value} limit={limit} />}
       {hint && !error && (
         <p id={`${id}-hint`} className="text-sm muted">
           {hint}
@@ -227,7 +230,7 @@ export function TextAreaField({
   error,
   onChange,
   onBlur,
-  maxLength,
+  limit,
 }: {
   label: string;
   name: string;
@@ -236,9 +239,11 @@ export function TextAreaField({
   errorLink?: { href: string; label: string };
   onChange: (value: string) => void;
   onBlur: () => void;
-  maxLength?: number;
+  /** As TextField's `limit`. */
+  limit?: number;
 }) {
   const id = `field-${name}`;
+  const describedBy = [error ? `${id}-error` : null, limit ? `${id}-count` : null].filter(Boolean).join(" ") || undefined;
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="field-label">
@@ -249,13 +254,13 @@ export function TextAreaField({
         name={name}
         rows={3}
         value={value}
-        maxLength={maxLength}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={describedBy}
         className="input"
       />
+      {limit && <CharacterCount id={`${id}-count`} value={value} limit={limit} />}
       {error && (
         <p id={`${id}-error`} className="field-error">
           {error}

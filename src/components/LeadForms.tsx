@@ -70,23 +70,23 @@ export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: R
   return (
     <form onSubmit={form.onSubmit} noValidate className="card mt-4 flex flex-col gap-3 p-5">
       {form.guardDialog}
-      <TextField label="Name" required maxLength={LIMITS.name} autoComplete="off" {...form.field("name")} />
-      <TextField label="Company" maxLength={LIMITS.company} {...form.field("company")} />
+      <TextField label="Name" required limit={LIMITS.name} autoComplete="off" {...form.field("name")} />
+      <TextField label="Company" limit={LIMITS.company} {...form.field("company")} />
       {locked ? (
         <EmailLockedNote email={locked} />
       ) : (
         <TextField
           label="Email"
           type="email"
-          maxLength={LIMITS.email}
+          limit={LIMITS.email}
           hint={mode.kind === "create" ? "Leave blank and use “Find email” on the lead page to look one up." : undefined}
           {...form.field("email")}
         />
       )}
       <TextField label="Phone" type="tel" inputMode="tel" placeholder="(480) 555-0101" {...form.field("phone")} />
-      <TextField label="Address" maxLength={LIMITS.address} {...form.field("address")} />
+      <TextField label="Address" limit={LIMITS.address} {...form.field("address")} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextField label="City" maxLength={LIMITS.city} {...form.field("city")} />
+        <TextField label="City" limit={LIMITS.city} {...form.field("city")} />
         <div className="flex flex-col gap-1">
           <label htmlFor="field-state" className="field-label">
             State
@@ -110,10 +110,10 @@ export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: R
           {state.error && <p className="field-error">{state.error}</p>}
         </div>
       </div>
-      <TextField label="Website" placeholder="example.com" maxLength={LIMITS.website} {...form.field("website")} />
-      <TextField label="Source" placeholder="Referral, event, …" maxLength={LIMITS.source} {...form.field("source")} />
+      <TextField label="Website" placeholder="example.com" limit={LIMITS.website} {...form.field("website")} />
+      <TextField label="Source" placeholder="Referral, event, …" limit={LIMITS.source} {...form.field("source")} />
       <TextField label="Estimated value ($)" inputMode="decimal" placeholder="2500" {...form.field("estimatedValue")} />
-      <TextAreaField label="Notes" maxLength={Math.max(LIMITS.notes, initial.notes.length)} {...form.field("notes")} />
+      <TextAreaField label="Notes" limit={Math.max(LIMITS.notes, initial.notes.length)} {...form.field("notes")} />
       <div aria-live="polite">{form.formError && <p className="notice-error">{form.formError}</p>}</div>
       <button type="submit" disabled={form.isPending} className="btn-primary">
         {form.isPending ? "Saving…" : mode.kind === "edit" ? "Save changes" : "Add lead"}
@@ -139,15 +139,15 @@ export function AgentLeadForm({ mode, initial }: { mode: Mode; initial: Required
   return (
     <form onSubmit={form.onSubmit} noValidate className="card mt-4 flex flex-col gap-3 p-5">
       {form.guardDialog}
-      <TextField label="Name" required maxLength={LIMITS.name} autoComplete="off" {...form.field("name")} />
-      <TextField label="Brokerage" maxLength={LIMITS.company} {...form.field("brokerage")} />
+      <TextField label="Name" required limit={LIMITS.name} autoComplete="off" {...form.field("name")} />
+      <TextField label="Brokerage" limit={LIMITS.company} {...form.field("brokerage")} />
       {locked ? (
         <EmailLockedNote email={locked} />
       ) : (
         <TextField
           label="Email"
           type="email"
-          maxLength={LIMITS.email}
+          limit={LIMITS.email}
           hint="The agent's own address — not the brokerage's shared inbox."
           {...form.field("email")}
         />
@@ -200,11 +200,11 @@ export function AgentLeadForm({ mode, initial }: { mode: Mode; initial: Required
             </select>
           </div>
         ) : (
-          <TextField label="City" maxLength={LIMITS.city} {...form.field("city")} />
+          <TextField label="City" limit={LIMITS.city} {...form.field("city")} />
         )}
       </div>
-      <TextField label="Website" placeholder="example.com" maxLength={LIMITS.website} {...form.field("website")} />
-      <TextAreaField label="Notes" maxLength={Math.max(LIMITS.notes, initial.notes.length)} {...form.field("notes")} />
+      <TextField label="Website" placeholder="example.com" limit={LIMITS.website} {...form.field("website")} />
+      <TextAreaField label="Notes" limit={Math.max(LIMITS.notes, initial.notes.length)} {...form.field("notes")} />
       <div aria-live="polite">{form.formError && <p className="notice-error">{form.formError}</p>}</div>
       <button type="submit" disabled={form.isPending} className="btn-primary">
         {form.isPending ? "Saving…" : mode.kind === "edit" ? "Save changes" : "Add agent"}
