@@ -2,7 +2,7 @@
 // local outbox only (see playwright.config.ts).
 import { readdir, rm } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { count, leadStatus, resetDb, seedColdLeads, withDb } from "./db";
+import { count, leadStatus, resetDb, seedAgentLead, seedColdLeads, withDb } from "./db";
 import { OUTBOX_DIR } from "../playwright.config";
 
 async function outboxCount(): Promise<number> {
@@ -264,6 +264,31 @@ for (const width of [375, 768, 1280, 1440, 2560]) {
       expect(box.x + box.width).toBeLessThanOrEqual(width);
     }
     await expect(list.getByRole("link", { name: longName }).filter({ visible: true })).toHaveAttribute("title", longName);
+  });
+}
+
+for (const pipeline of ["vault-pipeline", "dataleadsell"] as const) {
+  test(`on a phone, a ${pipeline} lead's status and Send come before the email preview`, async ({ page }) => {
+    const id = pipeline === "vault-pipeline" ? (await seedColdLeads(1))[0]! : await seedAgentLead();
+    await page.setViewportSize({ width: 375, height: 900 });
+    await page.goto(`/${pipeline}/${id}`);
+
+    await expectNoSidewaysScroll(page);
+    const send = page.getByRole("button", { name: "Send outreach email" });
+    const moveTo = page.getByRole("combobox", { name: "Move to…" });
+    const preview = page.getByRole("heading", { name: "Outreach email preview" });
+    for (const control of [send, moveTo]) {
+      const box = (await control.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(2 * 900); // within the first two screens
+      expect(box.y).toBeLessThan((await preview.boundingBox())!.y);
+    }
+
+    // From the md breakpoint up, the actions stay in the right-hand column beside the details.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const sendBox = (await send.boundingBox())!;
+    const previewBox = (await preview.boundingBox())!;
+    expect(sendBox.x).toBeGreaterThan(previewBox.x + previewBox.width);
+    await expect(send).toBeInViewport();
   });
 }
 

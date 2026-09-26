@@ -1,4 +1,4 @@
-import type { BaseStats, Breakdown } from "@/lib/pipeline-stats";
+import type { BaseStats, Breakdown, TemplateStats } from "@/lib/pipeline-stats";
 import { statusLabel } from "@/lib/lead-status";
 import { APP_TIME_ZONE_LABEL } from "@/lib/time";
 
@@ -77,7 +77,7 @@ export function DayTrend({ points, noun }: { points: { day: string; count: numbe
               >
                 {label}
               </span>
-              <span className="text-[10px] font-medium tabular-nums text-zinc-700 dark:text-zinc-300" aria-hidden>
+              <span className="text-xs font-medium tabular-nums text-zinc-700 dark:text-zinc-300" aria-hidden>
                 {p.count > 0 ? p.count.toLocaleString("en-US") : ""}
               </span>
               <span
@@ -85,8 +85,10 @@ export function DayTrend({ points, noun }: { points: { day: string; count: numbe
                 className="w-full rounded-t bg-gradient-to-t from-indigo-600 to-violet-400 transition-all"
                 style={{ height: `${Math.max((p.count / max) * 60, p.count > 0 ? 4 : 1.5)}%` }}
               />
-              <span aria-hidden className="truncate text-[10px] text-zinc-600 dark:text-zinc-400">
-                {p.day.slice(5).replace("-", "/")}
+              {/* Day of the month where bars are narrow, month/day where they're wide; the tooltip has the full date. */}
+              <span aria-hidden className="text-xs tabular-nums text-zinc-600 dark:text-zinc-400">
+                <span className="lg:hidden">{Number(p.day.slice(8))}</span>
+                <span className="hidden lg:inline">{`${Number(p.day.slice(5, 7))}/${Number(p.day.slice(8))}`}</span>
               </span>
             </li>
           );
@@ -178,4 +180,28 @@ export function StatusBreakdown({
 }) {
   const items = statuses.map((status) => ({ label: statusLabel(status), count: counts[status] ?? 0 })).filter((i) => i.count > 0);
   return <BreakdownList items={items} emptyLabel={emptyLabel} />;
+}
+
+/**
+ * Sends and reply rates per version of the pitch's wording, so a change of
+ * subject line or copy can be compared with what came before.
+ */
+export function TemplateBreakdown({ rows, noun }: { rows: TemplateStats[]; noun: string }) {
+  if (rows.length === 0) return <p className="text-sm muted">No emails sent yet.</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
+        {rows.map((row) => (
+          <li key={row.version ?? "none"} className="flex flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+            <div className="min-w-0">
+              <div className="break-words font-medium">{row.subject ? `“${row.subject}”` : "Subject not recorded"}</div>
+              <div className="text-xs muted">{row.version ? `Template ${row.version}` : "Sent before template versions were recorded"}</div>
+            </div>
+            <div className="shrink-0 tabular-nums">{shareOf(row.replied, row.leads, `${noun} emailed replied`)}</div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm muted">A new version appears whenever the wording of the email changes. Replies are counted as above.</p>
+    </div>
+  );
 }

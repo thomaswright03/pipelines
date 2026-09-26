@@ -62,3 +62,16 @@ export async function leadStatus(id: string): Promise<string | null> {
 export async function count(sql: string): Promise<number> {
   return withDb(async (db) => Number((await db.query<{ n: string }>(sql)).rows[0]?.n ?? 0));
 }
+
+/** Inserts one New dataleadsell agent with an address; returns its id. */
+export async function seedAgentLead(name = "Test Agent"): Promise<string> {
+  return withDb(async (db) => {
+    const id = "e2e-agent-1";
+    await db.query(
+      `INSERT INTO "AgentLead" (id, name, email, phone, city, county, state, status, source, "createdAt", "updatedAt")
+       VALUES ($1, $2, 'agent1@realty1.test', '(602) 555-0100', 'Phoenix', 'Maricopa', 'AZ', 'new', 'Browser test', now(), now())`,
+      [id, name],
+    );
+    return id;
+  });
+}
