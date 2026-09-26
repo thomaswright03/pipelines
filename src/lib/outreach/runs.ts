@@ -50,7 +50,8 @@ export async function recordRun(pipeline: string, kind: string, fn: (runId: stri
  * (the technical detail is in the server log under the run id).
  */
 function operatorMessage(err: unknown, runId: string): string {
-  if (err instanceof YelpError) return `${err.name}: ${err.message}`;
+  // Runs are unattended, so the Yelp wording that says what happens next.
+  if (err instanceof YelpError) return `Yelp: ${err.unattended}`;
   if (isDatabaseUnavailable(err)) return "The database couldn't be reached partway through the run.";
   return `An internal error stopped the run (details in the server log under run ${runId}).`;
 }

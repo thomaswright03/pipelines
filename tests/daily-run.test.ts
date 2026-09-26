@@ -112,7 +112,7 @@ describe("a daily run whose Yelp search fails", () => {
     expect(json.summary).toMatch(/^Couldn't search .+, so no new leads were found, 1 left over from earlier runs, emailed 1\.$/);
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
     expect(run.status).toBe("partial");
-    expect(run.errors).toMatch(/^Search of .+ failed: Yelp isn't responding right now/);
+    expect(run.errors).toMatch(/^Search of .+ failed: Yelp wasn't responding, so no new leads were found/);
     // The city wasn't searched, so it stays available for a later run.
     expect(await prisma.scrapedCity.count()).toBe(0);
   });
@@ -140,8 +140,22 @@ describe("a daily run whose Yelp search fails", () => {
     stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
     const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0 });
     expect(outcome.status).toBe("failed");
-    expect(outcome.errors?.[0]).toMatch(/Yelp isn't responding right now/);
+    expect(outcome.errors?.[0]).toMatch(/Yelp wasn't responding, so no new leads were found/);
     expect(mail.messages).toHaveLength(0);
+  });
+
+  it("tells the operator what happens next when Yelp can't be reached, not to 'try again'", async () => {
+    mail = captureMail();
+    stubFetch({
+      [YELP_PREFIX]: () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0 });
+    const error = outcome.errors?.[0] ?? "";
+    expect(error).toMatch(/Couldn't reach Yelp, so no new leads were found this time/);
+    expect(error).toMatch(/The next daily run tries again automatically; if this happens two days in a row, tell your developer\.$/);
+    expect(error).not.toMatch(/Check the connection|try again\./);
   });
 });
 

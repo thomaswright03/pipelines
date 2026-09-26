@@ -97,7 +97,7 @@ export async function runDailyColdOutreach(
     });
   } catch (err) {
     logError("run.daily.discovery", err, { city: target.city, state: target.state });
-    discoveryError = err instanceof YelpError ? err.message : describeError(err);
+    discoveryError = err instanceof YelpError ? err.unattended : describeError(err);
   }
 
   const created = discovery?.created ?? [];

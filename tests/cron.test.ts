@@ -106,7 +106,7 @@ describe("daily Cold Outreach run", () => {
     stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
     const json = await (await cron(dailyGET)).json();
     expect(json.status).toBe("failed");
-    expect(json.errors[0]).toContain("Yelp isn't responding right now");
+    expect(json.errors[0]).toContain("Yelp wasn't responding, so no new leads were found");
   });
 });
 
@@ -125,6 +125,17 @@ describe("stale-contact routing", () => {
     expect((await prisma.agentLead.findUniqueOrThrow({ where: { id: agentNoPhone.id } })).status).toBe("contactless_list");
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: cold.id } })).status).toBe("cold_call_list");
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: fresh.id } })).status).toBe("contacted");
+    // The summary is shown as-is in Settings → Connections: display names, plain words.
+    expect(json.summary).toBe(
+      "Leads with no reply 7 days after their email — dataleadsell.com: 1 lead to the call deck, 1 lead to No phone number (no number to call). Cold Outreach: 1 lead to the call deck.",
+    );
+  });
+
+  it("says so plainly when there is nobody to move", async () => {
+    const json = await (await cron(staleGET)).json();
+    expect(json.summary).toBe(
+      "Leads with no reply 7 days after their email — dataleadsell.com: nobody to move. Cold Outreach: nobody to move.",
+    );
   });
 });
 
