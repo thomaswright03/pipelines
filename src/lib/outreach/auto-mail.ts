@@ -12,7 +12,7 @@
 // Headers are the reliable signal (RFC 3834 `Auto-Submitted`, and the
 // de-facto `X-Autoreply`, `X-Autorespond`, `Precedence: auto_reply`,
 // `X-Auto-Response-Suppress`); the Cloudflare Email Worker forwards them
-// when it can (README → "Reply tracking"). Subject and body patterns cover
+// when it can (docs/deployment.md → "Reply tracking"). Subject and body patterns cover
 // mail from Workers that don't forward headers yet.
 //
 // tests/auto-mail.test.ts holds the development cases;

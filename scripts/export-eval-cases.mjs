@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Exports recent inbound mail as anonymised, pre-labelled candidates for the
-// evaluation sets in tests/corpus/ (README → "Measuring the reply and
-// address rules"). Read-only: it runs one SELECT inside a READ ONLY
+// evaluation sets in tests/corpus/ (docs/measuring-rules.md). Read-only: it runs one SELECT inside a READ ONLY
 // transaction and prints to stdout; nothing is written anywhere.
 //
 //   EVAL_EXPORT_DATABASE_URL=postgres://… node scripts/export-eval-cases.mjs [limit] > cases.json

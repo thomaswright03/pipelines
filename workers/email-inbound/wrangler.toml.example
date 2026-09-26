@@ -7,7 +7,7 @@
 #   npx wrangler deploy
 #
 # Then, in Cloudflare → Email → Email Routing → Routes, send the outreach
-# sender address(es) to this Worker. See README → "Reply tracking".
+# sender address(es) to this Worker. See docs/deployment.md → "Reply tracking".
 
 name = "pipelines-email-inbound"
 main = "src/index.ts"

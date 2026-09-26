@@ -4,8 +4,7 @@
 // Provenance: SYNTHETIC messages in the shapes Outlook/Exchange, Gmail,
 // Apple Mail, helpdesk autoresponders and common MTAs (Postfix, Exim,
 // Exchange, Gmail) produce — not real people's mail. Extend with anonymised
-// real cases from the InboundReply table (README → "Measuring the reply
-// and address rules").
+// real cases from the InboundReply table (docs/measuring-rules.md).
 //
 // Splits: `*_DEV` are the cases the rules were written against (the unit
 // tests in tests/auto-mail.test.ts are development cases too). `*_HELD_OUT`

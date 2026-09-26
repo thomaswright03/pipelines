@@ -4,7 +4,7 @@
 // while this list is empty the eval says plainly that every reply score is
 // synthetic.
 //
-// To fill it (README → "Measuring the reply and address rules"):
+// To fill it (docs/measuring-rules.md):
 //   EVAL_EXPORT_DATABASE_URL=… node scripts/export-eval-cases.mjs 200 > cases.json
 // then, for each case: read it, correct `expected` (the export only
 // suggests the app's own verdict), replace any person's or firm's name the

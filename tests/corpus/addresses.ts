@@ -5,8 +5,7 @@
 // Provenance: SYNTHETIC agent/address pairs in the shapes brokerage staff
 // directories use (first.last, flast, firstl, first only, shared inboxes,
 // colleagues sharing a first or last name). Not real people. Extend it with
-// anonymised real cases — see README → "Measuring the reply and address
-// rules".
+// anonymised real cases — see docs/measuring-rules.md.
 //
 // First run (2026-09-25), before any rule was changed for it: precision
 // 92.3%, recall 96.0% — it accepted jdoe.team@/tnguyen.assistant@-style

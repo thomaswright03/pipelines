@@ -8,7 +8,7 @@
 // is "Not confirmed yet". Every summary and next step is written for the
 // operator, not the developer: it says what is true, what to do, and what
 // to tell the developer when that's who has to act. (The settings behind
-// each message are listed in README → Settings → Connections.)
+// each message are listed in docs/deployment.md → "Settings → Connections".)
 import { prisma } from "@/lib/db";
 import { describeMailDestination, type Env } from "@/lib/mail-transport-kind";
 import { formatDateTime } from "@/lib/time";

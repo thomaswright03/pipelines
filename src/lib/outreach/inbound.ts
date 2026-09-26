@@ -42,7 +42,7 @@
 //
 // Everything happens in one transaction together with an InboundReply row,
 // so a re-delivered reply is recognised and changes nothing, and a failure
-// part-way leaves nothing half-recorded (the Worker retries — see README).
+// part-way leaves nothing half-recorded (the Worker retries — see docs/deployment.md).
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { suppressEmail } from "@/lib/email-suppression";

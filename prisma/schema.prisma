@@ -183,7 +183,7 @@ model OutreachCorrection {
 
 // Daily-automation settings per pipeline, editable from that pipeline's
 // page and read live by the cron route. The fire time itself is fixed in
-// vercel.json (see README "Daily automation").
+// vercel.json (see docs/operator.md "Daily automation").
 model PipelineSchedule {
   id        String   @id // pipeline id, e.g. "vault-pipeline"
   enabled   Boolean  @default(true)

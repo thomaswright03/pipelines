@@ -10,7 +10,7 @@ import { handleInboundReply } from "@/lib/outreach/inbound";
 // this repo). Cloudflare Email Routing has no webhook of its own — the
 // Worker turns "someone replied" into this authenticated POST.
 //
-// Contract (README → "Reply tracking"): every response carries `retry`.
+// Contract (docs/deployment.md → "Reply tracking"): every response carries `retry`.
 // 2xx: recorded (or already recorded — `duplicate: true`); don't resend.
 // 400 / 401: the request itself is wrong; resending won't help.
 // 503: nothing was recorded (e.g. the database is unreachable); the Worker

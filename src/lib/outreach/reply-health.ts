@@ -1,5 +1,5 @@
 // "Is reply tracking working?" Replies reach the app only through an
-// external email Worker (README → Reply tracking). If it breaks, the app
+// external email Worker (docs/deployment.md → "Reply tracking"). If it breaks, the app
 // just sees no replies — which looks the same as nobody replying and skews
 // the reply rate. So the pages show when the last reply arrived and warn
 // when emails have gone out but no reply of any kind has been recorded for

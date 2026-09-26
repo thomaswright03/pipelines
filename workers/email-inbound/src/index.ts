@@ -1,7 +1,7 @@
 // Reference Cloudflare Email Worker for reply tracking. Cloudflare Email
 // Routing sends every message addressed to the outreach sender to this
 // Worker, which turns it into the authenticated POST the app records it
-// from (src/app/api/email-inbound/route.ts; contract in README → "Reply
+// from (src/app/api/email-inbound/route.ts; contract in docs/deployment.md → "Reply
 // tracking"):
 //
 // - The message's From, Subject, plain text, Message-ID and all headers are

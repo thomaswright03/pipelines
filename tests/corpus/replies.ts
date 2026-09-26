@@ -9,7 +9,7 @@
 // were run, and a miss is recorded as a miss rather than patched away. To
 // make the measurement reflect production, add anonymised real replies
 // (names, addresses, phone numbers and firm names replaced) from the
-// InboundReply table — see README → "Measuring the reply and address rules".
+// InboundReply table — see docs/measuring-rules.md.
 //
 // First run (2026-09-25), before any rule was changed for it: precision
 // 96.8%, recall 95.2%. The two missed "don't send me anything else" / "do
