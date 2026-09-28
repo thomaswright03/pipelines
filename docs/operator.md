@@ -122,17 +122,18 @@ its status) or **Mark opted out**.
 
 ## Daily automation
 
-`vercel.json` defines two Vercel Cron jobs. Both routes need `Authorization: Bearer $CRON_SECRET`, which
+`vercel.json` defines three Vercel Cron jobs. All routes need `Authorization: Bearer $CRON_SECRET`, which
 Vercel sends automatically when `CRON_SECRET` is set.
 
 | Route | Schedule (UTC) | Arizona time | What it does |
 | --- | --- | --- | --- |
 | `/api/cron/vault-daily` | `33 15 * * *` | 8:33 AM | Cold Outreach: searches one new city, saves businesses with a findable email, pitches them and any leads earlier daily runs found but didn't email |
+| `/api/cron/dataleadsell-daily` | `3 16 * * *` | 9:03 AM | dataleadsell: the same run for real estate agents (the next agent city, Yelp term "real estate agent"), saving `AgentLead`s. **Off until turned on** on the dataleadsell page, with 10 agents per run by default, while its new sending domain warms up. 30 minutes after Cold Outreach's, so the two never overlap |
 | `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Both pipelines: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone), each with a History entry; leads with an unresolved "needs a look" reply stay in Contacted |
 
-- **Settings.** The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
+- **Settings.** Each pipeline page has its own **Daily automation** panel (stored in `PipelineSchedule` under `vault-pipeline` and `dataleadsell`). With no saved row, Cold Outreach runs daily with 30 businesses per run and dataleadsell is off with 10 agents per run. The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
-- **Run log.** Every run is recorded in `PipelineRun`, whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on the Cold Outreach page.
+- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach` or `dataleadsell`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections only watches the Cold Outreach run.
   - The page warns when the last run is more than 26 hours old.
   - Both routes return JSON: `{ status, summary, errors }`. A failed run returns HTTP 500. If the run can't
     even be recorded (database unreachable) they return 503 with `{ ok: false, code: "db_unavailable" |

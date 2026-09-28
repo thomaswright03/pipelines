@@ -9,9 +9,15 @@ import ReplyStatus from "@/components/ReplyStatus";
 import PipelineAlerts from "@/components/PipelineAlerts";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import AdreImportPanel from "@/components/AdreImportPanel";
+import DailyRunSettings from "@/components/DailyRunSettings";
 import LeadTable from "@/components/LeadTable";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { getAppSettings } from "@/lib/outreach/settings";
+import { DATALEADSELL_DAILY_RUN_TIME_LABEL, DATALEADSELL_SCHEDULE_ID, getPipelineSchedule } from "@/lib/pipeline-schedule";
+import { updateDataleadsellScheduleAction } from "@/lib/actions/pipeline-schedule";
+import { recentRuns } from "@/lib/outreach/runs";
+import { staleRunWarning, toRunViews } from "@/lib/outreach/run-view";
+import { countUnsentDailyAgentLeads } from "@/lib/dataleadsell-daily-run";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { getAdreStatus } from "@/lib/adre-import";
 import { DATALEADSELL_STATUSES } from "@/lib/lead-status";
@@ -32,18 +38,22 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     ...searchWhere(params.q, ["name", "brokerage", "email", "city", "county"]),
   };
 
-  const [filteredTotal, total, withEmail, counts, settings, adre, unsent, blocked, replyHealth, nextCity] = await Promise.all([
-    prisma.agentLead.count({ where }),
-    prisma.agentLead.count(),
-    prisma.agentLead.count({ where: { email: { not: null } } }),
-    prisma.agentLead.groupBy({ by: ["status"], _count: true }),
-    getAppSettings(),
-    getAdreStatus(),
-    getPipeline("dataleadsell").countSendable(prisma),
-    getPipeline("dataleadsell").countBlockedNew(prisma),
-    getReplyHealth(),
-    peekNextAgentCity(prisma),
-  ]);
+  const [filteredTotal, total, withEmail, counts, schedule, settings, runs, adre, unsent, dailyRunUnsent, blocked, replyHealth, nextCity] =
+    await Promise.all([
+      prisma.agentLead.count({ where }),
+      prisma.agentLead.count(),
+      prisma.agentLead.count({ where: { email: { not: null } } }),
+      prisma.agentLead.groupBy({ by: ["status"], _count: true }),
+      getPipelineSchedule(DATALEADSELL_SCHEDULE_ID),
+      getAppSettings(),
+      recentRuns("dataleadsell", "daily", 5),
+      getAdreStatus(),
+      getPipeline("dataleadsell").countSendable(prisma),
+      countUnsentDailyAgentLeads(),
+      getPipeline("dataleadsell").countBlockedNew(prisma),
+      getReplyHealth(),
+      peekNextAgentCity(prisma),
+    ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.agentLead.findMany({
     where,
@@ -51,6 +61,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     skip: (page - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
   });
+  const staleWarning = staleRunWarning(schedule, settings.outboundPaused, runs[0]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,12 +84,12 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
             + Add agent by hand
           </Link>
           <a href="#tools" className="btn-ghost">
-            Find, bulk send and ADRE import ↓
+            Find, bulk send, daily run and ADRE import ↓
           </a>
         </div>
       </div>
 
-      <PipelineAlerts replyHealth={replyHealth} />
+      <PipelineAlerts replyHealth={replyHealth} staleWarning={staleWarning} />
 
       <LeadTable
         pipeline="dataleadsell"
@@ -123,10 +134,22 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
           pipeline="dataleadsell"
           paused={settings.outboundPaused}
           unsent={unsent}
+          // While the daily run is off, nothing is emailed without Send outreach.
+          dailyRunUnsent={schedule.enabled ? dailyRunUnsent : null}
           blocked={blocked}
           nextCity={`${nextCity.city} (${nextCity.county} County, ${nextCity.state})`}
         />
         <ReplyStatus health={replyHealth} showUnmatched={false} />
+        {/* A stale-run warning is shown above the list (PipelineAlerts). */}
+        <DailyRunSettings
+          pipeline="dataleadsell"
+          action={updateDataleadsellScheduleAction}
+          schedule={schedule}
+          runTimeLabel={DATALEADSELL_DAILY_RUN_TIME_LABEL}
+          paused={settings.outboundPaused}
+          runs={toRunViews(runs)}
+          staleWarning={null}
+        />
         <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
       </section>
     </div>

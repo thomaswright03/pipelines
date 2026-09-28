@@ -114,8 +114,13 @@ export default function HelpPage() {
             <strong>Glance at the daily run.</strong> On{" "}
             <Link href="/vault-pipeline" className={link}>
               Cold Outreach
-            </Link>
-            , <em>Recent runs</em> says what the last run found and emailed. A red line under a run says why it failed.
+            </Link>{" "}
+            (and on{" "}
+            <Link href="/dataleadsell" className={link}>
+              dataleadsell.com
+            </Link>{" "}
+            once its daily run is turned on), <em>Recent runs</em> says what the last run found and emailed. A red line under a run says why
+            it failed.
           </li>
         </ol>
       </Section>

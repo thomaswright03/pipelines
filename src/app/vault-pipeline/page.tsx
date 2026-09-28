@@ -7,15 +7,15 @@ import OutreachControls from "@/components/OutreachControls";
 import ReplyStatus from "@/components/ReplyStatus";
 import PipelineAlerts from "@/components/PipelineAlerts";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
-import VaultScheduleSettings, { type RunView } from "@/components/VaultScheduleSettings";
+import VaultScheduleSettings from "@/components/VaultScheduleSettings";
 import LeadTable from "@/components/LeadTable";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { getPipelineSchedule, VAULT_DAILY_RUN_TIME_LABEL, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { displayRunStatus, isRunOverdue, recentRuns } from "@/lib/outreach/runs";
+import { recentRuns } from "@/lib/outreach/runs";
+import { staleRunWarning, toRunViews } from "@/lib/outreach/run-view";
 import { COLD_OUTREACH_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
-import { formatDateTime } from "@/lib/time";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { peekNextCity } from "@/lib/vault-city-picker";
 import { countUnsentDailyLeads } from "@/lib/vault-daily-run";
@@ -53,22 +53,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     take: PAGE_SIZE,
   });
 
-  const lastRun = runs[0];
-  const staleWarning =
-    schedule.enabled && !settings.outboundPaused && lastRun && isRunOverdue(lastRun.startedAt)
-      ? `The last daily run was ${formatDateTime(lastRun.startedAt)} — more than a day ago. The automatic schedule may have stopped — ask your developer to check it.`
-      : null;
-  const runViews: RunView[] = runs.map((r) => ({
-    id: r.id,
-    status: displayRunStatus(r),
-    startedAt: formatDateTime(r.startedAt),
-    summary: r.summary ?? (displayRunStatus(r) === "interrupted" ? "The run was cut off before it could record what it did." : null),
-    errors: r.errors ? r.errors.split("\n").filter(Boolean) : [],
-    numbers:
-      r.businessesChecked !== null && r.leadsFound !== null && r.emailsSent !== null
-        ? { businessesChecked: r.businessesChecked, leadsFound: r.leadsFound, emailsSent: r.emailsSent }
-        : null,
-  }));
+  const staleWarning = staleRunWarning(schedule, settings.outboundPaused, runs[0]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -146,7 +131,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
           schedule={schedule}
           runTimeLabel={VAULT_DAILY_RUN_TIME_LABEL}
           paused={settings.outboundPaused}
-          runs={runViews}
+          runs={toRunViews(runs)}
           staleWarning={null}
         />
       </section>
