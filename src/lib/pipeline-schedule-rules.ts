@@ -7,6 +7,11 @@ export const VAULT_SCHEDULE_ID = "vault-pipeline";
 /** The cron time in vercel.json ("33 15 * * *" UTC), as Arizona wall-clock time (MST, no DST). */
 export const VAULT_DAILY_RUN_TIME_LABEL = "8:33 AM Arizona time";
 
+export const GARBAGE_AI_SCHEDULE_ID = "garbage-ai";
+
+/** The Garbage AI cron time in vercel.json ("0 15 * * *" UTC), as Arizona time. */
+export const GARBAGE_AI_DAILY_RUN_TIME_LABEL = "8:00 AM Arizona time";
+
 /**
  * `businessesPerRun` caps how many Yelp businesses one daily run checks for
  * an email address — not how many get emailed: typically only 15–25% of

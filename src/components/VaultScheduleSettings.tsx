@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { updateVaultScheduleAction, type UpdateScheduleState } from "@/lib/actions/pipeline-schedule";
+import { updateGarbageAiScheduleAction, updateVaultScheduleAction, type UpdateScheduleState } from "@/lib/actions/pipeline-schedule";
 import {
   BUSINESSES_PER_RUN_LABEL,
   BUSINESSES_PER_RUN_MAX,
@@ -34,7 +34,8 @@ const RUN_STATUS: Record<string, { label: string; className: string }> = {
 };
 
 /**
- * The daily Cold Outreach run: its real state (on, off, or held by the
+ * The daily run of Cold Outreach (or, with `haulers`, Garbage AI's hauler
+ * search): its real state (on, off, or held by the
  * global pause), the two settings that apply live, and what the last few
  * runs actually did.
  */
@@ -44,30 +45,43 @@ export default function VaultScheduleSettings({
   paused,
   runs,
   staleWarning,
+  sendHold = null,
+  haulers = false,
 }: {
   schedule: PipelineScheduleData;
   runTimeLabel: string;
   paused: boolean;
   runs: RunView[];
   staleWarning: string | null;
+  /** Garbage AI: why its run only searches (sends held), or null once it also sends. */
+  sendHold?: string | null;
+  haulers?: boolean;
 }) {
   const [enabled, setEnabled] = useState(schedule.enabled);
   const [businessesPerRun, setLeadCount] = useState(String(schedule.businessesPerRun));
   const [clientError, setClientError] = useState<string | null>(null);
   const [state, formAction, isPending] = useActionState(
-    (prev: UpdateScheduleState, formData: FormData) => updateVaultScheduleAction(prev, formData),
+    (prev: UpdateScheduleState, formData: FormData) =>
+      haulers ? updateGarbageAiScheduleAction(prev, formData) : updateVaultScheduleAction(prev, formData),
     {},
   );
 
-  const live = schedule.enabled && !paused;
+  // Garbage AI's run only searches while its sends are held, so the global pause doesn't stop it.
+  const searchOnly = haulers && sendHold !== null;
+  const heldByPause = paused && !searchOnly;
+  const live = schedule.enabled && !heldByPause;
   // The latest run, whatever its outcome — a failed run must not read like a quiet day.
   const lastRun = runs[0] ?? null;
   const lastStatus = lastRun ? (RUN_STATUS[lastRun.status] ?? { label: lastRun.status, className: RUN_STATUS.skipped!.className }) : null;
-  const stateLine = paused
-    ? "On hold: outbound email is paused, so the daily run skips itself (see Settings)."
-    : schedule.enabled
-      ? `On: runs every day at ${runTimeLabel}. It searches one new city on Yelp, checks up to ${schedule.businessesPerRun} of those businesses for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`
-      : "Off: the daily run is skipped until you turn it back on.";
+  const stateLine = searchOnly
+    ? schedule.enabled
+      ? `On: runs every day at ${runTimeLabel}. It searches one new city on Yelp for garbage collection, checks up to ${schedule.businessesPerRun} of those haulers for an email address, and saves the ones it finds. Sending is on hold, so it emails nobody.`
+      : "Off: the daily search is skipped until you turn it back on."
+    : heldByPause
+      ? "On hold: outbound email is paused, so the daily run skips itself (see Settings)."
+      : schedule.enabled
+        ? `On: runs every day at ${runTimeLabel}. It searches one new city on Yelp, checks up to ${schedule.businessesPerRun} of those businesses for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`
+        : "Off: the daily run is skipped until you turn it back on.";
 
   function validate(e: React.FormEvent<HTMLFormElement>) {
     const n = Number(businessesPerRun);
@@ -84,7 +98,7 @@ export default function VaultScheduleSettings({
   return (
     <section aria-labelledby="daily-heading" className="card flex flex-col gap-3 p-4">
       <h2 id="daily-heading" className="flex items-center gap-2 text-sm font-semibold">
-        <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-500" : paused ? "bg-red-500" : "bg-zinc-400"}`} aria-hidden />
+        <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-500" : heldByPause ? "bg-red-500" : "bg-zinc-400"}`} aria-hidden />
         Daily automation
       </h2>
       <p className="text-sm muted">{stateLine}</p>

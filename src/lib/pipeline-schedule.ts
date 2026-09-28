@@ -4,7 +4,14 @@
 import { prisma } from "@/lib/db";
 import { BUSINESSES_PER_RUN_MAX, type PipelineScheduleData } from "@/lib/pipeline-schedule-rules";
 
-export { scheduleSchema, VAULT_DAILY_RUN_TIME_LABEL, VAULT_SCHEDULE_ID, type PipelineScheduleData } from "@/lib/pipeline-schedule-rules";
+export {
+  GARBAGE_AI_DAILY_RUN_TIME_LABEL,
+  GARBAGE_AI_SCHEDULE_ID,
+  scheduleSchema,
+  VAULT_DAILY_RUN_TIME_LABEL,
+  VAULT_SCHEDULE_ID,
+  type PipelineScheduleData,
+} from "@/lib/pipeline-schedule-rules";
 
 const DEFAULT_SCHEDULE: PipelineScheduleData = { enabled: true, businessesPerRun: 30 };
 

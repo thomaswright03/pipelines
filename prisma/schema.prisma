@@ -440,3 +440,87 @@ model ScrapedCity {
 
   @@unique([city, state])
 }
+
+// --- Garbage AI pipeline ---
+// Pitches the hauler text-back AI (demos run by Max Garrett) to independent
+// waste haulers found on Yelp, one new US city per day. Same shape as the
+// Cold Outreach tables, plus the Yelp categories ("services"). Sending is
+// held in code until the owner says go (see src/lib/garbage-ai-config.ts).
+model HaulerLead {
+  id                  String    @id @default(cuid())
+  name                String
+  company             String? // the business name from Yelp
+  services            String? // the business's Yelp categories, e.g. "Garbage Collection, Dumpster Rental"
+  email               String? // lower-case
+  phone               String?
+  address             String?
+  city                String? // the city the discovery query targeted
+  state               String? // two-letter code
+  website             String?
+  source              String?
+  status              String    @default("new") // see src/lib/lead-status.ts
+  callOutcome         String? // see src/lib/lead-status.ts
+  starred             Boolean   @default(false)
+  emailCheckedAt      DateTime? // see AgentLead.emailCheckedAt
+  emailLookupFailedAt DateTime? // see AgentLead.emailLookupFailedAt
+  emailEvidence       String? // see AgentLead.emailEvidence
+  emailRulesVersion   String? // see AgentLead.emailRulesVersion
+  sendBlockedReason   String? // see AgentLead.sendBlockedReason
+  lastSendFailedAt    DateTime? // see AgentLead.lastSendFailedAt
+  lastSendFailure     String?
+  sendRefusalCount    Int       @default(0)
+  lastEmailedAt       DateTime?
+  repliedAt           DateTime?
+  ourReplyAt          DateTime?
+  replyNeedsReview    Boolean   @default(false) // see AgentLead.replyNeedsReview
+  replyReviewReason   String?
+  estimatedValueCents Int? // see Lead.estimatedValueCents
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  activities HaulerLeadActivity[]
+  emailLogs  HaulerEmailSendLog[]
+
+  @@index([status])
+  @@index([email])
+}
+
+model HaulerLeadActivity {
+  id     String     @id @default(cuid())
+  leadId String
+  lead   HaulerLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type   String // call | email | meeting | note
+  notes  String
+  date   DateTime   @default(now())
+
+  @@index([leadId, date])
+}
+
+// One row per Garbage AI outreach send; see EmailSendLog.
+model HaulerEmailSendLog {
+  id                String      @id @default(cuid())
+  leadId            String?
+  lead              HaulerLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  email             String
+  sentAt            DateTime    @default(now())
+  bounced           Boolean     @default(false)
+  bouncedAt         DateTime?
+  providerMessageId String?     @unique
+  subject           String?
+  templateVersion   String?
+
+  @@index([leadId])
+}
+
+// Which "city, state" pairs the Garbage AI Yelp search has already used,
+// kept apart from Cold Outreach's ScrapedCity so each pipeline walks the
+// city pool on its own.
+model ScrapedHaulerCity {
+  id        String   @id @default(cuid())
+  city      String
+  state     String
+  queriedAt DateTime @default(now())
+
+  @@unique([city, state])
+}

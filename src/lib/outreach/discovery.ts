@@ -12,7 +12,7 @@ import { SITE_RULES_VERSION, siteEvidence, type LeadFacts } from "@/lib/outreach
 import { getAppSettings } from "@/lib/outreach/settings";
 import { DUPLICATE_BLOCK_PREFIX, findExistingPitch } from "@/lib/outreach/send";
 import { getPipeline, type NamedLead, type OutreachLead } from "@/lib/outreach/pipelines";
-import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
+import { LEAD_NOUN, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 
 /**
  * The outcome of looking for a lead's address.
@@ -142,6 +142,8 @@ export type DiscoveryCandidate = {
   address: string | null;
   website: string | null;
   brokerage?: string | null;
+  /** The business's Yelp categories (Garbage AI stores them). */
+  services?: string | null;
   city?: string | null;
   notes?: string | null;
 };
@@ -294,6 +296,7 @@ export async function createLeadsFromCandidates(
     const lead = await pipeline.createLead(prisma, {
       name: candidate.name.trim(),
       brokerage: candidate.brokerage ?? null,
+      services: candidate.services ?? null,
       phone: facts.phone,
       address: candidate.address,
       website: lookup.website,
@@ -331,7 +334,7 @@ export function describeDiscovery(pipelineId: PipelineId, where: string, scraped
   if (result.skipped.optedOut) skipped.push(`${result.skipped.optedOut} opted out`);
   const created = result.created.length;
   return (
-    `Found ${scraped} ${isAgents ? "agents" : "businesses"} in ${where} and added ${created} new ${isAgents ? (created === 1 ? "agent" : "agents") : created === 1 ? "lead" : "leads"}` +
+    `Found ${scraped} ${isAgents ? "agents" : "businesses"} in ${where} and added ${created} new ${created === 1 ? LEAD_NOUN[pipelineId].one : LEAD_NOUN[pipelineId].many}` +
     (skipped.length ? ` (skipped ${skipped.join(", ")})` : "") +
     (result.stoppedEarly ? ". Stopped early to stay within the time limit — run again for more." : ".")
   );

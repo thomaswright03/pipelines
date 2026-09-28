@@ -5,6 +5,8 @@
 //   first-touch pitch.
 // - Nothing is sent while outbound email is paused (Settings, or the
 //   OUTBOUND_EMAIL_DISABLED environment variable).
+// - Nothing is sent for a pipeline whose sends are held in code (Garbage
+//   AI, until its open decisions are settled; see garbage-ai-config.ts).
 // - Nothing is sent to a suppressed (opted-out) address.
 // - Nothing is sent to an address whose reply is waiting for the operator
 //   ("Reply needs a look", on any lead in either pipeline, or unmatched on
@@ -186,6 +188,7 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
     message,
   });
 
+  if (pipeline.sendHold) return fail("paused", pipeline.sendHold);
   if (!lead.email) return fail("no_email", `${lead.name} has no email address yet — nothing was sent.`);
   const email = lead.email.trim().toLowerCase();
   if (lead.status !== "new") {

@@ -11,14 +11,13 @@ export type VersionHistory = Map<string, { number: number; since: Date }>;
 
 /** Each recorded version's number (1 = the first one sent) and when it was first sent. */
 export async function templateVersionHistory(pipeline: PipelineId): Promise<VersionHistory> {
+  const where = { templateVersion: { not: null } };
   const rows =
     pipeline === "dataleadsell"
-      ? await prisma.emailSendLog.groupBy({ by: ["templateVersion"], where: { templateVersion: { not: null } }, _min: { sentAt: true } })
-      : await prisma.leadEmailSendLog.groupBy({
-          by: ["templateVersion"],
-          where: { templateVersion: { not: null } },
-          _min: { sentAt: true },
-        });
+      ? await prisma.emailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } })
+      : pipeline === "garbage-ai"
+        ? await prisma.haulerEmailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } })
+        : await prisma.leadEmailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } });
   return numberVersions(rows.map((r) => ({ version: r.templateVersion, firstSent: r._min.sentAt })));
 }
 

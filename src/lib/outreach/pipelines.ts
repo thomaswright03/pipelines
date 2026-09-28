@@ -8,11 +8,13 @@
 // for every column the shared rules touch, so the only per-pipeline
 // differences are data — which tables, which pitch, which sender, and the
 // one pipeline-specific column (company vs brokerage/county).
-import { Prisma, type AgentLead, type Lead, type PrismaClient } from "@/generated/prisma/client";
+import { Prisma, type AgentLead, type HaulerLead, type Lead, type PrismaClient } from "@/generated/prisma/client";
 import { buildAgentOutreachEmail, DATALEADSELL_TEMPLATE_VERSION } from "@/lib/dataleadsell-email-template";
 import { buildOutreachEmail, COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-email-template";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
+import { buildHaulerOutreachEmail, GARBAGE_AI_TEMPLATE_VERSION } from "@/lib/garbage-ai-email-template";
+import { GARBAGE_AI_HOLD_MESSAGE, GARBAGE_AI_SENDER_EMAIL, GARBAGE_AI_SENDING_HELD } from "@/lib/garbage-ai-config";
 import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { APP_TIME_ZONE } from "@/lib/time";
 
@@ -44,7 +46,7 @@ export type OutreachLead = {
   emailRulesVersion: string | null;
   /** A reply from this lead is waiting for the operator ("Reply needs a look"); nothing is sent to it until resolved. */
   replyNeedsReview: boolean;
-  company: string | null; // Cold Outreach only
+  company: string | null; // Cold Outreach and Garbage AI
   brokerage: string | null; // dataleadsell only
   county: string | null; // dataleadsell only
 };
@@ -85,6 +87,7 @@ type NewLeadData = {
   county?: string | null;
   brokerage?: string | null;
   company?: string | null;
+  services?: string | null;
   source: string;
   notes?: string | null;
   emailCheckedAt?: Date | null;
@@ -102,6 +105,8 @@ export type PipelineAdapter = {
   label: string;
   basePath: string;
   senderEmail: string;
+  /** Set while this pipeline's sends are held in code: every send path refuses with this message (send.ts). */
+  sendHold: string | null;
   buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): OutreachEmail;
   findLead(db: Db, id: string): Promise<OutreachLead | null>;
   findLeadsByEmail(db: Db, email: string, excludeId?: string): Promise<OutreachLead[]>;
@@ -241,7 +246,11 @@ type SendLogTable = {
 type SharedRow = Omit<Row, "company" | "brokerage" | "county">;
 type HasColumns<Model, Columns> =
   Model extends Pick<Columns, keyof Columns & keyof Model> ? (keyof Columns extends keyof Model ? true : false) : false;
-const rowColumnsExist: [HasColumns<Lead, SharedRow>, HasColumns<AgentLead, SharedRow>] = [true, true];
+const rowColumnsExist: [HasColumns<Lead, SharedRow>, HasColumns<AgentLead, SharedRow>, HasColumns<HaulerLead, SharedRow>] = [
+  true,
+  true,
+  true,
+];
 void rowColumnsExist;
 
 type PipelineSpec = {
@@ -249,6 +258,7 @@ type PipelineSpec = {
   /** The SQL table names, for the set-based statements Prisma can't express. */
   tables: { leads: string; activities: string };
   senderEmail: string;
+  sendHold?: string | null;
   buildEmail: PipelineAdapter["buildEmail"];
   leads: (db: Db) => LeadTable;
   sendLogs: (db: Db) => SendLogTable;
@@ -291,6 +301,7 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     label: PIPELINE_LABEL[spec.id],
     basePath: PIPELINE_BASE_PATH[spec.id],
     senderEmail: spec.senderEmail,
+    sendHold: spec.sendHold ?? null,
     buildEmail: spec.buildEmail,
     async findLead(db, id) {
       const lead = await leads(db).findUnique({ where: { id } });
@@ -476,10 +487,26 @@ const coldOutreach = makeAdapter({
   searchColumns: ["company", "city"],
 });
 
-const ADAPTERS: Record<PipelineId, PipelineAdapter> = { dataleadsell, "cold-outreach": coldOutreach };
+// HaulerLead has every Lead column (plus "services"), so it is read through
+// the same views.
+const garbageAi = makeAdapter({
+  id: "garbage-ai",
+  tables: { leads: "HaulerLead", activities: "HaulerLeadActivity" },
+  senderEmail: GARBAGE_AI_SENDER_EMAIL,
+  sendHold: GARBAGE_AI_SENDING_HELD ? GARBAGE_AI_HOLD_MESSAGE : null,
+  buildEmail: (lead) => ({ ...buildHaulerOutreachEmail(lead), templateVersion: GARBAGE_AI_TEMPLATE_VERSION }),
+  leads: (db) => db.haulerLead as unknown as LeadTable,
+  sendLogs: (db) => db.haulerEmailSendLog as unknown as SendLogTable,
+  activities: (db) => db.haulerLeadActivity as unknown as ActivityTable,
+  // Yelp gives only the business name, so it is the company too.
+  ownColumns: (data) => ({ company: data.company ?? data.name, services: data.services ?? null }),
+  searchColumns: ["company", "city"],
+});
+
+const ADAPTERS: Record<PipelineId, PipelineAdapter> = { dataleadsell, "cold-outreach": coldOutreach, "garbage-ai": garbageAi };
 
 export function getPipeline(id: PipelineId): PipelineAdapter {
   return ADAPTERS[id];
 }
 
-export const ALL_PIPELINES: PipelineAdapter[] = [dataleadsell, coldOutreach];
+export const ALL_PIPELINES: PipelineAdapter[] = [dataleadsell, coldOutreach, garbageAi];

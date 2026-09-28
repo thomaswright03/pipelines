@@ -5,6 +5,7 @@
 import { useRouter } from "next/navigation";
 import { createLeadAction, updateLeadAction } from "@/lib/actions/vault-pipeline";
 import { createAgentAction, updateAgentAction } from "@/lib/actions/dataleadsell";
+import { createHaulerAction, updateHaulerAction } from "@/lib/actions/garbage-ai";
 import {
   agentLeadEditSchema,
   agentLeadSchema,
@@ -56,12 +57,22 @@ function EmailLockedNote({ email }: { email: string }) {
   );
 }
 
-export function ColdOutreachLeadForm({ mode, initial }: { mode: Mode; initial: Required<ColdOutreachLeadInput> }) {
+/** The Cold Outreach form; Garbage AI haulers (`haulers`) have the same fields. */
+export function ColdOutreachLeadForm({
+  mode,
+  initial,
+  haulers = false,
+}: {
+  mode: Mode;
+  initial: Required<ColdOutreachLeadInput>;
+  haulers?: boolean;
+}) {
   const router = useRouter();
-  const submit = mode.kind === "edit" ? (values: ColdOutreachLeadInput) => updateLeadAction(mode.leadId, values) : createLeadAction;
+  const [create, update] = haulers ? [createHaulerAction, updateHaulerAction] : [createLeadAction, updateLeadAction];
+  const submit = mode.kind === "edit" ? (values: ColdOutreachLeadInput) => update(mode.leadId, values) : create;
   const schema = mode.kind === "edit" ? coldOutreachLeadEditSchema(initial.notes) : coldOutreachLeadSchema;
   const form = useLeadForm(schema, initial, submit, (id) => {
-    router.push(`/vault-pipeline/${id}`);
+    router.push(`${haulers ? "/garbage-ai" : "/vault-pipeline"}/${id}`);
     router.refresh();
   });
   const state = form.field("state");

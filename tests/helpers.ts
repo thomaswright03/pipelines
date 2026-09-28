@@ -134,6 +134,13 @@ export async function makeColdLead(data: Partial<Parameters<typeof prisma.lead.c
   });
 }
 
+export async function makeHaulerLead(data: Partial<Parameters<typeof prisma.haulerLead.create>[0]["data"]> = {}) {
+  seq++;
+  return prisma.haulerLead.create({
+    data: { name: `Hauler ${seq}`, company: `Hauler ${seq}`, email: `office${seq}@hauler${seq}.test`, status: "new", ...data },
+  });
+}
+
 export async function makeAgentLead(data: Partial<Parameters<typeof prisma.agentLead.create>[0]["data"]> = {}) {
   seq++;
   return prisma.agentLead.create({

@@ -73,7 +73,8 @@ type DeckTable = {
 };
 
 function table(pipelineId: PipelineId): DeckTable {
-  return (pipelineId === "cold-outreach" ? prisma.lead : prisma.agentLead) as unknown as DeckTable;
+  const tables = { "cold-outreach": prisma.lead, "garbage-ai": prisma.haulerLead, dataleadsell: prisma.agentLead };
+  return tables[pipelineId] as unknown as DeckTable;
 }
 
 /** Leads that sort after `cursor` in ORDER. */
@@ -123,7 +124,7 @@ export async function loadCallDeck(pipelineId: PipelineId, options: { afterId?: 
   const fromHere = remaining ?? total;
   const last = rows.at(-1);
   return {
-    cards: rows.map((lead) => toCard(lead, pipelineId === "cold-outreach" ? (lead.company ?? null) : (lead.brokerage ?? null))),
+    cards: rows.map((lead) => toCard(lead, pipelineId === "dataleadsell" ? (lead.brokerage ?? null) : (lead.company ?? null))),
     total,
     offset: total - fromHere,
     nextAfter: last && fromHere > rows.length ? last.id : null,
