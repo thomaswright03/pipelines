@@ -47,6 +47,8 @@ const { default: VaultDeck } = await import("@/app/vault-pipeline/cold-call/page
 const { default: AgentDeck } = await import("@/app/dataleadsell/cold-call/page");
 const { default: VaultLayout } = await import("@/app/vault-pipeline/layout");
 const { default: AgentLayout } = await import("@/app/dataleadsell/layout");
+const { default: VaultInbox } = await import("@/app/vault-pipeline/inbox/page");
+const { default: AgentInbox } = await import("@/app/dataleadsell/inbox/page");
 const { default: Replies } = await import("@/app/replies/page");
 const { default: Settings } = await import("@/app/settings/page");
 const { default: Help } = await import("@/app/help/page");
@@ -321,5 +323,43 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     const settings = await renderPage(Settings(pageProps()));
     expect(settings.getByRole("heading", { name: "Outbound email: off (server setting)" })).toBeTruthy();
     expect(settings.text).toMatch(/OUTBOUND_EMAIL_DISABLED is set in the hosting environment/);
+  });
+});
+
+describe("the inbox pages", () => {
+  it("show each folder with its count and link sends to their lead", async () => {
+    const lead = await makeColdLead({ name: "Acme Plumbing" });
+    await prisma.leadEmailSendLog.create({ data: { leadId: lead.id, email: lead.email!, subject: "Quick question" } });
+    await prisma.outreachRecipient.create({
+      data: { pipeline: "cold-outreach", email: "gone@x.test", state: "refused", lastError: "550 no such user" },
+    });
+    const page = await renderPage(VaultInbox(pageProps()));
+    expect(page.getByRole("link", { name: "Sent (1)" }).getAttribute("href")).toBe("/vault-pipeline/inbox?tab=sent");
+    expect(page.getByRole("link", { name: "Failed (1)" })).toBeTruthy();
+    expect(page.getByRole("link", { name: "Replied (0)" })).toBeTruthy();
+    expect(page.getByRole("link", { name: "Acme Plumbing" }).getAttribute("href")).toBe(`/vault-pipeline/${lead.id}`);
+    expect(page.text).toContain("Quick question");
+
+    const failed = await renderPage(VaultInbox(pageProps({}, { tab: "failed" })));
+    expect(failed.text).toContain("Refused by mail server");
+    expect(failed.text).toContain("550 no such user");
+  });
+
+  it("show replies with how each was read", async () => {
+    const lead = await makeAgentLead({ name: "Jane Agent", repliedAt: new Date() });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "mid:1",
+        fromEmail: lead.email!,
+        text: "Sounds good, call me",
+        optedOut: false,
+        matched: [`dataleadsell:${lead.id}`],
+        verdict: "positive",
+      },
+    });
+    const page = await renderPage(AgentInbox(pageProps({}, { tab: "replied" })));
+    expect(page.getByText("Interested")).toBeTruthy();
+    expect(page.text).toContain("Sounds good, call me");
+    expect(page.getByRole("link", { name: "Jane Agent" }).getAttribute("href")).toBe(`/dataleadsell/${lead.id}`);
   });
 });

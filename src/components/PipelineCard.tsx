@@ -137,9 +137,14 @@ export default function PipelineCard({
       {!editing && (
         <div>
           {rest.kind === "internal" ? (
-            <Link href={rest.href} className="btn-primary">
-              Open pipeline
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href={rest.href} className="btn-primary">
+                Open pipeline
+              </Link>
+              <Link href={`${rest.href}/inbox`} className="btn-secondary">
+                Inbox
+              </Link>
+            </div>
           ) : (
             <div className="flex flex-col items-start gap-1">
               <p className="text-sm muted">Answers new GoHighLevel leads on its own — there is nothing to operate here.</p>
