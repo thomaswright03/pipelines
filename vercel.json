@@ -9,6 +9,10 @@
       "schedule": "33 15 * * *"
     },
     {
+      "path": "/api/cron/dataleadsell-daily",
+      "schedule": "3 16 * * *"
+    },
+    {
       "path": "/api/cron/garbage-ai-daily",
       "schedule": "0 15 * * *"
     }

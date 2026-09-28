@@ -17,7 +17,9 @@ import { sendBulkChunk, sendFirstTouch } from "@/lib/outreach/send";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { allowedTransitions, coldCallResult, GARBAGE_AI_STATUSES, statusLabel } from "@/lib/lead-status";
 import { US_CITIES } from "@/lib/us-cities";
-import { captureMail, makeHaulerLead, page, stubFetch, YELP_PREFIX, type Route } from "./helpers";
+import { captureMail, makeHaulerLead, page, stubFetch, YELP_PREFIX } from "./helpers";
+
+type Route = { status?: number; body: string; contentType?: string };
 
 type YelpBusiness = { name: string; phone?: string; address?: string; categories?: string[] };
 

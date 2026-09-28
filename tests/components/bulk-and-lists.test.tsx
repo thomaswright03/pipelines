@@ -237,9 +237,12 @@ describe("Unmatched replies", () => {
 
     fireEvent.change(box, { target: { value: "acme" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Attach" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add reply" }));
-    expect(await screen.findByText("Added the reply to Acme Plumbing.")).toBeTruthy();
+    // Role queries over the whole list are slow in jsdom under coverage on
+    // CI, where the default 1 s wait once ran out before the dialog showed.
+    const slow = { timeout: 5_000 };
+    fireEvent.click(await screen.findByRole("button", { name: "Attach" }, slow));
+    fireEvent.click(await screen.findByRole("button", { name: "Add reply" }, slow));
+    expect(await screen.findByText("Added the reply to Acme Plumbing.", undefined, slow)).toBeTruthy();
     expect(replies.attachReplyAction).toHaveBeenCalledWith("r1", "cold-outreach", "lead-1");
   });
 

@@ -7,15 +7,16 @@ import OutreachControls from "@/components/OutreachControls";
 import ReplyStatus from "@/components/ReplyStatus";
 import PipelineAlerts from "@/components/PipelineAlerts";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
-import VaultScheduleSettings, { type RunView } from "@/components/VaultScheduleSettings";
+import DailyRunSettings from "@/components/DailyRunSettings";
+import { updateGarbageAiScheduleAction } from "@/lib/actions/pipeline-schedule";
 import LeadTable from "@/components/LeadTable";
 import { GARBAGE_AI_SENDER_EMAIL } from "@/lib/garbage-ai-config";
 import { GARBAGE_AI_DAILY_RUN_TIME_LABEL, GARBAGE_AI_SCHEDULE_ID, getPipelineSchedule } from "@/lib/pipeline-schedule";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { displayRunStatus, isRunOverdue, recentRuns } from "@/lib/outreach/runs";
+import { recentRuns } from "@/lib/outreach/runs";
+import { staleRunWarning, toRunViews } from "@/lib/outreach/run-view";
 import { GARBAGE_AI_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
-import { formatDateTime } from "@/lib/time";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { peekNextHaulerCity } from "@/lib/garbage-ai-city-picker";
 import { countUnsentDailyHaulers } from "@/lib/garbage-ai-daily-run";
@@ -54,22 +55,9 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
     take: PAGE_SIZE,
   });
 
-  const lastRun = runs[0];
-  const staleWarning =
-    schedule.enabled && lastRun && isRunOverdue(lastRun.startedAt)
-      ? `The last daily run was ${formatDateTime(lastRun.startedAt)} — more than a day ago. The automatic schedule may have stopped — ask your developer to check it.`
-      : null;
-  const runViews: RunView[] = runs.map((r) => ({
-    id: r.id,
-    status: displayRunStatus(r),
-    startedAt: formatDateTime(r.startedAt),
-    summary: r.summary ?? (displayRunStatus(r) === "interrupted" ? "The run was cut off before it could record what it did." : null),
-    errors: r.errors ? r.errors.split("\n").filter(Boolean) : [],
-    numbers:
-      r.businessesChecked !== null && r.leadsFound !== null && r.emailsSent !== null
-        ? { businessesChecked: r.businessesChecked, leadsFound: r.leadsFound, emailsSent: r.emailsSent }
-        : null,
-  }));
+  // While sending is held the run only searches, so the global pause doesn't stop it.
+  const runPaused = settings.outboundPaused && !pipeline.sendHold;
+  const staleWarning = staleRunWarning(schedule, runPaused, runs[0]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -146,13 +134,13 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
           sendHold={pipeline.sendHold}
         />
         <ReplyStatus health={replyHealth} showUnmatched={false} />
-        <VaultScheduleSettings
-          haulers
+        <DailyRunSettings
+          pipeline="garbage-ai"
+          action={updateGarbageAiScheduleAction}
           schedule={schedule}
           runTimeLabel={GARBAGE_AI_DAILY_RUN_TIME_LABEL}
-          paused={settings.outboundPaused}
-          sendHold={pipeline.sendHold}
-          runs={runViews}
+          paused={runPaused}
+          runs={toRunViews(runs)}
           staleWarning={null}
         />
       </section>
