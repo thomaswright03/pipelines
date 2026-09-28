@@ -1,13 +1,11 @@
-// Everything about the Garbage AI pitch that is still waiting on a decision
-// lives here, so changing it is a one-line edit:
+// The Garbage AI pitch's switches, so changing one is a one-line edit:
 //
 // - SENDING_HELD: while true, no Garbage AI email goes out from any path
-//   (single, bulk, daily run). The daily run still finds haulers. Turn it
-//   off only once Mountain High's naming OK, the brand and the signup URL
-//   are settled.
-// - NAME_REFERENCE_CUSTOMER: whether the pitch names Mountain High Disposal.
-//   If they say no, set it to false and the email says "A hauler in
-//   Colorado" instead.
+//   (single, bulk, daily run). The daily run still finds haulers. The
+//   wording decisions are settled (2026-09-28); it stays on until Thomas
+//   says go.
+// - NAME_REFERENCE_CUSTOMER: whether the pitch names Mountain High Disposal
+//   (off: the email says "A hauler in Colorado").
 // - BRAND / PHONE / SIGNUP_URL: the signature. The "Or take a look first"
 //   line and the signature URL only appear once SIGNUP_URL is set.
 //
@@ -19,16 +17,16 @@ export const GARBAGE_AI_SENDING_HELD = true;
 
 /** Why sends are held, shown wherever a send is refused or disabled. */
 export const GARBAGE_AI_HOLD_MESSAGE =
-  "Garbage AI sending is on hold until Mountain High's OK to be named, the brand and the signup link are settled. Haulers are still found and saved; nothing is emailed.";
+  "Garbage AI sending is off until Thomas turns it on. Haulers are still found and saved; nothing is emailed.";
 
-/** Whether the pitch names the reference customer (needs their OK). */
-export const GARBAGE_AI_NAME_REFERENCE_CUSTOMER = true;
+/** Whether the pitch names the reference customer. Off: Thomas said no on 2026-09-28. */
+export const GARBAGE_AI_NAME_REFERENCE_CUSTOMER = false;
 export const GARBAGE_AI_REFERENCE_CUSTOMER = "Mountain High Disposal";
 
-/** The company in the signature and on the dashboard card (Wright AI Solutions or Kaizen Marketing: undecided). */
+/** The company in the signature and on the dashboard card (decided 2026-09-28). */
 export const GARBAGE_AI_BRAND = "Wright AI Solutions, LLC";
-/** The number in the signature and the call deck. */
-export const GARBAGE_AI_PHONE = "(801) 580-8630";
+/** The number in the signature: Max Garrett's, since he makes the follow-up calls. */
+export const GARBAGE_AI_PHONE = "(385) 306-8041";
 /** Who runs the demo. */
 export const GARBAGE_AI_DEMO_HOST = "Max Garrett";
 /** The hauler signup site, once it is deployed (null until then). */

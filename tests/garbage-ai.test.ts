@@ -63,11 +63,12 @@ describe("the Garbage AI pitch", () => {
     const { subject, body } = buildHaulerOutreachEmail({ name: "Desert Roll Off", company: "Desert Roll Off" });
     expect(subject).toBe("Who's texting back your 9pm leads?");
     expect(body.startsWith("Hi there,\n\nA homeowner fills out your form at 9pm.")).toBe(true);
-    expect(body).toContain("Mountain High Disposal in Colorado runs it today.");
-    expect(body).toContain("Max Garrett, who runs it with Mountain High, will walk you through it.");
+    expect(body).toContain("A hauler in Colorado runs it today.");
+    expect(body).not.toContain("Mountain High");
+    expect(body).toContain("Max Garrett, who runs it with them, will walk you through it.");
     expect(body).not.toContain("Or take a look first");
     expect(body).not.toMatch(/\$|\d+ new customers/);
-    expect(body).toContain("Thomas Wright\n(801) 580-8630\nWright AI Solutions, LLC\n28 E 14 Street, Tempe, AZ 85281\n\n");
+    expect(body).toContain("Thomas Wright\n(385) 306-8041\nWright AI Solutions, LLC\n28 E 14 Street, Tempe, AZ 85281\n\n");
     expect(body.endsWith("Don't want to hear from us again? Reply STOP and we won't email you again.")).toBe(true);
   });
 
