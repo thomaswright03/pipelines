@@ -1,7 +1,7 @@
 // The Garbage AI pipeline: its pitch, who it never pitches, where it never
-// searches, that its daily run and buttons find haulers without emailing
-// anyone while sending is held, and that every send path refuses.
-import { afterEach, describe, expect, it } from "vitest";
+// searches, that its daily run finds and emails haulers, and that every
+// send path refuses while sending is held.
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { buildHaulerOutreachEmail, GARBAGE_AI_TEMPLATE_VERSION, haulerGreetingName } from "@/lib/garbage-ai-email-template";
@@ -140,7 +140,7 @@ describe("who Garbage AI never pitches", () => {
 });
 
 describe("the daily Garbage AI run", () => {
-  it("finds and saves haulers, leaves out the ones it never pitches, and emails nobody while sending is held", async () => {
+  it("finds and saves haulers, leaves out the ones it never pitches, and emails the new ones", async () => {
     mail = captureMail();
     const calls = stubHaulerSearch();
     const next = await peekNextHaulerCity(prisma);
@@ -148,16 +148,17 @@ describe("the daily Garbage AI run", () => {
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
 
     expect(outcome.status).toBe("succeeded");
-    expect(outcome.numbers).toEqual({ businessesChecked: 2, leadsFound: 2, emailsSent: 0 });
+    expect(outcome.numbers).toEqual({ businessesChecked: 2, leadsFound: 2, emailsSent: 2 });
     expect(outcome.summary).toMatch(/Left out 4 that Garbage AI never pitches/);
-    expect(outcome.summary).toMatch(/sending is on hold, so nobody was emailed\.$/);
-    expect(mail.messages).toHaveLength(0);
+    expect(outcome.summary).toMatch(/emailed 2/);
+    expect(mail.messages).toHaveLength(2);
+    expect(mail.messages[0]!.subject).toBe("Who's texting back your 9pm leads?");
     expect(calls.calls.find((u) => u.startsWith(YELP_PREFIX))).toContain("term=garbage+collection");
 
     const haulers = await prisma.haulerLead.findMany({ orderBy: { name: "asc" } });
     expect(haulers.map((h) => [h.name, h.company, h.email, h.status, h.source])).toEqual([
-      ["Desert Roll Off", "Desert Roll Off", "office@desertrolloff.test", "new", GARBAGE_AI_DAILY_SOURCE],
-      ["Saguaro Hauling", "Saguaro Hauling", "info@saguarohauling.test", "new", GARBAGE_AI_DAILY_SOURCE],
+      ["Desert Roll Off", "Desert Roll Off", "office@desertrolloff.test", "contacted", GARBAGE_AI_DAILY_SOURCE],
+      ["Saguaro Hauling", "Saguaro Hauling", "info@saguarohauling.test", "contacted", GARBAGE_AI_DAILY_SOURCE],
     ]);
     expect(haulers[0]!.services).toBe("Dumpster Rental, Garbage Collection");
     expect(await prisma.scrapedHaulerCity.count({ where: { city: next.city, state: next.state } })).toBe(1);
@@ -166,11 +167,13 @@ describe("the daily Garbage AI run", () => {
   });
 
   it("skips a hauler whose address Cold Outreach already pitched", async () => {
+    mail = captureMail();
     stubHaulerSearch();
     await prisma.outreachRecipient.create({ data: { pipeline: "cold-outreach", email: "info@saguarohauling.test", state: "sent" } });
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     expect(outcome.numbers?.leadsFound).toBe(1);
     expect(await prisma.haulerLead.count({ where: { email: "info@saguarohauling.test" } })).toBe(0);
+    expect(mail.messages.map((m) => m.to)).not.toContain("info@saguarohauling.test");
   });
 
   it("records a failed search and doesn't use up the city", async () => {
@@ -182,6 +185,7 @@ describe("the daily Garbage AI run", () => {
   });
 
   it("runs from the cron route, and is skipped when turned off on the page", async () => {
+    mail = captureMail();
     stubHaulerSearch();
     const request = () =>
       new NextRequest("http://localhost/api/cron/garbage-ai-daily", { headers: { authorization: "Bearer test-cron-secret" } });
@@ -235,9 +239,22 @@ describe("the Find haulers buttons", () => {
   });
 });
 
-describe("sending while held", () => {
-  it("refuses a single send and a bulk send, and emails nobody", async () => {
+describe("sending", () => {
+  it("sends the pitch to a hauler", async () => {
     mail = captureMail();
+    const lead = await makeHaulerLead();
+    expect(await sendFirstTouch("garbage-ai", lead.id)).toMatchObject({ ok: true });
+    expect(mail.messages).toHaveLength(1);
+    expect((await prisma.haulerLead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("contacted");
+  });
+
+  it("while held, refuses a single send and a bulk send, and the daily run emails nobody", async () => {
+    mail = captureMail();
+    const adapter = getPipeline("garbage-ai") as { sendHold: string | null };
+    adapter.sendHold = GARBAGE_AI_HOLD_MESSAGE;
+    onTestFinished(() => {
+      adapter.sendHold = null;
+    });
     const lead = await makeHaulerLead();
 
     const single = await sendFirstTouch("garbage-ai", lead.id);
@@ -250,6 +267,12 @@ describe("sending while held", () => {
     expect(mail.messages).toHaveLength(0);
     expect(await prisma.outreachRecipient.count()).toBe(0);
     expect((await prisma.haulerLead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("new");
+
+    stubHaulerSearch();
+    const run = await runDailyGarbageAi(30, { sendDelayMs: 0 });
+    expect(run.numbers?.emailsSent).toBe(0);
+    expect(run.summary).toMatch(/sending is on hold, so nobody was emailed\.$/);
+    expect(mail.messages).toHaveLength(0);
   });
 });
 

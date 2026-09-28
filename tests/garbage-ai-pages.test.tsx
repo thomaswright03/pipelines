@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-// The Garbage AI pages render with representative data and say plainly
-// that sending is on hold: no working Send button anywhere.
+// The Garbage AI pages render with representative data, with sending on.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { prisma } from "@/lib/db";
-import { GARBAGE_AI_HOLD_MESSAGE } from "@/lib/garbage-ai-config";
 import { makeHaulerLead } from "./helpers";
 import { pageProps, renderPage } from "./render-page";
 
@@ -49,27 +47,25 @@ describe("the Garbage AI pages", () => {
     expect(links).toContainEqual(["/garbage-ai?status=new", "Ready to email: 1"]);
   });
 
-  it("list haulers with their Yelp services, say sending is on hold, and disable the bulk send", async () => {
+  it("list haulers with their Yelp services and a working bulk send", async () => {
     await makeHaulerLead({ name: "Desert Roll Off", services: "Dumpster Rental" });
     const page = await renderPage(List(pageProps()));
     expect(page.getByRole("heading", { name: "Garbage AI", level: 1 })).toBeTruthy();
     expect(page.getAllByText("Desert Roll Off").length).toBeGreaterThan(0);
     expect(page.getAllByText("Dumpster Rental").length).toBeGreaterThan(0);
-    expect(page.getAllByText(GARBAGE_AI_HOLD_MESSAGE).length).toBeGreaterThan(0);
     expect(page.getByRole("button", { name: "Find haulers in the next city" })).toBeTruthy();
-    expect(page.text).toMatch(/Sending is on hold, so it emails nobody\./);
-    for (const button of page.getAllByRole("button", { name: /Send outreach/ })) expect(button.hasAttribute("disabled")).toBe(true);
+    expect(page.text).not.toMatch(/on hold/);
+    for (const button of page.getAllByRole("button", { name: /Send outreach/ })) expect(button.hasAttribute("disabled")).toBe(false);
   });
 
-  it("show a hauler with the pitch preview and a disabled Send button", async () => {
+  it("show a hauler with the pitch preview and a working Send button", async () => {
     const lead = await makeHaulerLead({ name: "Desert Roll Off", services: "Garbage Collection" });
     await prisma.haulerLeadActivity.create({ data: { leadId: lead.id, type: "note", notes: "Owner is Sam." } });
     const page = await renderPage(Hauler(pageProps({ id: lead.id })));
     expect(page.getByRole("heading", { name: "Desert Roll Off", level: 1 })).toBeTruthy();
     expect(page.text).toContain("Who's texting back your 9pm leads?");
     expect(page.text).toContain("Garbage Collection");
-    expect(page.getByRole("button", { name: "Send outreach email" }).hasAttribute("disabled")).toBe(true);
-    expect(page.getAllByText(GARBAGE_AI_HOLD_MESSAGE).length).toBeGreaterThan(0);
+    expect(page.getByRole("button", { name: "Send outreach email" }).hasAttribute("disabled")).toBe(false);
     await expect(renderPage(Hauler(pageProps({ id: "missing" })))).rejects.toThrow("NEXT_NOT_FOUND");
   });
 

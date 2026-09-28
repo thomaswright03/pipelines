@@ -1,9 +1,8 @@
 // The Garbage AI pitch's switches, so changing one is a one-line edit:
 //
 // - SENDING_HELD: while true, no Garbage AI email goes out from any path
-//   (single, bulk, daily run). The daily run still finds haulers. The
-//   wording decisions are settled (2026-09-28); it stays on until Thomas
-//   says go.
+//   (single, bulk, daily run); the daily run still finds haulers. Off
+//   since Thomas said go on 2026-09-28; set it back to true to stop sends.
 // - NAME_REFERENCE_CUSTOMER: whether the pitch names Mountain High Disposal
 //   (off: the email says "A hauler in Colorado").
 // - BRAND / PHONE / SIGNUP_URL: the signature. The "Or take a look first"
@@ -13,7 +12,7 @@
 // without pulling in the template.
 
 /** No Garbage AI email is sent while this is true (see send.ts). */
-export const GARBAGE_AI_SENDING_HELD = true;
+export const GARBAGE_AI_SENDING_HELD = false;
 
 /** Why sends are held, shown wherever a send is refused or disabled. */
 export const GARBAGE_AI_HOLD_MESSAGE =
