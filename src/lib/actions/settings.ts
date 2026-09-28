@@ -48,6 +48,7 @@ export async function setAllowCrossPipelineRepeatsAction(allow: boolean): Promis
 function refreshLists() {
   revalidatePath("/settings");
   revalidatePath("/vault-pipeline", "layout");
+  revalidatePath("/garbage-ai", "layout");
   revalidatePath("/dataleadsell", "layout");
 }
 

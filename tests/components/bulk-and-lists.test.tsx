@@ -37,7 +37,15 @@ const PREVIEW: BulkPreview = {
     { name: "Acme", email: "a@acme.test" },
     { name: "Bolt", email: "b@bolt.test" },
   ],
-  skipped: { duplicateInBatch: 0, alreadyPitched: 0, suppressed: 0, refusedEarlier: 0, replyNeedsLook: 0, alreadyAnswered: 0 },
+  skipped: {
+    neverPitch: 0,
+    duplicateInBatch: 0,
+    alreadyPitched: 0,
+    suppressed: 0,
+    refusedEarlier: 0,
+    replyNeedsLook: 0,
+    alreadyAnswered: 0,
+  },
   batchLimit: 50,
 };
 

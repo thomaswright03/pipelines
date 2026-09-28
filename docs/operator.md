@@ -122,14 +122,15 @@ its status) or **Mark opted out**.
 
 ## Daily automation
 
-`vercel.json` defines three Vercel Cron jobs. All routes need `Authorization: Bearer $CRON_SECRET`, which
+`vercel.json` defines four Vercel Cron jobs. All routes need `Authorization: Bearer $CRON_SECRET`, which
 Vercel sends automatically when `CRON_SECRET` is set.
 
 | Route | Schedule (UTC) | Arizona time | What it does |
 | --- | --- | --- | --- |
 | `/api/cron/vault-daily` | `33 15 * * *` | 8:33 AM | Cold Outreach: searches one new city, saves businesses with a findable email, pitches them and any leads earlier daily runs found but didn't email |
 | `/api/cron/dataleadsell-daily` | `3 16 * * *` | 9:03 AM | dataleadsell: the same run for real estate agents (the next agent city, Yelp term "real estate agent"), saving `AgentLead`s. **Off until turned on** on the dataleadsell page, with 10 agents per run by default so volume grows gradually. 30 minutes after Cold Outreach's, so the two never overlap |
-| `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Both pipelines: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone), each with a History entry; leads with an unresolved "needs a look" reply stay in Contacted |
+| `/api/cron/garbage-ai-daily` | `0 15 * * *` | 8:00 AM | Garbage AI: searches one new city on Yelp for garbage collection (never one in Mountain High Disposal's service area), leaves out haulers it never pitches, and saves the ones with a findable email. While sending is held (`GARBAGE_AI_SENDING_HELD` in `src/lib/garbage-ai-config.ts`) it emails nobody; once released it pitches what daily runs found, like the Cold Outreach run |
+| `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Every pipeline: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone), each with a History entry; leads with an unresolved "needs a look" reply stay in Contacted |
 
 - **Settings.** Each pipeline page has its own **Daily automation** panel (stored in `PipelineSchedule` under `vault-pipeline` and `dataleadsell`). With no saved row, Cold Outreach runs daily with 30 businesses per run and dataleadsell is off with 10 agents per run. The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.

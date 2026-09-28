@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { numberVersions } from "@/lib/template-versions";
 import { APP_TIME_ZONE, dayKey, startOfZoneDay } from "@/lib/time";
 import { DAILY_RUN_SOURCE } from "@/lib/vault-daily-run";
+import { GARBAGE_AI_DAILY_SOURCE } from "@/lib/garbage-ai-daily-run";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 
@@ -122,6 +123,14 @@ const STATS_SOURCES: Record<
     logTable: "LeadEmailSendLog",
     leads: () => prisma.lead as unknown as LeadTable,
     sendLogs: () => prisma.leadEmailSendLog as unknown as SendLogTable,
+    location: "state",
+    locationLimit: 10,
+  },
+  "garbage-ai": {
+    leadTable: "HaulerLead",
+    logTable: "HaulerEmailSendLog",
+    leads: () => prisma.haulerLead as unknown as LeadTable,
+    sendLogs: () => prisma.haulerEmailSendLog as unknown as SendLogTable,
     location: "state",
     locationLimit: 10,
   },
@@ -296,6 +305,16 @@ export async function getVaultStats(now: Date = new Date()): Promise<VaultStats>
   ]);
   const c = base.statusCounts;
   return { ...base, positiveOutcomes: (c.appointment_set ?? 0) + (c.working_for ?? 0) + (c.paying_client ?? 0), automatedLeads };
+}
+
+/** Garbage AI's numbers; "positive" is a demo booked or better. */
+export async function getGarbageAiStats(now: Date = new Date()): Promise<VaultStats> {
+  const [base, automatedLeads] = await Promise.all([
+    getPipelineStats("garbage-ai", now),
+    prisma.haulerLead.count({ where: { source: GARBAGE_AI_DAILY_SOURCE } }),
+  ]);
+  const c = base.statusCounts;
+  return { ...base, positiveOutcomes: (c.demo_booked ?? 0) + (c.signed_up ?? 0) + (c.paying_client ?? 0), automatedLeads };
 }
 
 export async function getDataleadsellStats(now: Date = new Date()): Promise<DataleadsellStats> {

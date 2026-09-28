@@ -75,12 +75,15 @@ export default function LeadActions({
   suppression,
   paused,
   latestReply = null,
+  sendHold = null,
 }: {
   pipeline: PipelineId;
   lead: LeadActionsLead;
   suppression: LeadSuppression | null;
   paused: boolean;
   latestReply?: LatestReply | null;
+  /** Set while this pipeline's sends are held in code: why, shown instead of a working Send button. */
+  sendHold?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -392,10 +395,14 @@ export default function LeadActions({
 
         {canSend && (
           <>
-            <button type="button" disabled={isPending || paused} onClick={send} className="btn-primary">
+            <button type="button" disabled={isPending || paused || sendHold !== null} onClick={send} className="btn-primary">
               Send outreach email
             </button>
-            {paused && <p className="text-sm muted">Outbound email is paused — resume it in Settings to send.</p>}
+            {sendHold ? (
+              <p className="text-sm muted">{sendHold}</p>
+            ) : (
+              paused && <p className="text-sm muted">Outbound email is paused — resume it in Settings to send.</p>
+            )}
           </>
         )}
         {lead.email && !canSend && !suppression && !lead.sendBlockedReason && lead.status !== "new" && (

@@ -70,7 +70,7 @@ type LeadRow = {
   ourReplyAt: Date | null;
 };
 
-// The two pipelines keep leads and send logs in separate tables; this is
+// Each pipeline keeps leads and send logs in its own tables; this is
 // the little the inbox needs from each.
 function tables(pipelineId: PipelineId) {
   const select = { id: true, name: true, email: true, lastSendFailedAt: true, lastSendFailure: true, ourReplyAt: true } as const;
@@ -82,6 +82,16 @@ function tables(pipelineId: PipelineId) {
       findLeads: (where: Prisma.AgentLeadWhereInput): Promise<LeadRow[]> => prisma.agentLead.findMany({ where, select }),
       findLeadsFor: (where: Prisma.AgentLeadWhereInput, take: number) =>
         prisma.agentLead.findMany({ where, select: { ...select, repliedAt: true }, orderBy: { repliedAt: "desc" }, take }),
+    };
+  }
+  if (pipelineId === "garbage-ai") {
+    return {
+      countLogs: (where: Prisma.HaulerEmailSendLogWhereInput) => prisma.haulerEmailSendLog.count({ where }),
+      findLogs: (where: Prisma.HaulerEmailSendLogWhereInput, orderBy: Prisma.HaulerEmailSendLogOrderByWithRelationInput) =>
+        prisma.haulerEmailSendLog.findMany({ where, orderBy, take: INBOX_LIMIT, include: { lead: { select: { name: true } } } }),
+      findLeads: (where: Prisma.HaulerLeadWhereInput): Promise<LeadRow[]> => prisma.haulerLead.findMany({ where, select }),
+      findLeadsFor: (where: Prisma.HaulerLeadWhereInput, take: number) =>
+        prisma.haulerLead.findMany({ where, select: { ...select, repliedAt: true }, orderBy: { repliedAt: "desc" }, take }),
     };
   }
   return {

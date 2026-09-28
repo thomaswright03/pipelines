@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/dataleadsell", label: "dataleadsell.com" },
   { href: "/vault-pipeline", label: "Cold Outreach" },
+  { href: "/garbage-ai", label: "Garbage AI" },
   { href: "/replies", label: "Replies" },
   { href: "/settings", label: "Settings" },
 ];

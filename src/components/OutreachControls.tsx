@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { runPipelineScrapeAction, searchLeadsAction, type LeadSearchState } from "@/lib/actions/vault-pipeline";
 import { runAgentPipelineScrapeAction, searchAgentsAction, type AgentSearchState } from "@/lib/actions/dataleadsell";
+import { runHaulerScrapeAction, searchHaulersAction } from "@/lib/actions/garbage-ai";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { LEAD_NOUN, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { US_STATE_OPTIONS } from "@/lib/us-states";
@@ -34,6 +35,7 @@ export default function OutreachControls({
   dailyRunUnsent = null,
   blocked,
   nextCity,
+  sendHold = null,
 }: {
   pipeline: PipelineId;
   paused: boolean;
@@ -45,12 +47,15 @@ export default function OutreachControls({
   nextCity: string;
   /** New leads with an address that can't be sent (already pitched, opted out, unverified…). */
   blocked: number;
+  /** Set while this pipeline's sends are held in code: why, shown instead of the send controls working. */
+  sendHold?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [showSearch, setShowSearch] = useState(false);
   const isAgents = pipeline === "dataleadsell";
+  const isHaulers = pipeline === "garbage-ai";
   const noun = LEAD_NOUN[pipeline];
 
   const epochRef = useRef(0);
@@ -68,7 +73,11 @@ export default function OutreachControls({
     startTransition(async () => {
       let result: ActionResult;
       try {
-        result = isAgents ? await runAgentPipelineScrapeAction() : await runPipelineScrapeAction();
+        result = isAgents
+          ? await runAgentPipelineScrapeAction()
+          : isHaulers
+            ? await runHaulerScrapeAction()
+            : await runPipelineScrapeAction();
       } catch {
         result = { ok: false, error: "Couldn't reach the server — nothing was run. Check your connection and try again." };
       }
@@ -81,7 +90,7 @@ export default function OutreachControls({
     <section aria-label="Pipeline controls" className="card flex flex-col gap-3 p-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={isPending} onClick={runPipeline} className="btn-primary">
-          {isPending ? "Searching… (up to a minute)" : isAgents ? "Find agents in the next city" : "Find leads in the next city"}
+          {isPending ? "Searching… (up to a minute)" : `Find ${noun.many} in the next city`}
         </button>
         <p className="self-center text-sm muted">
           Next city: <strong className="font-medium text-zinc-800 dark:text-zinc-200">{nextCity}</strong>
@@ -105,7 +114,9 @@ export default function OutreachControls({
           {unsent > 0 ? (
             <>
               <strong>{plural(unsent, noun.one, noun.many)}</strong> ready to email.{" "}
-              {dailyRunUnsent === null ? (
+              {sendHold ? (
+                <span className="muted">Nothing is emailed while sending is on hold.</span>
+              ) : dailyRunUnsent === null ? (
                 <span className="muted">They&apos;re only emailed when you press Send outreach to new {noun.many}.</span>
               ) : dailyRunUnsent >= unsent ? (
                 <span className="muted">The next daily run will email them, or send them now.</span>
@@ -136,8 +147,9 @@ export default function OutreachControls({
             </>
           )}
         </p>
-        <BulkSendButton pipeline={pipeline} disabled={isPending || paused || unsent === 0} />
+        <BulkSendButton pipeline={pipeline} disabled={isPending || paused || sendHold !== null || unsent === 0} />
       </div>
+      {sendHold && <p className="notice-warning">{sendHold}</p>}
       {paused && <p className="notice-warning">Outbound email is paused — sending is off until it&apos;s resumed in Settings.</p>}
       <ActionMessage feedback={feedbackEpoch === epoch ? feedback : null} />
 
@@ -145,7 +157,7 @@ export default function OutreachControls({
         (isAgents ? (
           <AgentSearchForm epoch={epoch} startControl={startControl} />
         ) : (
-          <BusinessSearchForm epoch={epoch} startControl={startControl} />
+          <BusinessSearchForm epoch={epoch} startControl={startControl} haulers={isHaulers} />
         ))}
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
@@ -159,6 +171,12 @@ export default function OutreachControls({
           phone number, street address or city — expect fewer new {noun.many} than results.
           {isAgents ? " An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox." : ""}
         </p>
+        {isHaulers && (
+          <p>
+            Each search asks Yelp for garbage collection in one city and leaves out current clients, national and large regional haulers,
+            city and county departments, and anything in Mountain High Disposal&apos;s service area.
+          </p>
+        )}
         <p>Replies to your emails are logged automatically; record anything else from the lead page.</p>
       </HowThisWorks>
     </section>
@@ -167,13 +185,14 @@ export default function OutreachControls({
 
 const initialSearch: LeadSearchState = {};
 
-function BusinessSearchForm({ epoch, startControl }: { epoch: number; startControl: StartControl }) {
+/** City search; Garbage AI's always searches for garbage collection, so it has no business-type field. */
+function BusinessSearchForm({ epoch, startControl, haulers = false }: { epoch: number; startControl: StartControl; haulers?: boolean }) {
   const router = useRouter();
   const [values, setValues] = useState({ city: "", state: "", businessType: "" });
   const [submittedEpoch, setSubmittedEpoch] = useState(-1);
   const [clientError, setClientError] = useState<string | null>(null);
   const [state, action, pending] = useActionState(async (prev: LeadSearchState, formData: FormData) => {
-    const result = await searchLeadsAction(prev, formData);
+    const result = haulers ? await searchHaulersAction(prev, formData) : await searchLeadsAction(prev, formData);
     router.refresh();
     return result;
   }, initialSearch);
@@ -223,17 +242,19 @@ function BusinessSearchForm({ epoch, startControl }: { epoch: number; startContr
             ))}
           </select>
         </label>
-        <label className="field-label w-44">
-          Business type (optional)
-          <input
-            name="businessType"
-            value={values.businessType}
-            maxLength={80}
-            onChange={(e) => setValues({ ...values, businessType: e.target.value })}
-            placeholder="dentist"
-            className="input"
-          />
-        </label>
+        {!haulers && (
+          <label className="field-label w-44">
+            Business type (optional)
+            <input
+              name="businessType"
+              value={values.businessType}
+              maxLength={80}
+              onChange={(e) => setValues({ ...values, businessType: e.target.value })}
+              placeholder="dentist"
+              className="input"
+            />
+          </label>
+        )}
         <button type="submit" disabled={pending} className="btn-primary">
           {pending ? "Searching…" : "Search"}
         </button>

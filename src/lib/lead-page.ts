@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { getSuppression } from "@/lib/email-suppression";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { formatDate, formatDateTime } from "@/lib/time";
-import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import type { LatestReply, LeadSuppression } from "@/components/LeadActions";
 
 export type LedgerNote = { tone: "warning" | "info"; text: string } | null;
@@ -69,7 +69,7 @@ export async function loadLeadContext(pipeline: PipelineId, leadId: string, emai
   } else if (!own && other) {
     ledgerNote = {
       tone: "info",
-      text: `This address was already pitched ${other.pipeline === pipeline ? "via another lead in this pipeline" : `by the ${other.pipeline === "dataleadsell" ? "dataleadsell.com" : "Cold Outreach"} pipeline`} on ${formatDate(other.claimedAt)}.`,
+      text: `This address was already pitched ${other.pipeline === pipeline ? "via another lead in this pipeline" : `by the ${PIPELINE_LABEL[other.pipeline as PipelineId] ?? other.pipeline} pipeline`} on ${formatDate(other.claimedAt)}.`,
     };
   }
 

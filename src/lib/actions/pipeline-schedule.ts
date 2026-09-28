@@ -3,8 +3,14 @@
 import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/log";
-import { DATALEADSELL_SCHEDULE_ID, savePipelineSchedule, scheduleSchema, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
-import { AGENTS_PER_RUN_LABEL, scheduleSchemaFor } from "@/lib/pipeline-schedule-rules";
+import {
+  DATALEADSELL_SCHEDULE_ID,
+  GARBAGE_AI_SCHEDULE_ID,
+  savePipelineSchedule,
+  scheduleSchema,
+  VAULT_SCHEDULE_ID,
+} from "@/lib/pipeline-schedule";
+import { AGENTS_PER_RUN_LABEL, HAULERS_PER_RUN_LABEL, scheduleSchemaFor } from "@/lib/pipeline-schedule-rules";
 
 export type UpdateScheduleState = {
   error?: string;
@@ -56,6 +62,18 @@ export async function updateDataleadsellScheduleAction(_prevState: UpdateSchedul
       schema: scheduleSchemaFor(AGENTS_PER_RUN_LABEL),
       path: "/dataleadsell",
       logScope: "action.updateDataleadsellSchedule",
+    },
+    formData,
+  );
+}
+
+export async function updateGarbageAiScheduleAction(_prevState: UpdateScheduleState, formData: FormData): Promise<UpdateScheduleState> {
+  return updateSchedule(
+    {
+      scheduleId: GARBAGE_AI_SCHEDULE_ID,
+      schema: scheduleSchemaFor(HAULERS_PER_RUN_LABEL),
+      path: "/garbage-ai",
+      logScope: "action.updateGarbageAiSchedule",
     },
     formData,
   );

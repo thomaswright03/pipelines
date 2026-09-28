@@ -7,10 +7,12 @@ import {
   BUSINESSES_PER_RUN_LABEL,
   BUSINESSES_PER_RUN_MAX,
   BUSINESSES_PER_RUN_MIN,
+  HAULERS_PER_RUN_LABEL,
   rangeMessage,
   type PipelineScheduleData,
 } from "@/lib/pipeline-schedule-rules";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { GARBAGE_AI_SENDING_HELD } from "@/lib/garbage-ai-config";
 import ActionMessage from "@/components/ActionMessage";
 import { plural } from "@/lib/format";
 
@@ -67,6 +69,17 @@ const WORDING: Record<
       `It searches the next city on Yelp for real estate agents, checks up to ${n} of those agents for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`,
     yieldNote:
       "Not every agent has a findable email address, and each run stops looking after about 25 seconds, so expect far fewer emails than agents checked.",
+  },
+  "garbage-ai": {
+    perRunLabel: HAULERS_PER_RUN_LABEL,
+    checked: { one: "hauler", many: "haulers" },
+    emailed: { one: "hauler", many: "haulers" },
+    describe: (n) =>
+      GARBAGE_AI_SENDING_HELD
+        ? `It searches one new city on Yelp for garbage collection, checks up to ${n} of those haulers for an email address, and saves the ones it finds. Sending is on hold, so it emails nobody.`
+        : `It searches one new city on Yelp for garbage collection, checks up to ${n} of those haulers for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`,
+    yieldNote:
+      "Not every hauler has a findable email address, and each run stops looking after about 25 seconds, so expect far fewer addresses than haulers checked.",
   },
 };
 

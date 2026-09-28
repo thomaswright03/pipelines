@@ -15,6 +15,8 @@ type YelpCandidate = {
   phone: string | null;
   address: string | null;
   website: string | null;
+  /** Yelp's category names for the business ("Garbage Collection", "Dumpster Rental"). */
+  categories: string[];
 };
 
 // The fields this module reads from a successful search, validated so a
@@ -26,6 +28,7 @@ const yelpSearchSchema = z.object({
       name: z.string().nullish(),
       phone: z.string().nullish(),
       location: z.object({ display_address: z.array(z.string()).nullish() }).nullish(),
+      categories: z.array(z.object({ title: z.string().nullish() })).nullish(),
     }),
   ),
 });
@@ -124,6 +127,7 @@ export async function findBusinessesViaYelp(term: string, location: string, opti
       phone: b.phone || null,
       address: b.location?.display_address?.join(", ") || null,
       website: null, // Yelp's search API doesn't expose the business's own site.
+      categories: (b.categories ?? []).map((c) => c.title?.trim() ?? "").filter(Boolean),
     }));
 }
 

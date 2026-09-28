@@ -57,13 +57,14 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { suppressEmail } from "@/lib/email-suppression";
 import { formatDateTime } from "@/lib/time";
-import { REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@/lib/lead-status";
+import { declinedStatus, REPLY_FLAGS_FOR_REVIEW, REPLY_MOVES_TO_RESPONDED, statusLabel } from "@/lib/lead-status";
 import { classifyReply, REPLY_RULES_VERSION, showsClearInterest, type ReplyVerdict } from "@/lib/outreach/reply-classifier";
 import { AUTO_MAIL_RULES_VERSION, autoReplySignal, detectBounce, type MailHeaders } from "@/lib/outreach/auto-mail";
 import { applyBounce } from "@/lib/outreach/lead-actions";
 import { ANSWERED_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
+import { GARBAGE_AI_SENDER_EMAIL } from "@/lib/garbage-ai-config";
 import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type PipelineAdapter } from "@/lib/outreach/pipelines";
 
 /** The rules behind every stored inbound verdict (kind, opt-out, review). */
@@ -122,7 +123,9 @@ function inboundDedupeKey(message: InboundEmail): string {
   return `hash:${digest}`;
 }
 
-const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL].map((address) => address.split("@")[1]!);
+const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL, GARBAGE_AI_SENDER_EMAIL].map(
+  (address) => address.split("@")[1]!,
+);
 
 export async function handleInboundReply(message: InboundEmail, now: Date = new Date()): Promise<InboundResult> {
   const fromEmail = extractEmailAddress(message.from);
@@ -315,7 +318,7 @@ function replyUpdateFor(
     // A lead we were actively working (emailing, or about to call) is done;
     // a New lead just can't be emailed, and a customer stays a customer.
     if (REPLY_MOVES_TO_RESPONDED.includes(lead.status) || lead.status === "responded") {
-      data.status = pipelineId === "dataleadsell" ? "not_interested" : "lost";
+      data.status = declinedStatus(pipelineId);
     }
     return { data, needsReview: false };
   }
@@ -324,7 +327,7 @@ function replyUpdateFor(
     // A lead we were still trying to reach is closed, as a "not interested"
     // call outcome would; one that got further is left for the operator.
     if (REPLY_MOVES_TO_RESPONDED.includes(lead.status)) {
-      data.status = pipelineId === "dataleadsell" ? "not_interested" : "lost";
+      data.status = declinedStatus(pipelineId);
       data.callOutcome = "not_interested";
       return { data, needsReview: false };
     }

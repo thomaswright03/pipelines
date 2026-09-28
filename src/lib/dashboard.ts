@@ -18,7 +18,7 @@ export type DashboardNumbers = {
   needsALook: number;
 };
 
-const LEAD_TABLE: Record<PipelineId, string> = { "cold-outreach": "Lead", dataleadsell: "AgentLead" };
+const LEAD_TABLE: Record<PipelineId, string> = { "cold-outreach": "Lead", dataleadsell: "AgentLead", "garbage-ai": "HaulerLead" };
 
 export async function getDashboardNumbers(pipelineId: PipelineId): Promise<DashboardNumbers> {
   const [readyToEmail, [row]] = await Promise.all([

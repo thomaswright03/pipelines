@@ -1,4 +1,4 @@
-// The lead stage machine for both pipelines: which statuses exist, what
+// The lead stage machine for every pipeline: which statuses exist, what
 // they're called on screen, and which manual moves are allowed from each.
 // The server rejects anything not listed here, and the lead pages only
 // offer what's listed here, so the two can't drift apart.
@@ -27,9 +27,23 @@ export const DATALEADSELL_STATUSES = [
   "lost",
 ] as const;
 
+export const GARBAGE_AI_STATUSES = [
+  "new",
+  "contacted",
+  "responded",
+  "demo_booked",
+  "signed_up",
+  "paying_client",
+  "not_interested",
+  "cold_call_list",
+  "contactless_list",
+  "lost",
+] as const;
+
 type ColdOutreachStatus = (typeof COLD_OUTREACH_STATUSES)[number];
 type DataleadsellStatus = (typeof DATALEADSELL_STATUSES)[number];
-export type LeadStatus = ColdOutreachStatus | DataleadsellStatus;
+type GarbageAiStatus = (typeof GARBAGE_AI_STATUSES)[number];
+export type LeadStatus = ColdOutreachStatus | DataleadsellStatus | GarbageAiStatus;
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
   new: "New",
@@ -39,6 +53,8 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   working_for: "Working for",
   paying_client: "Paying client",
   subscribed: "Subscribed",
+  demo_booked: "Demo booked",
+  signed_up: "Signed up",
   not_interested: "Not interested",
   cold_call_list: "Cold call list",
   contactless_list: "No phone number",
@@ -54,6 +70,8 @@ export const STATUS_HELP: Record<LeadStatus, string> = {
   working_for: "Doing work for them.",
   paying_client: "Pays for the service.",
   subscribed: "Subscribed to dataleadsell.com.",
+  demo_booked: "A demo with Max is booked.",
+  signed_up: "Filled out the hauler signup form after the demo.",
   not_interested: "Said no, by reply or on a call.",
   cold_call_list: "Didn't reply within a week and has a phone number: on the call deck.",
   contactless_list: "Didn't reply within a week and has no phone number to call.",
@@ -68,6 +86,8 @@ export const STATUS_COLOR: Record<LeadStatus, string> = {
   working_for: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
   paying_client: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   subscribed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  demo_booked: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
+  signed_up: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
   not_interested: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
   cold_call_list: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
   contactless_list: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
@@ -82,14 +102,27 @@ export const STATUS_DOT: Record<LeadStatus, string> = {
   working_for: "bg-cyan-500",
   paying_client: "bg-emerald-500",
   subscribed: "bg-emerald-500",
+  demo_booked: "bg-purple-500",
+  signed_up: "bg-cyan-500",
   not_interested: "bg-zinc-400",
   cold_call_list: "bg-orange-500",
   contactless_list: "bg-zinc-400",
   lost: "bg-red-500",
 };
 
-function statusesFor(pipeline: PipelineId): readonly LeadStatus[] {
-  return pipeline === "dataleadsell" ? DATALEADSELL_STATUSES : COLD_OUTREACH_STATUSES;
+const STATUSES: Record<PipelineId, readonly LeadStatus[]> = {
+  dataleadsell: DATALEADSELL_STATUSES,
+  "cold-outreach": COLD_OUTREACH_STATUSES,
+  "garbage-ai": GARBAGE_AI_STATUSES,
+};
+
+export function statusesFor(pipeline: PipelineId): readonly LeadStatus[] {
+  return STATUSES[pipeline];
+}
+
+/** Where a lead goes when it says no (by reply or on a call): its own stage where the pipeline has one, else Lost. */
+export function declinedStatus(pipeline: PipelineId): "not_interested" | "lost" {
+  return pipeline === "cold-outreach" ? "lost" : "not_interested";
 }
 
 export function isStatusOf(pipeline: PipelineId, value: string): value is LeadStatus {
@@ -129,6 +162,19 @@ const DATALEADSELL_TRANSITIONS: Record<DataleadsellStatus, DataleadsellStatus[]>
   lost: ["responded", "cold_call_list"],
 };
 
+const GARBAGE_AI_TRANSITIONS: Record<GarbageAiStatus, GarbageAiStatus[]> = {
+  new: ["cold_call_list", "contactless_list", "not_interested", "lost"],
+  contacted: ["responded", "demo_booked", "cold_call_list", "contactless_list", "not_interested", "lost"],
+  responded: ["demo_booked", "signed_up", "paying_client", "not_interested", "cold_call_list", "contacted", "lost"],
+  demo_booked: ["signed_up", "paying_client", "responded", "not_interested", "lost"],
+  signed_up: ["paying_client", "demo_booked", "not_interested", "lost"],
+  paying_client: ["signed_up", "lost"],
+  not_interested: ["responded", "lost"],
+  cold_call_list: ["responded", "demo_booked", "contactless_list", "not_interested", "lost"],
+  contactless_list: ["cold_call_list", "lost"],
+  lost: ["responded", "cold_call_list"],
+};
+
 // Appointment set is reached through the appointment form (it needs a
 // date), not the status dropdown, from these statuses.
 export const APPOINTMENT_FROM: readonly string[] = ["contacted", "responded", "cold_call_list", "appointment_set"];
@@ -136,6 +182,9 @@ export const APPOINTMENT_FROM: readonly string[] = ["contacted", "responded", "c
 export function allowedTransitions(pipeline: PipelineId, from: string): LeadStatus[] {
   if (pipeline === "dataleadsell") {
     return DATALEADSELL_TRANSITIONS[from as DataleadsellStatus] ?? [];
+  }
+  if (pipeline === "garbage-ai") {
+    return GARBAGE_AI_TRANSITIONS[from as GarbageAiStatus] ?? [];
   }
   return COLD_OUTREACH_TRANSITIONS[from as ColdOutreachStatus] ?? [];
 }
@@ -149,7 +198,9 @@ const RANK: Record<LeadStatus, number> = {
   contacted: 2,
   responded: 3,
   appointment_set: 4,
+  demo_booked: 4,
   working_for: 5,
+  signed_up: 5,
   subscribed: 6,
   paying_client: 6,
   not_interested: 7,
@@ -162,9 +213,9 @@ export function isBackwardMove(from: string, to: string): boolean {
 
 // Statuses where the relationship is past cold outreach: opting out of
 // marketing email doesn't make a client "lost".
-export const CUSTOMER_STATUSES: readonly string[] = ["working_for", "paying_client", "subscribed"];
+export const CUSTOMER_STATUSES: readonly string[] = ["working_for", "paying_client", "subscribed", "signed_up"];
 
-// --- Replies (both pipelines) ---
+// --- Replies (every pipeline) ---
 // A genuine reply from a lead that was emailed moves it to Responded from
 // these statuses — including after the stale-contacts job moved it to
 // phone outreach. "Mark replied" on the lead page is offered for the same.
@@ -178,7 +229,7 @@ export function canMarkReplied(status: string): boolean {
   return REPLY_MOVES_TO_RESPONDED.includes(status);
 }
 
-// --- Cold-call outcomes (both pipelines' call decks) ---
+// --- Cold-call outcomes (every pipeline's call deck) ---
 export const COLD_CALL_OUTCOMES = ["no_answer", "invalid_number", "not_interested", "interested"] as const;
 export type ColdCallOutcome = (typeof COLD_CALL_OUTCOMES)[number];
 
@@ -197,7 +248,7 @@ export function coldCallResult(pipeline: PipelineId, outcome: ColdCallOutcome): 
     case "invalid_number":
       return { callOutcome: "unable_to_contact", status: "lost" };
     case "not_interested":
-      return { callOutcome: "not_interested", status: pipeline === "dataleadsell" ? "not_interested" : "lost" };
+      return { callOutcome: "not_interested", status: declinedStatus(pipeline) };
     case "interested":
       return { callOutcome: "interested", status: "responded" };
   }

@@ -12,6 +12,7 @@ import {
   COLD_CALL_OUTCOMES,
   coldCallResult,
   CUSTOMER_STATUSES,
+  declinedStatus,
   isLostReason,
   isStatusOf,
   statusLabel,
@@ -183,7 +184,7 @@ export async function applyBounce(
   let lead: OutreachLead | null = initial;
   for (let attempt = 0; lead && attempt < 3; attempt++) {
     if (!BOUNCE_MOVES_TO_LOST.includes(lead.status)) return { from: initial.status, to: lead.status };
-    const lost = { status: "lost", ...(pipelineId === "cold-outreach" ? { callOutcome: "unable_to_contact" } : {}) };
+    const lost = { status: "lost", ...(pipelineId !== "dataleadsell" ? { callOutcome: "unable_to_contact" } : {}) };
     if (await pipeline.updateIfStatus(tx, lead.id, [lead.status], lost)) return { from: initial.status, to: "lost" };
     lead = await pipeline.findLead(tx, lead.id);
   }
@@ -210,7 +211,7 @@ export async function markOptedOut(pipelineId: PipelineId, leadId: string): Prom
   const email = lead.email.toLowerCase();
 
   const keepStatus = CUSTOMER_STATUSES.includes(lead.status);
-  const newStatus = pipelineId === "dataleadsell" ? "not_interested" : "lost";
+  const newStatus = declinedStatus(pipelineId);
   const block = {
     sendBlockedReason: `${OPTED_OUT_BLOCK_PREFIX} — ${email} is on the suppression list.`,
     replyNeedsReview: false,

@@ -19,7 +19,7 @@ import { displayRunStatus, isRunOverdue } from "@/lib/outreach/runs";
 export type StatusTone = "ok" | "warn" | "error";
 
 export type ConnectionStatus = {
-  key: "mail" | "replies" | "daily-run" | "stale-contacts" | "yelp";
+  key: "mail" | "replies" | "daily-run" | "garbage-ai-daily" | "stale-contacts" | "yelp";
   label: string;
   tone: StatusTone;
   /** The badge's words when they differ from the tone's usual label ("Not confirmed yet"). */
@@ -41,6 +41,13 @@ const CRON_JOBS = [
     pipeline: "cold-outreach",
     kind: "daily",
     schedule: "8:33 AM Arizona time",
+  },
+  {
+    key: "garbage-ai-daily" as const,
+    label: "Daily Garbage AI search",
+    pipeline: "garbage-ai",
+    kind: "daily",
+    schedule: "8:00 AM Arizona time",
   },
   {
     key: "stale-contacts" as const,

@@ -33,6 +33,7 @@ const WINDOW_DAYS = 90;
 const TABLES: Record<PipelineId, { leads: string; logs: string }> = {
   dataleadsell: { leads: "AgentLead", logs: "EmailSendLog" },
   "cold-outreach": { leads: "Lead", logs: "LeadEmailSendLog" },
+  "garbage-ai": { leads: "HaulerLead", logs: "HaulerEmailSendLog" },
 };
 const SOURCE_ORDER: AddressSource[] = ["found", "checked", "hand", "unknown"];
 
