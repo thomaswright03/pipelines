@@ -1,7 +1,7 @@
 // A pipeline's Inbox: sent, failed and replied, kept apart per pipeline.
 import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { getPipelineInbox, parseInboxTab } from "@/lib/outreach/inbox";
+import { getPipelineInbox, gmailSearchUrl, parseInboxTab } from "@/lib/outreach/inbox";
 import { makeAgentLead, makeColdLead } from "./helpers";
 
 const at = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000);
@@ -98,7 +98,16 @@ describe("getPipelineInbox", () => {
       ["Phone Reply", "marked"],
     ]);
     expect(inbox.replied[0]!.text).toBe("Yes, tell me more");
+    expect(inbox.replied[0]!.gmailUrl).toBe("https://mail.google.com/mail/u/0/#search/rfc822msgid%3A1");
+    expect(inbox.replied[2]!.gmailUrl).toBe(`https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(byHand.email!)}`);
     expect(byHand.id).toBe(inbox.replied[2]!.leadId);
+  });
+
+  it("links a reply to Gmail by its Message-ID, or by sender without one", () => {
+    expect(gmailSearchUrl("mid:<CAB1@mail.gmail.com>", "a@b.test")).toBe(
+      "https://mail.google.com/mail/u/0/#search/rfc822msgid%3ACAB1%40mail.gmail.com",
+    );
+    expect(gmailSearchUrl("hash:abc", "a@b.test")).toBe("https://mail.google.com/mail/u/0/#search/from%3Aa%40b.test");
   });
 
   it("falls back to the Sent tab for an unknown tab", () => {

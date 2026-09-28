@@ -42,7 +42,16 @@ export type RepliedItem = LeadRef & {
   optedOut: boolean;
   /** A recorded reply that can be answered from the Inbox (not a lead only marked replied by hand). */
   canReply: boolean;
+  /** Opens the reply in Gmail: its Message-ID when the Worker passed one on, otherwise mail from the sender. */
+  gmailUrl: string | null;
 };
+
+/** A Gmail search for one message (by Message-ID) or, without one, everything from the sender. */
+export function gmailSearchUrl(dedupeKey: string | null, fromEmail: string): string | null {
+  const messageId = dedupeKey?.startsWith("mid:") ? dedupeKey.slice(4).trim().replace(/^<|>$/g, "") : "";
+  const query = messageId ? `rfc822msgid:${messageId}` : fromEmail ? `from:${fromEmail}` : "";
+  return query ? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}` : null;
+}
 
 export type PipelineInbox = {
   tab: InboxTab;
@@ -220,6 +229,7 @@ export async function getPipelineInbox(pipelineId: PipelineId, tab: InboxTab = "
       ourReplyAt: lead?.ourReplyAt ?? null,
       optedOut: optedOut.has(r.fromEmail.toLowerCase()),
       canReply: !!lead,
+      gmailUrl: gmailSearchUrl(r.dedupeKey, r.fromEmail),
     };
   });
   for (const lead of markedLeads) {
@@ -235,6 +245,7 @@ export async function getPipelineInbox(pipelineId: PipelineId, tab: InboxTab = "
       ourReplyAt: lead.ourReplyAt,
       optedOut: false,
       canReply: false,
+      gmailUrl: gmailSearchUrl(null, lead.email ?? ""),
     });
   }
   replied.sort((a, b) => b.at.getTime() - a.at.getTime());

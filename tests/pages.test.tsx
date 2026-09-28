@@ -362,5 +362,8 @@ describe("the inbox pages", () => {
     expect(page.text).toContain("Sounds good, call me");
     expect(page.getByRole("link", { name: "Jane Agent" }).getAttribute("href")).toBe(`/dataleadsell/${lead.id}`);
     expect(page.getByRole("button", { name: "Reply" })).toBeTruthy();
+    expect(page.getByRole("link", { name: /Open in Gmail/ }).getAttribute("href")).toBe(
+      "https://mail.google.com/mail/u/0/#search/rfc822msgid%3A1",
+    );
   });
 });

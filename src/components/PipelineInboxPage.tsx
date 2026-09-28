@@ -99,6 +99,17 @@ export default function PipelineInboxPage({
                     </p>
                     {r.text && <p className="line-clamp-3 whitespace-pre-line break-words muted">{r.text}</p>}
                     {r.ourReplyAt && r.ourReplyAt >= r.at && <p className="text-xs muted">You replied {formatDateTime(r.ourReplyAt)}</p>}
+                    {r.gmailUrl && (
+                      <a
+                        href={r.gmailUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Searches your Gmail for this message. Only finds it if replies to the sending address are forwarded to that Gmail account."
+                        className="w-fit text-xs underline muted"
+                      >
+                        Open in Gmail ↗
+                      </a>
+                    )}
                     {r.canReply && (
                       <InboxReplyForm
                         pipeline={pipeline}
