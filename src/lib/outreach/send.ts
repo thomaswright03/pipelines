@@ -189,6 +189,8 @@ export async function sendFirstTouch(pipelineId: PipelineId, leadId: string): Pr
   });
 
   if (pipeline.sendHold) return fail("paused", pipeline.sendHold);
+  const neverPitch = pipeline.neverPitch(lead);
+  if (neverPitch) return fail("blocked", `${lead.name} is never emailed by ${pipeline.label} (${neverPitch}) — nothing was sent.`);
   if (!lead.email) return fail("no_email", `${lead.name} has no email address yet — nothing was sent.`);
   const email = lead.email.trim().toLowerCase();
   if (lead.status !== "new") {
@@ -426,6 +428,8 @@ export type BulkPreview = {
   sample: { name: string; email: string }[];
   /** Leads the send will skip, by the reason it will give. */
   skipped: {
+    /** Leads this pipeline never emails (Garbage AI: current clients and Mountain High's area). */
+    neverPitch: number;
     duplicateInBatch: number;
     alreadyPitched: number;
     suppressed: number;
@@ -471,12 +475,21 @@ export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPrevi
   const suppressedSet = new Set(suppressed.map((r) => r.email));
 
   const seen = new Set<string>();
-  const skipped = { duplicateInBatch: 0, alreadyPitched: 0, suppressed: 0, refusedEarlier: 0, replyNeedsLook: 0, alreadyAnswered: 0 };
+  const skipped = {
+    neverPitch: 0,
+    duplicateInBatch: 0,
+    alreadyPitched: 0,
+    suppressed: 0,
+    refusedEarlier: 0,
+    replyNeedsLook: 0,
+    alreadyAnswered: 0,
+  };
   const sendable: OutreachLead[] = [];
   for (const lead of batch) {
     const email = lead.email!.toLowerCase();
     const hold = holds.get(email);
-    if (suppressedSet.has(email)) skipped.suppressed++;
+    if (pipeline.neverPitch(lead)) skipped.neverPitch++;
+    else if (suppressedSet.has(email)) skipped.suppressed++;
     else if (hold?.kind === "needs_look") skipped.replyNeedsLook++;
     else if (hold?.kind === "answered") skipped.alreadyAnswered++;
     else if (refusedSet.has(email)) skipped.refusedEarlier++;

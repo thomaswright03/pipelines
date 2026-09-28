@@ -14,6 +14,7 @@ import { buildOutreachEmail, COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { buildHaulerOutreachEmail, GARBAGE_AI_TEMPLATE_VERSION } from "@/lib/garbage-ai-email-template";
+import { pitchExclusion } from "@/lib/garbage-ai-targeting";
 import { GARBAGE_AI_HOLD_MESSAGE, GARBAGE_AI_SENDER_EMAIL, GARBAGE_AI_SENDING_HELD } from "@/lib/garbage-ai-config";
 import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { APP_TIME_ZONE } from "@/lib/time";
@@ -107,6 +108,8 @@ export type PipelineAdapter = {
   senderEmail: string;
   /** Set while this pipeline's sends are held in code: every send path refuses with this message (send.ts). */
   sendHold: string | null;
+  /** Why this lead must never be emailed by this pipeline, or null (checked by send.ts). */
+  neverPitch(lead: OutreachLead): string | null;
   buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): OutreachEmail;
   findLead(db: Db, id: string): Promise<OutreachLead | null>;
   findLeadsByEmail(db: Db, email: string, excludeId?: string): Promise<OutreachLead[]>;
@@ -259,6 +262,7 @@ type PipelineSpec = {
   tables: { leads: string; activities: string };
   senderEmail: string;
   sendHold?: string | null;
+  neverPitch?: PipelineAdapter["neverPitch"];
   buildEmail: PipelineAdapter["buildEmail"];
   leads: (db: Db) => LeadTable;
   sendLogs: (db: Db) => SendLogTable;
@@ -302,6 +306,7 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     basePath: PIPELINE_BASE_PATH[spec.id],
     senderEmail: spec.senderEmail,
     sendHold: spec.sendHold ?? null,
+    neverPitch: spec.neverPitch ?? (() => null),
     buildEmail: spec.buildEmail,
     async findLead(db, id) {
       const lead = await leads(db).findUnique({ where: { id } });
@@ -494,6 +499,7 @@ const garbageAi = makeAdapter({
   tables: { leads: "HaulerLead", activities: "HaulerLeadActivity" },
   senderEmail: GARBAGE_AI_SENDER_EMAIL,
   sendHold: GARBAGE_AI_SENDING_HELD ? GARBAGE_AI_HOLD_MESSAGE : null,
+  neverPitch: pitchExclusion,
   buildEmail: (lead) => ({ ...buildHaulerOutreachEmail(lead), templateVersion: GARBAGE_AI_TEMPLATE_VERSION }),
   leads: (db) => db.haulerLead as unknown as LeadTable,
   sendLogs: (db) => db.haulerEmailSendLog as unknown as SendLogTable,

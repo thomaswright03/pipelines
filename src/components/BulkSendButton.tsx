@@ -155,6 +155,7 @@ function PreviewBody({ preview, noun }: { preview: BulkPreview; noun: { one: str
     );
   }
   const skippedParts = [
+    preview.skipped.neverPitch && `${n(preview.skipped.neverPitch)} this pipeline never emails (a current client, or in a client's area)`,
     preview.skipped.alreadyPitched && `${n(preview.skipped.alreadyPitched)} whose address was already pitched`,
     preview.skipped.duplicateInBatch && `${n(preview.skipped.duplicateInBatch)} sharing an address with another ${noun.one} in this batch`,
     preview.skipped.suppressed && `${n(preview.skipped.suppressed)} on the do-not-email list`,

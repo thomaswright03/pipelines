@@ -13,7 +13,7 @@ import { runHaulerScrapeAction, searchHaulersAction, createHaulerAction, updateH
 import { updateGarbageAiScheduleAction } from "@/lib/actions/pipeline-schedule";
 import { GET as garbageDailyGET } from "@/app/api/cron/garbage-ai-daily/route";
 import { getPipelineSchedule, GARBAGE_AI_SCHEDULE_ID } from "@/lib/pipeline-schedule";
-import { sendBulkChunk, sendFirstTouch } from "@/lib/outreach/send";
+import { previewBulkSend, sendBulkChunk, sendFirstTouch } from "@/lib/outreach/send";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { allowedTransitions, coldCallResult, GARBAGE_AI_STATUSES, statusLabel } from "@/lib/lead-status";
 import { US_CITIES } from "@/lib/us-cities";
@@ -246,6 +246,25 @@ describe("sending", () => {
     expect(await sendFirstTouch("garbage-ai", lead.id)).toMatchObject({ ok: true });
     expect(mail.messages).toHaveLength(1);
     expect((await prisma.haulerLead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("contacted");
+  });
+
+  it("never emails Mountain High Disposal, even one added by hand under another name, email or address", async () => {
+    mail = captureMail();
+    const byName = await makeHaulerLead({ name: "Mountain High Disposal LLC", email: "a@example.test" });
+    const byCompany = await makeHaulerLead({ name: "Jane Doe", company: "Mountain High Disposal", email: "b@example.test" });
+    const byDomain = await makeHaulerLead({ name: "Jane Roe", email: "office@mountainhighdisposal.com" });
+    const byCity = await makeHaulerLead({ name: "Front Range Hauling", email: "c@example.test", city: "Greeley", state: "CO" });
+    for (const lead of [byName, byCompany, byDomain, byCity]) {
+      expect(await sendFirstTouch("garbage-ai", lead.id)).toMatchObject({ ok: false, reason: "blocked" });
+    }
+    expect((await sendFirstTouch("garbage-ai", byName.id)).message).toBe(
+      "Mountain High Disposal LLC is never emailed by Garbage AI (already a client) — nothing was sent.",
+    );
+
+    const preview = await previewBulkSend("garbage-ai");
+    expect(preview).toMatchObject({ willSend: 0, skipped: { neverPitch: 4 } });
+    expect(mail.messages).toHaveLength(0);
+    expect(await prisma.outreachRecipient.count()).toBe(0);
   });
 
   it("while held, refuses a single send and a bulk send, and the daily run emails nobody", async () => {

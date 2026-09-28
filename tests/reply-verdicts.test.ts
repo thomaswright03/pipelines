@@ -186,6 +186,7 @@ describe("the bulk preview counts every skip under the reason the send gives", (
     // them; the preview and the send both skip them for the reply.
     const preview = await previewBulkSend("dataleadsell");
     expect(preview.skipped).toEqual({
+      neverPitch: 0,
       suppressed: 1,
       replyNeedsLook: 1,
       alreadyAnswered: 2,

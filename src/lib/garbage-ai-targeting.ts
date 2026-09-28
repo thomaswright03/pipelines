@@ -61,6 +61,10 @@ export function isMountainHighCity(city: string, state: string): boolean {
 
 const CURRENT_CLIENTS = ["Mountain High Disposal", "Eastern Waste and Recycling", "Garden State Bin Cleaning"].map(normalize);
 
+// The same clients as they'd appear run together in an email domain
+// ("office@mountainhighdisposal.com").
+const CLIENT_DOMAIN_KEYS = ["mountainhigh", "easternwaste", "gardenstatebin"];
+
 // Matched as whole words in the normalized name. "WM" alone only when it
 // is the whole name or a word of its own ("WM of Arizona").
 const NATIONAL_HAULERS = [
@@ -99,5 +103,34 @@ export function haulerExclusion(candidate: { name: string; address: string | nul
     const match = candidate.address.match(/,\s*([^,]+?),\s*CO\b/i);
     if (match && AREA.has(normalize(match[1]!))) return "in Mountain High's service area";
   }
+  return null;
+}
+
+/**
+ * Why a saved hauler must never be emailed, or null when it may be — the
+ * send gate's last check (send.ts), so a hauler added or edited by hand is
+ * held to the same rules as a Yelp result. Beyond haulerExclusion it also
+ * looks at the company, the email's domain and the city.
+ */
+export function pitchExclusion(lead: {
+  name: string;
+  company: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+}): string | null {
+  for (const name of [lead.name, lead.company]) {
+    if (!name) continue;
+    const reason = haulerExclusion({ name, address: lead.address });
+    if (reason) return reason;
+  }
+  const domain =
+    lead.email
+      ?.split("@")[1]
+      ?.toLowerCase()
+      .replace(/[^a-z0-9]/g, "") ?? "";
+  if (CLIENT_DOMAIN_KEYS.some((key) => domain.includes(key))) return "already a client";
+  if (lead.city && lead.state && isMountainHighCity(lead.city, lead.state)) return "in Mountain High's service area";
   return null;
 }
