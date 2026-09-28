@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { INBOX_LIMIT, type InboxTab, type PipelineInbox } from "@/lib/outreach/inbox";
 import { formatDateTime } from "@/lib/time";
+import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { replySubject } from "@/lib/outreach/reply-send";
+import InboxReplyForm from "@/components/InboxReplyForm";
 
 const TAB_LABEL: Record<InboxTab, string> = { sent: "Sent", failed: "Failed", replied: "Replied" };
 
@@ -11,7 +14,7 @@ const TAB_HELP: Record<InboxTab, string> = {
   failed:
     "Sends that didn't get through: bounced, refused by the recipient's mail server, dropped mid-send so delivery can't be confirmed, or errored. Each address is listed once.",
   replied:
-    "Replies people wrote back, newest first, with how the app read each one. Out-of-office and other automatic replies aren't counted. Leads you marked replied by hand are here too.",
+    "Replies people wrote back, newest first, with how the app read each one. Out-of-office and other automatic replies aren't counted. Leads you marked replied by hand are here too. Reply sends your answer from the app, in the same email thread.",
 };
 
 const FAILURE_LABEL: Record<string, string> = {
@@ -32,7 +35,17 @@ const VERDICT: Record<string, { label: string; tone: string }> = {
 
 const PILL = "inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium";
 
-export default function PipelineInboxPage({ title, basePath, inbox }: { title: string; basePath: string; inbox: PipelineInbox }) {
+export default function PipelineInboxPage({
+  pipeline,
+  title,
+  basePath,
+  inbox,
+}: {
+  pipeline: PipelineId;
+  title: string;
+  basePath: string;
+  inbox: PipelineInbox;
+}) {
   const { tab, counts } = inbox;
   const rows = inbox[tab];
   return (
@@ -85,6 +98,18 @@ export default function PipelineInboxPage({ title, basePath, inbox }: { title: s
                       {r.subject && <span className="truncate font-medium">{r.subject}</span>}
                     </p>
                     {r.text && <p className="line-clamp-3 whitespace-pre-line break-words muted">{r.text}</p>}
+                    {r.ourReplyAt && r.ourReplyAt >= r.at && <p className="text-xs muted">You replied {formatDateTime(r.ourReplyAt)}</p>}
+                    {r.canReply && (
+                      <InboxReplyForm
+                        pipeline={pipeline}
+                        replyId={r.id}
+                        to={r.email}
+                        subject={replySubject(r.subject)}
+                        disabledReason={
+                          r.optedOut ? "Opted out: this address is on the do-not-email list, so you can't reply from here." : null
+                        }
+                      />
+                    )}
                   </div>
                 </Row>
               );

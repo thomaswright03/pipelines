@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 
 export default async function DataleadsellInboxPage({ searchParams }: PageProps<"/dataleadsell/inbox">) {
   const inbox = await getPipelineInbox("dataleadsell", parseInboxTab((await searchParams).tab));
-  return <PipelineInboxPage title="dataleadsell.com" basePath="/dataleadsell" inbox={inbox} />;
+  return <PipelineInboxPage pipeline="dataleadsell" title="dataleadsell.com" basePath="/dataleadsell" inbox={inbox} />;
 }

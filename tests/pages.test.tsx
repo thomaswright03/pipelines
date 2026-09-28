@@ -361,5 +361,6 @@ describe("the inbox pages", () => {
     expect(page.getByText("Interested")).toBeTruthy();
     expect(page.text).toContain("Sounds good, call me");
     expect(page.getByRole("link", { name: "Jane Agent" }).getAttribute("href")).toBe(`/dataleadsell/${lead.id}`);
+    expect(page.getByRole("button", { name: "Reply" })).toBeTruthy();
   });
 });

@@ -172,6 +172,28 @@ export async function sendOutreachEmail(from: string, to: string, subject: strin
   return { providerMessageId: info.messageId };
 }
 
+/**
+ * A reply the operator writes to someone who answered a pitch. It threads
+ * under their message (In-Reply-To/References name its Message-ID, when the
+ * reply Worker passed one on) and replies come back to the same inbox.
+ */
+export async function sendReplyEmail(
+  from: string,
+  to: string,
+  subject: string,
+  body: string,
+  inReplyTo: string | null,
+): Promise<{ providerMessageId: string }> {
+  if (outboundDisabledByEnvironment()) throw new OutboundDisabledError();
+  const headers: Record<string, string> = { "List-Unsubscribe": listUnsubscribeHeader(from) };
+  if (inReplyTo) {
+    headers["In-Reply-To"] = inReplyTo;
+    headers["References"] = inReplyTo;
+  }
+  const info = await getTransport().sendMail({ from, to, subject, text: body, replyTo: from, headers });
+  return { providerMessageId: info.messageId };
+}
+
 /** A configuration problem: nothing was sent. */
 export class MailConfigError extends Error {
   constructor(message: string) {

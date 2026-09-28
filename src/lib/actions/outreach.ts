@@ -26,6 +26,7 @@ import {
   type ActionResult,
 } from "@/lib/outreach/lead-actions";
 import { confirmAddress, deleteLead } from "@/lib/outreach/lead-edit";
+import { sendInboxReply } from "@/lib/outreach/reply-send";
 import { statusLabel } from "@/lib/lead-status";
 
 function refresh(pipeline: PipelineId, leadId?: string) {
@@ -141,6 +142,14 @@ export async function setStarredAction(pipeline: string, leadId: string, starred
 
 export async function setOurReplyAction(pipeline: string, leadId: string, replied: boolean): Promise<ActionResult> {
   return guarded("setOurReply", pipeline, leadId, (p) => setOurReply(p, leadId, Boolean(replied)));
+}
+
+export async function sendInboxReplyAction(pipeline: string, inboundReplyId: string, body: string): Promise<ActionResult> {
+  return guarded("sendInboxReply", pipeline, undefined, async (p) => {
+    const result = await sendInboxReply(p, String(inboundReplyId), String(body ?? ""));
+    revalidatePath(`${PIPELINE_BASE_PATH[p]}/inbox`);
+    return result;
+  });
 }
 
 export async function confirmColdCallAction(pipeline: string, leadId: string, outcome: string, notes: string): Promise<ActionResult> {

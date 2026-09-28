@@ -36,6 +36,12 @@ export type RepliedItem = LeadRef & {
   /** The classifier's verdict (reply-classifier.ts); "marked" for a lead marked replied by hand with no recorded reply. */
   verdict: string | null;
   at: Date;
+  /** When you last replied to the lead (from the Inbox, or marked by hand). */
+  ourReplyAt: Date | null;
+  /** The address is on the do-not-email list, so it can't be answered from here. */
+  optedOut: boolean;
+  /** A recorded reply that can be answered from the Inbox (not a lead only marked replied by hand). */
+  canReply: boolean;
 };
 
 export type PipelineInbox = {
@@ -46,12 +52,19 @@ export type PipelineInbox = {
   replied: RepliedItem[];
 };
 
-type LeadRow = { id: string; name: string; email: string | null; lastSendFailedAt: Date | null; lastSendFailure: string | null };
+type LeadRow = {
+  id: string;
+  name: string;
+  email: string | null;
+  lastSendFailedAt: Date | null;
+  lastSendFailure: string | null;
+  ourReplyAt: Date | null;
+};
 
 // The two pipelines keep leads and send logs in separate tables; this is
 // the little the inbox needs from each.
 function tables(pipelineId: PipelineId) {
-  const select = { id: true, name: true, email: true, lastSendFailedAt: true, lastSendFailure: true } as const;
+  const select = { id: true, name: true, email: true, lastSendFailedAt: true, lastSendFailure: true, ourReplyAt: true } as const;
   if (pipelineId === "dataleadsell") {
     return {
       countLogs: (where: Prisma.EmailSendLogWhereInput) => prisma.emailSendLog.count({ where }),
@@ -92,7 +105,7 @@ async function replyRows(pipelineId: PipelineId) {
 }
 
 /** The lead a reply belongs to in this pipeline, from its "pipeline:leadId" matches or its attach resolution. */
-function replyLeadId(pipelineId: PipelineId, reply: { matched: string[]; resolution: string | null }): string | null {
+export function replyLeadId(pipelineId: PipelineId, reply: { matched: string[]; resolution: string | null }): string | null {
   const hit = reply.matched.find((m) => m.startsWith(`${pipelineId}:`));
   if (hit) return hit.slice(pipelineId.length + 1);
   const attachedPrefix = `attached:${pipelineId}:`;
@@ -183,9 +196,18 @@ export async function getPipelineInbox(pipelineId: PipelineId, tab: InboxTab = "
     replyLeadIds.length ? t.findLeads({ id: { in: replyLeadIds } }) : Promise.resolve([]),
     allRepliedLeadIds(pipelineId),
   ]);
-  const replyLeadNames = new Map(replyLeads.map((l) => [l.id, l.name]));
+  const replyLeadsById = new Map(replyLeads.map((l) => [l.id, l]));
+  const markedLeads = await t.findLeadsFor({ repliedAt: { not: null }, id: { notIn: [...allReplyLeadIds] } }, INBOX_LIMIT);
+  const replyEmails = [...new Set(replies.map((r) => r.fromEmail.toLowerCase()))];
+  const optedOut = new Set(
+    (replyEmails.length
+      ? await prisma.suppressedEmail.findMany({ where: { email: { in: replyEmails } }, select: { email: true } })
+      : []
+    ).map((r) => r.email),
+  );
   const replied: RepliedItem[] = replies.map((r) => {
     const leadId = replyLeadId(pipelineId, r);
+    const lead = leadId ? replyLeadsById.get(leadId) : undefined;
     return {
       id: r.id,
       email: r.fromEmail,
@@ -194,10 +216,12 @@ export async function getPipelineInbox(pipelineId: PipelineId, tab: InboxTab = "
       verdict: r.verdict,
       at: r.receivedAt,
       leadId,
-      leadName: leadId ? (replyLeadNames.get(leadId) ?? null) : null,
+      leadName: lead?.name ?? null,
+      ourReplyAt: lead?.ourReplyAt ?? null,
+      optedOut: optedOut.has(r.fromEmail.toLowerCase()),
+      canReply: !!lead,
     };
   });
-  const markedLeads = await t.findLeadsFor({ repliedAt: { not: null }, id: { notIn: [...allReplyLeadIds] } }, INBOX_LIMIT);
   for (const lead of markedLeads) {
     replied.push({
       id: `marked:${lead.id}`,
@@ -208,6 +232,9 @@ export async function getPipelineInbox(pipelineId: PipelineId, tab: InboxTab = "
       at: lead.repliedAt!,
       leadId: lead.id,
       leadName: lead.name,
+      ourReplyAt: lead.ourReplyAt,
+      optedOut: false,
+      canReply: false,
     });
   }
   replied.sort((a, b) => b.at.getTime() - a.at.getTime());

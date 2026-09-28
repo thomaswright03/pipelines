@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 
 export default async function ColdOutreachInboxPage({ searchParams }: PageProps<"/vault-pipeline/inbox">) {
   const inbox = await getPipelineInbox("cold-outreach", parseInboxTab((await searchParams).tab));
-  return <PipelineInboxPage title="Cold Outreach" basePath="/vault-pipeline" inbox={inbox} />;
+  return <PipelineInboxPage pipeline="cold-outreach" title="Cold Outreach" basePath="/vault-pipeline" inbox={inbox} />;
 }
