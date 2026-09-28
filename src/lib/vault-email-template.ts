@@ -1,6 +1,8 @@
-// Ported verbatim from bizhub (The Vault)'s email-template.ts — this
-// pipeline is a copy of Vault's own outreach, same pitch, same identity.
-export const OUTREACH_MAILING_ADDRESS = "28 E 14 Street, Tempe, AZ 85281";
+// The Cold Outreach pitch (same copy as The Vault's own outreach). Used for
+// every send — single, bulk, the daily cron — and the preview on each lead's
+// page. CAN-SPAM requires the physical mailing address and the opt-out line.
+import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
+import { templateVersion } from "@/lib/email-template-version";
 
 export function buildOutreachEmail(businessName: string): { subject: string; body: string } {
   const subject = `I probably shouldn’t have sent this 😂`;
@@ -42,3 +44,6 @@ export function buildOutreachEmail(businessName: string): { subject: string; bod
   ].join("\n");
   return { subject, body };
 }
+
+/** Which wording a send used (stored with it); changes whenever the template's text does. */
+export const COLD_OUTREACH_TEMPLATE_VERSION = templateVersion("cold-outreach", [buildOutreachEmail("{business}")]);

@@ -7,26 +7,36 @@ const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/dataleadsell", label: "dataleadsell.com" },
   { href: "/vault-pipeline", label: "Cold Outreach" },
+  { href: "/replies", label: "Replies" },
+  { href: "/settings", label: "Settings" },
 ];
 
-export default function SiteNav() {
+/** `unmatchedReplies`: replies waiting to be matched to a lead, shown as a count on "Replies". */
+export default function SiteNav({ unmatchedReplies = 0 }: { unmatchedReplies?: number }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-wrap gap-1 text-sm">
+    <nav aria-label="Main" className="flex flex-wrap gap-1 text-sm lg:flex-nowrap">
       {LINKS.map(({ href, label }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
-            className={`rounded-md px-2.5 py-1.5 font-medium transition ${
+            aria-current={active ? "page" : undefined}
+            className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-2.5 py-1.5 font-medium transition sm:min-h-8 ${
               active
-                ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"
-                : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300"
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             }`}
           >
             {label}
+            {href === "/replies" && unmatchedReplies > 0 && (
+              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
+                {unmatchedReplies}
+                <span className="sr-only"> waiting to be matched</span>
+              </span>
+            )}
           </Link>
         );
       })}

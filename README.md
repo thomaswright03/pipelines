@@ -1,81 +1,152 @@
 # Pipelines
 
-Thomas Wright's internal dashboard for Wright AI Solutions' email/SMS outreach pipelines. This is **not** a
-multi-tenant product — there's one operator, gated by Vercel Deployment Protection (SSO), not an in-app
-login system.
+[![CI](https://github.com/thomaswright03/pipelines/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thomaswright03/pipelines/actions/workflows/ci.yml)
 
-Two pipelines live here today:
+Thomas Wright's internal dashboard for Wright AI Solutions' email outreach. One operator, no in-app login:
+access is gated by Vercel Deployment Protection (SSO). Two pipelines live here:
 
-- **dataleadsell.com** — finds real estate agents/brokers in Maricopa (AZ), Salt Lake and Utah (UT)
-  counties via Yelp and Arizona's ADRE license roster, finds an email for each, and pitches a Probate
-  Property Leads subscription.
-- **Cold Outreach** — Wright AI Solutions' own client-acquisition pipeline (a full copy of "The Vault"),
-  generic small-business outreach found via Yelp. Runs automatically once a day (see "Daily automation" on
-  its page) as well as on demand.
+- **dataleadsell.com** (`/dataleadsell`) finds real estate agents in Maricopa (AZ), Salt Lake and Utah (UT)
+  counties via Yelp and Arizona's ADRE license roster, finds each agent's own email address and pitches a
+  Probate Property Leads subscription.
+- **Cold Outreach** (`/vault-pipeline`) finds local businesses via Yelp and emails each one a single pitch,
+  automatically once a day.
 
-A third entry on the dashboard, **AI Lead Responder**, is a separate always-on service (SMS auto-replies
-for a different client) — it isn't code in this repo, just a link out to its own Vercel project.
+Each pipeline has a lead list, a call deck for phone follow-up and Stats. **Replies** (`/replies`) tracks
+inbound mail, **Settings** holds the kill switch, connections and the do-not-email list, and **Operator
+guide** (`/help`) is the runbook, with a glossary. To stop all outbound email without the app, set
+`OUTBOUND_EMAIL_DISABLED=1` in Vercel and redeploy ([docs/deployment.md](docs/deployment.md) → "Emergency
+stop").
+
+| Document | For | What's in it |
+| --- | --- | --- |
+| [docs/operator.md](docs/operator.md) | The operator and support | What each screen shows, what a reply does, the daily run |
+| [docs/outreach-safety.md](docs/outreach-safety.md) | Developers | Every rule that keeps a send safe (one pitch per address, opt-outs, replies that need a look, kill switch) |
+| [docs/deployment.md](docs/deployment.md) | Developer and owner | Deploying, schema changes, the reply Worker contract, Connections, **owner-only setup** |
+| [docs/testing.md](docs/testing.md) | Developers | The test suites, coverage floors, browser tests and CI |
+| [docs/measuring-rules.md](docs/measuring-rules.md) | Developers | How the reply and address heuristics are scored, and how to add real replies |
+
+## Architecture
+
+```
+Browser (operator) ──► Next.js pages (src/app) ──► server actions (src/lib/actions)
+                                  │                          │
+Vercel Cron ──► /api/cron/*  ─────┤                          ▼
+Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach  ──► Postgres (Prisma)
+                                                        │      │
+                                                        │      └──► ZeptoMail SMTP (nodemailer)
+                                                        └──► Yelp API, ADRE roster, business websites
+```
+
+- **Request flow.** Pages are server components that read through `src/lib` and Prisma. Every change the
+  operator makes is a server action in `src/lib/actions/` (validation, then one call into
+  `src/lib/outreach/`). The rules live once in `src/lib/outreach/`: `send.ts` (every email goes through
+  it), `inbound.ts` + `reply-classifier.ts` + `auto-mail.ts` (replies, opt-outs, bounces),
+  `discovery.ts` + `site-evidence.ts` + `email-policy.ts` (finding addresses), `lead-actions.ts` and
+  `lead-edit.ts` (status moves, edits), `stale-contacts.ts` (the 7-day move), `pipelines.ts` (the two
+  pipelines' tables behind one interface).
+- **Routes that aren't pages.** `/api/cron/vault-daily` and `/api/cron/stale-contacts` (Vercel Cron,
+  `vercel.json`, Bearer `CRON_SECRET`); `/api/email-inbound` (the Cloudflare Email Worker in
+  `workers/email-inbound/`, Bearer `EMAIL_INBOUND_SECRET`); `/api/health`; `/api/contact-card/…` (vCard).
+  `src/proxy.ts` answers page requests with 503 while the database is down; `src/instrumentation.ts`
+  checks the environment at startup.
+- **Data stores.** One Postgres database (Neon in production), schema in `prisma/schema.prisma`,
+  migrations in `prisma/migrations/` (additive; see docs/deployment.md). Main tables: `Lead` and
+  `AgentLead` (one per pipeline) with their `…Activity` history and `…EmailSendLog` sends;
+  `OutreachRecipient` (the one-pitch-per-address ledger); `SuppressedEmail` (do-not-email list);
+  `InboundReply` (every inbound message and the rules' verdict); `OutreachCorrection` (operator
+  corrections); `PipelineRun` (cron runs); `AppSettings`, `PipelineSchedule`, `PipelineMeta`; ADRE and
+  city-rotation tables. Nothing else is stored: no cache, queue or file store (the Worker's retry queue
+  lives in Cloudflare).
+- **External services.** ZeptoMail (SMTP, sending), Cloudflare Email Routing + Worker (receiving),
+  Yelp Fusion (discovery), ADRE (public roster download), the businesses' own websites (address lookup),
+  Vercel (hosting, cron, SSO). Local development and CI use none of them: mail goes to an outbox or a local
+  catcher, and `fetch` is stubbed in tests.
+- **UI.** React 19 server components with small client components in `src/components/`, Tailwind v4.
+  English-only, with no translation layer (see "Known limitations").
 
 ## Running it locally
 
+You need Node 22 and PostgreSQL 16. Nothing in local development touches production data or sends real
+email.
+
+1. Create local databases. Run these as a Postgres superuser; on Linux that is usually `sudo -u postgres`.
+   The role and password below match `.env.example`, so change both together if you use different ones.
+
+   ```bash
+   createuser -s ci && psql -c "ALTER ROLE ci PASSWORD 'ci'"
+   createdb -O ci pipelines_dev
+   createdb -O ci pipelines_test
+   ```
+
+2. Install and configure: `npm install`, then `cp .env.example .env`. The defaults are safe: a local
+   database and `EMAIL_TRANSPORT=outbox`.
+
+3. Create the schema and start the app: `npx prisma migrate deploy`, then `npm run dev`. The app runs at
+   [http://localhost:4000](http://localhost:4000).
+
+**Where email goes locally.** With `EMAIL_TRANSPORT=outbox` (the default off Vercel), every "sent" email is
+written to `.outbox/*.eml` and nothing is delivered. To read the mail in a browser instead, run a local mail
+catcher such as [Mailpit](https://mailpit.axllent.org) with `EMAIL_TRANSPORT=smtp`, `SMTP_HOST=127.0.0.1`,
+`SMTP_PORT=1025`, and open http://localhost:8025. The header says where mail goes: **Test mode — emails are
+saved, not delivered**, **Mail captured locally (127.0.0.1:1025)**, or, in amber, **Mail sent via
+host:port** when `SMTP_HOST` is another machine that may deliver to real people. Never put the production
+ZeptoMail password in a local `.env`.
+
+**Discovery locally.** The search buttons call Yelp, which needs a real `YELP_API_KEY` and uses up real
+quota. Leave the key empty to work on everything else, and use **+ Add lead by hand**.
+
+**When the database is down,** every page shows "Can't reach the database right now" and a **Try again**
+button; page requests get HTTP 503 (`src/proxy.ts`, which reuses its probe for 5 s). `GET /api/health`
+answers `{"database":"ok"}` (200) or `{"database":"unreachable"}` (503) for an uptime monitor.
+
+## Tests and CI
+
 ```bash
-npm install
-cp .env.example .env   # fill in real values — see that file for what each one is for
-npx prisma migrate deploy
-npm run dev
+npm test               # vitest against a disposable local Postgres (TEST_DATABASE_URL)
+npm run test:coverage  # the same, with coverage floors
+npm run build && npm run test:e2e   # Playwright browser tests against the production build
+npm run lint && npm run format:check
 ```
 
-Open [http://localhost:3000](http://localhost:3000) (the `run` skill/launch config uses port 4000 instead —
-either works). The app validates required env vars at startup (`src/instrumentation.ts`) and refuses to
-start with a clear message naming whatever's missing, rather than failing deep inside Prisma or nodemailer.
-
-There's no separate local database — both local dev and the Vercel deployment point at the same Neon
-Postgres instance (see `.env.example`). There's no seed script; the two pipelines start empty and populate
-themselves via their own "Run pipeline" buttons.
-
-## Deploying
-
-Deployed via the Vercel CLI directly from local files (`vercel --prod`), not git-integrated — there's no
-GitHub remote for this repo. Production env vars are set with `vercel env add <NAME> production`, and
-`vercel.json` defines the two Vercel Cron jobs (see "Daily automation" below). After any `prisma/migrations`
-change, run `npx prisma migrate deploy` against the same `PIPELINES_DIRECT_URL` before deploying — the app
-doesn't run migrations itself at boot.
-
-## Daily automation
-
-Cold Outreach runs automatically once a day. The **time** it fires is fixed in `vercel.json` (`33 15 * * *`
-UTC = 8:33 AM Arizona time — Vercel's free plan can't reschedule cron jobs without a redeploy) — but
-**whether it runs at all, and how many leads it pulls per run**, are stored in the database and editable
-live from the Cold Outreach page itself, no redeploy needed.
+CI (`.github/workflows/ci.yml`, badge above) runs all of these on every push and pull request, with no
+secrets and no external services. Making its `CI / build-lint-test` check required before merging to `main`
+is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-only setup"). Details, the per-file coverage table and the browser tests are in
+[docs/testing.md](docs/testing.md); how the reply and address heuristics are scored is in
+[docs/measuring-rules.md](docs/measuring-rules.md).
 
 ## Known limitations
 
-- **Inbound reply detection is currently broken.** The Cloudflare Email Worker POSTs to
-  `/api/email-inbound` to record when a lead replies, but that route sits behind Vercel Deployment
-  Protection like every other route on this project — an external caller with no Vercel session gets
-  Vercel's own 401 page, before the route's own `EMAIL_INBOUND_SECRET` check ever runs. Fix: enable
-  "Protection Bypass for Automation" in Vercel's Project Settings → Deployment Protection, then have the
-  Worker send the resulting secret as an `x-vercel-protection-bypass` header. Not yet done. Until then,
-  replies and bounces have to be marked manually via the "Mark replied"/"Mark bounced" buttons on each
-  lead.
-- **No real bounce webhook.** ZeptoMail's SMTP relay doesn't hand back a provider-side message id the way
-  the previous provider (Resend) did, so there's nothing to correlate a bounce webhook against yet. "Mark
-  bounced" is the honest manual fallback.
-- **Email-finding is a low-accuracy heuristic, not a guarantee.** Neither Yelp nor Arizona's ADRE roster
-  gives a business's website, so `src/lib/website-finder.ts` guesses a handful of plausible domains from
-  the business's name and checks them directly (no search engine involved — those all either block
-  automated queries or require payment). Expect roughly 15–25% of scraped businesses to yield a real email,
-  not 100%.
-- **No automated test suite or CI.** There's no test framework installed and no `.github/workflows` — this
-  repo also isn't on GitHub yet. `npm run build` (which runs `tsc --noEmit` as part of the Next.js build)
-  is the only automated check today.
-- **Where the outreach data comes from is a business/legal question, not a code one.** Both pipelines
-  discover real people's names, phone numbers and (once found) emails via Yelp's API and Arizona's public
-  ADRE license roster, then email them without prior opt-in. Whether that's on solid legal footing under
-  CAN-SPAM (which governs *how* you can email people, not whether you can source their address this way) —
-  and what a lawful basis for this outreach actually is — hasn't been reviewed here. Flagged for the
-  business owner, not decided in code. (What CAN-SPAM does explicitly require — a physical mailing address
-  and a working opt-out — is handled: every outreach email includes the mailing address, says "reply STOP",
-  and a STOP reply is detected in `/api/email-inbound` and permanently suppresses that address across both
-  pipelines, checked before every future send. That enforcement is only reachable once the Deployment
-  Protection issue above is fixed — until then, nothing calls it in production.)
+- **The interface language is not decided.** The interface is English-only: the one operator and every
+  recipient are in the US, so strings are hard-coded in the components. That is the developer's
+  recommendation (recorded 2026-09-26); the owner has not confirmed it — see docs/deployment.md →
+  "Owner-only setup". Spanish/French would mean moving every string into a translation layer with full
+  catalogues, a persistent switcher and localised dates and numbers. Replies are separate: common Spanish,
+  French, German, Portuguese, Italian and Dutch opt-outs are honoured, and any other reply in another
+  language needs a look.
+- **Replies the rules can't read with confidence wait for the operator.** About a quarter (26%) of the
+  synthetic held-out replies land on "needs a look", and nothing is emailed to such an address until the
+  operator resolves it (docs/outreach-safety.md). A plain "no thanks" closes the lead and a "Thanks" /
+  "Got it" changes nothing, without the operator; both also stop further email to the address, and neither
+  is treated as an opt-out. The Replies page and the lead list show how many are waiting.
+- **Email finding is a heuristic.** Neither Yelp nor ADRE gives a business's website, so
+  `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly (no
+  search engine: those block automated queries or charge for them). A guessed site is only used when it
+  shows the lead's phone or street, or its city plus the lead's name in the page title, which trades yield
+  for not pitching the wrong business. Expect well under a quarter of results to yield a usable address.
+  For agents, an address on a brokerage's site is used only if it names the agent.
+- **No bounce webhook.** ZeptoMail's SMTP relay gives no message id a bounce notification could be matched
+  against. Bounce notices that reach the reply inbox are recorded automatically; any other bounce is marked
+  by hand with **Mark bounced**.
+- **Automatic-reply detection is a heuristic.** Headers are reliable; without them, subject and wording
+  decide. A reply worded like an out-of-office that also says yes or "interested" needs a look rather than
+  being filed as automatic; any other person's reply read as automatic is still in the lead's History, and
+  **Mark replied** records it.
+- **One-click unsubscribe (RFC 8058) is not offered.** Every pitch has a `mailto:` `List-Unsubscribe`
+  header; the HTTPS one-click form needs a public endpoint outside Vercel Deployment Protection (an owner
+  decision, docs/deployment.md).
+- **Where the outreach data comes from is a business/legal question, not a code one.** Both pipelines email
+  people found through Yelp's API and Arizona's public ADRE roster, without prior opt-in. What CAN-SPAM
+  explicitly requires is handled (a mailing address and a working opt-out in every email, opt-outs enforced
+  before every send); whether sourcing addresses this way has a sound lawful basis has not been reviewed.
+- `docs/archive/LEAD_GEN_PIPELINE_SPEC.md` is the historical spec the Cold Outreach pipeline was first built
+  from. It does not describe the current system.

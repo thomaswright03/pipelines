@@ -1,16 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-
 // Only fires if the root layout itself throws — replaces the entire
 // <html>, so it can't rely on layout.tsx's header/footer and has to repeat
 // the minimum (including the copyright line, which must appear on every
 // route with no exception).
-export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => {
-    console.error(error);
-  }, [error]);
-
+export default function GlobalError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
   return (
     <html lang="en">
       <body
@@ -28,11 +22,9 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         }}
       >
         <p style={{ fontSize: "1.125rem", fontWeight: 600 }}>Something went wrong.</p>
-        <p style={{ maxWidth: "24rem", fontSize: "0.875rem", color: "#71717a" }}>
-          That&apos;s on us, not you. Try again.
-        </p>
+        <p style={{ maxWidth: "24rem", fontSize: "0.875rem", color: "#71717a" }}>That&apos;s on us, not you. Try again.</p>
         <button
-          onClick={reset}
+          onClick={() => retry()}
           style={{
             marginTop: "8px",
             borderRadius: "8px",
@@ -47,7 +39,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         >
           Try again
         </button>
-        <footer style={{ marginTop: "24px", fontSize: "0.75rem", color: "#a1a1aa" }}>
+        <footer style={{ marginTop: "24px", fontSize: "0.75rem", color: "#52525b" }}>
           © {new Date().getFullYear()} Wright AI Solutions LLC
         </footer>
       </body>

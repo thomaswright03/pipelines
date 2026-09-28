@@ -2,18 +2,36 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
-  typecheck-and-lint:
+  build-lint-test:
     runs-on: ubuntu-latest
+
+    # A throwaway Postgres for the test suite. Tests never reach the real
+    # database, ZeptoMail, Yelp or any other network service: mail goes to
+    # a capturing transport and fetch is stubbed (see tests/setup.ts).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: pipelines_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d pipelines_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      # `prisma generate` (this project's postinstall) only needs this var
-      # to resolve, never an actual connection — CI never talks to a real
-      # database.
+      # `prisma generate` (postinstall) and `next build` only need this to
+      # resolve; neither connects. No real secrets are used anywhere in CI.
       PIPELINES_DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci"
+      TEST_DATABASE_URL: "postgresql://ci:ci@localhost:5432/pipelines_test"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,16 +40,69 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Skips the `prisma generate` postinstall step's need for a real
-      # database — it only reads prisma/schema.prisma, never connects.
       - run: npm ci
 
-      # `next build` runs the real TypeScript check itself — a bare `tsc
-      # --noEmit` misses Next's generated route types (LayoutProps etc.),
-      # which only exist after a build has run at least once. Confirmed
-      # this needs no real secrets, only the dummy PIPELINES_DIRECT_URL
-      # above — instrumentation.ts's env validation only runs when a
-      # server actually starts, not at build time.
+      # `next build` runs the TypeScript check (including Next's generated
+      # route types, which a bare `tsc --noEmit` wouldn't have yet).
       - run: npm run build
 
       - run: npm run lint
+
+      # Formatting is enforced: run `npm run format` locally before pushing.
+      - run: npm run format:check
+
+      # Applies prisma/migrations to the service database, runs every test
+      # file against it, and prints a coverage summary.
+      - run: npm run test:coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          node -e '
+            const summary = require("./coverage/coverage-summary.json");
+            const t = summary.total;
+            const rows = ["lines", "statements", "branches", "functions"].map((k) => `| ${k} | ${t[k].pct}% (${t[k].covered}/${t[k].total}) |`);
+            const areas = { "src/lib": "/src/lib/", "src/components": "/src/components/", "src/app (pages)": "/src/app/" };
+            const areaRows = Object.entries(areas).map(([label, dir]) => {
+              const files = Object.entries(summary).filter(([f]) => f.includes(dir)).map(([, v]) => v.lines);
+              const covered = files.reduce((n, l) => n + l.covered, 0);
+              const total = files.reduce((n, l) => n + l.total, 0);
+              return `| ${label} | ${total ? ((100 * covered) / total).toFixed(1) : "0"}% (${covered}/${total}) |`;
+            });
+            console.log(["### Unit/integration test coverage (src/)", "", "| Metric | Covered |", "| --- | --- |", ...rows, "", "| Lines by area | Covered |", "| --- | --- |", ...areaRows].join("\n"));
+          ' >> "$GITHUB_STEP_SUMMARY"
+
+      # The reply classifier's outcomes (unsafe, needs a look, handled
+      # automatically) and precision/recall of the other heuristics
+      # (automatic replies, bounces, brokerage addresses, guessed sites) on
+      # the development and held-out splits in tests/corpus/ (also part of
+      # the run above, where an unsafe outcome or a drop below any floor
+      # fails the build).
+      - name: Heuristic scores
+        if: always()
+        run: |
+          npx vitest run tests/heuristics-eval.test.ts --reporter=basic 2>&1 | tee eval.log
+          {
+            echo "### Heuristics on the labelled sets (quote the held-out split)"
+            echo
+            grep -E "precision|miss:|Real replies|Reply outcomes|UNSAFE|held, not suppressed|interest missed" eval.log | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Browser smoke tests against the production build: single send, bulk
+      # send with Stop, pause/resume, lead form validation, editing and
+      # deleting a lead, attaching an unmatched reply, confirm-dialog focus,
+      # tab titles, the lead list at phone-to-desktop widths, the one-row
+      # desktop header and the do-not-email list at 375px. Mail goes
+      # to a local outbox; the app uses a separate local database.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          E2E_DATABASE_URL: "postgresql://ci:ci@localhost:5432/pipelines_e2e"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

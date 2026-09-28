@@ -1,0 +1,77 @@
+// Data every lead page needs besides the lead itself: its address's
+// do-not-email entry, what the send ledger knows about it, whether outbound
+// email is paused, and the latest reply (shown when it needs a look, said
+// no, or only said thanks).
+import { prisma } from "@/lib/db";
+import { getSuppression } from "@/lib/email-suppression";
+import { getAppSettings } from "@/lib/outreach/settings";
+import { formatDate, formatDateTime } from "@/lib/time";
+import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import type { LatestReply, LeadSuppression } from "@/components/LeadActions";
+
+export type LedgerNote = { tone: "warning" | "info"; text: string } | null;
+
+/**
+ * A send's SMTP call takes at most ~20 s (see send-email.ts timeouts), so a
+ * claim older than this never finished recording; a younger one is a send
+ * still in progress.
+ */
+const STALE_CLAIM_MS = 2 * 60_000;
+
+export async function loadLeadContext(pipeline: PipelineId, leadId: string, email: string | null, now: Date = new Date()) {
+  const [suppression, settings, ledger, reply] = await Promise.all([
+    email ? getSuppression(email) : null,
+    getAppSettings(),
+    email ? prisma.outreachRecipient.findMany({ where: { email: email.toLowerCase() } }) : [],
+    prisma.inboundReply.findFirst({
+      where: { matched: { has: `${pipeline}:${leadId}` }, kind: "reply" },
+      orderBy: { receivedAt: "desc" },
+      select: { text: true, subject: true, receivedAt: true, verdict: true },
+    }),
+  ]);
+  const latestReply: LatestReply | null = reply
+    ? { text: reply.text ?? reply.subject ?? "", receivedAt: formatDateTime(reply.receivedAt), verdict: reply.verdict }
+    : null;
+
+  const lead: LeadSuppression | null = suppression
+    ? {
+        source: suppression.source,
+        evidence: suppression.evidence,
+        reason: suppression.reason,
+        since: formatDate(suppression.createdAt),
+      }
+    : null;
+
+  let ledgerNote: LedgerNote = null;
+  const own = ledger.find((r) => r.pipeline === pipeline && r.leadId === leadId);
+  const other = ledger.find((r) => !(r.pipeline === pipeline && r.leadId === leadId));
+  if (own?.state === "unknown") {
+    ledgerNote = {
+      tone: "warning",
+      text: `The connection to the email service dropped while sending on ${formatDateTime(own.claimedAt)}, so it's unknown whether the email arrived. It won't be sent again automatically.`,
+    };
+  } else if (own?.state === "refused") {
+    // The lead's own block reason already says so.
+    ledgerNote = null;
+  } else if (!own && other?.state === "refused") {
+    ledgerNote = {
+      tone: "warning",
+      text: `The recipient's mail server refused this address on ${formatDate(other.claimedAt)}, so it won't be emailed.`,
+    };
+  } else if (own?.state === "claimed" && now.getTime() - own.claimedAt.getTime() < STALE_CLAIM_MS) {
+    // Most likely a send still in progress in another tab or a bulk run.
+    ledgerNote = { tone: "info", text: `A send to this address started at ${formatDateTime(own.claimedAt)} and is still in progress.` };
+  } else if (own?.state === "claimed") {
+    ledgerNote = {
+      tone: "warning",
+      text: `A send started on ${formatDateTime(own.claimedAt)} never finished recording. It is treated as sent, so this address won't be pitched again.`,
+    };
+  } else if (!own && other) {
+    ledgerNote = {
+      tone: "info",
+      text: `This address was already pitched ${other.pipeline === pipeline ? "via another lead in this pipeline" : `by the ${other.pipeline === "dataleadsell" ? "dataleadsell.com" : "Cold Outreach"} pipeline`} on ${formatDate(other.claimedAt)}.`,
+    };
+  }
+
+  return { suppression: lead, paused: settings.outboundPaused, ledgerNote, latestReply };
+}

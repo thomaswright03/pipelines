@@ -1,21 +1,19 @@
 "use server";
 
+import { failureMessage } from "@/lib/db-health";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { getPipelineMetaDefaults } from "@/lib/pipeline-meta-defaults";
+import { logError } from "@/lib/log";
 
 const metaSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  company: z.string().trim(),
-  productDescription: z.string().trim(),
-  pipelineDescription: z.string().trim(),
+  name: z.string().trim().min(1, "Pipeline name is required").max(80, "Pipeline name can be at most 80 characters"),
+  company: z.string().trim().max(160, "Company can be at most 160 characters"),
+  productDescription: z.string().trim().max(600, "Product description can be at most 600 characters"),
+  pipelineDescription: z.string().trim().max(600, "Pipeline description can be at most 600 characters"),
 });
 
-export async function updatePipelineMetaAction(
-  pipelineId: string,
-  formData: FormData,
-): Promise<{ error?: string }> {
+export async function updatePipelineMetaAction(pipelineId: string, formData: FormData): Promise<{ error?: string }> {
   const parsed = metaSchema.safeParse({
     name: String(formData.get("name") ?? ""),
     company: String(formData.get("company") ?? ""),
@@ -26,25 +24,17 @@ export async function updatePipelineMetaAction(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  await prisma.pipelineMeta.upsert({
-    where: { id: pipelineId },
-    create: { id: pipelineId, ...parsed.data },
-    update: parsed.data,
-  });
+  try {
+    await prisma.pipelineMeta.upsert({
+      where: { id: pipelineId },
+      create: { id: pipelineId, ...parsed.data },
+      update: parsed.data,
+    });
+  } catch (err) {
+    logError("action.updatePipelineMeta", err, { pipelineId });
+    return { error: failureMessage(err, "Couldn't save the card — nothing changed. Try again in a moment.") };
+  }
 
   revalidatePath("/");
   return {};
-}
-
-export async function getPipelineMeta(pipelineId: string) {
-  const row = await prisma.pipelineMeta.findUnique({ where: { id: pipelineId } });
-  if (row) {
-    return {
-      name: row.name,
-      company: row.company,
-      productDescription: row.productDescription,
-      pipelineDescription: row.pipelineDescription,
-    };
-  }
-  return getPipelineMetaDefaults(pipelineId);
 }

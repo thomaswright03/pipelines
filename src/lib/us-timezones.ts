@@ -3,7 +3,7 @@
 // majority of its population, since going more precise than that would
 // need a real city-level geocoding lookup. Good enough for "is it a
 // reasonable time to call this area code" during cold calling.
-export const STATE_TIMEZONES: Record<string, string> = {
+const STATE_TIMEZONES: Record<string, string> = {
   AL: "America/Chicago",
   AK: "America/Anchorage",
   AZ: "America/Phoenix", // no DST

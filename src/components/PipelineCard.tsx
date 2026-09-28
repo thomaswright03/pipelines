@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { updatePipelineMetaAction } from "@/lib/actions/pipeline-meta";
 import type { PipelineMetaFields } from "@/lib/pipeline-meta-defaults";
+import type { DashboardNumbers } from "@/lib/dashboard";
 
 type InternalProps = {
   kind: "internal";
   href: string;
+  numbers: DashboardNumbers;
 };
 
 type HostedProps = {
@@ -30,7 +32,12 @@ export default function PipelineCard({
   function save(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const result = await updatePipelineMetaAction(pipelineId, formData);
+      let result: { error?: string };
+      try {
+        result = await updatePipelineMetaAction(pipelineId, formData);
+      } catch {
+        result = { error: "Couldn't reach the server — nothing was saved. Try again." };
+      }
       if (result.error) {
         setError(result.error);
         return;
@@ -41,14 +48,21 @@ export default function PipelineCard({
   }
 
   return (
-    <div className="card card-hover flex flex-col gap-3 p-5">
+    <div className={rest.kind === "internal" ? "card card-hover flex flex-col gap-3 p-5" : "card flex flex-col gap-3 p-4 text-sm"}>
       {editing ? (
         <form action={save} className="flex flex-col gap-2">
-          <EditField label="Pipeline name" name="name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-          <EditField label="Company" name="company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+          <EditField label="Pipeline name" name="name" maxLength={80} value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
+          <EditField
+            label="Company"
+            name="company"
+            maxLength={160}
+            value={form.company}
+            onChange={(v) => setForm({ ...form, company: v })}
+          />
           <EditField
             label="Product description"
             name="productDescription"
+            maxLength={600}
             value={form.productDescription}
             onChange={(v) => setForm({ ...form, productDescription: v })}
             textarea
@@ -56,11 +70,12 @@ export default function PipelineCard({
           <EditField
             label="Pipeline description"
             name="pipelineDescription"
+            maxLength={600}
             value={form.pipelineDescription}
             onChange={(v) => setForm({ ...form, pipelineDescription: v })}
             textarea
           />
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          <div aria-live="polite">{error && <p className="notice-error">{error}</p>}</div>
           <div className="flex gap-2">
             <button type="submit" disabled={isPending} className="btn-primary">
               {isPending ? "Saving…" : "Save"}
@@ -86,18 +101,18 @@ export default function PipelineCard({
                 {meta.name.slice(0, 1).toUpperCase()}
               </span>
               <div>
-                <h2 className="font-semibold">{meta.name}</h2>
-                {meta.company && <p className="text-xs text-zinc-500">{meta.company}</p>}
+                <h2 className="break-words font-semibold">{meta.name}</h2>
+                {meta.company && <p className="text-xs muted">{meta.company}</p>}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {rest.kind === "hosted" && (
-                <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Always-on
+                // Not a health indicator: this app doesn't check the hosted service.
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  Runs separately
                 </span>
               )}
-              <button onClick={() => setEditing(true)} className="btn-ghost px-2 py-1 text-xs">
+              <button onClick={() => setEditing(true)} className="btn-ghost text-xs">
                 Edit
               </button>
             </div>
@@ -105,29 +120,38 @@ export default function PipelineCard({
 
           {meta.productDescription && (
             <div>
-              <div className="text-xs font-medium uppercase text-zinc-400">Product</div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">{meta.productDescription}</p>
+              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Product</div>
+              <p className="break-words text-sm muted">{meta.productDescription}</p>
             </div>
           )}
           {meta.pipelineDescription && (
             <div>
-              <div className="text-xs font-medium uppercase text-zinc-400">Pipeline</div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">{meta.pipelineDescription}</p>
+              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Pipeline</div>
+              <p className="break-words text-sm muted">{meta.pipelineDescription}</p>
             </div>
           )}
+          {rest.kind === "internal" && <KeyNumbers href={rest.href} numbers={rest.numbers} />}
         </>
       )}
 
       {!editing && (
         <div>
           {rest.kind === "internal" ? (
-            <Link href={rest.href} className="btn-primary">
-              Open pipeline
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href={rest.href} className="btn-primary">
+                Open pipeline
+              </Link>
+              <Link href={`${rest.href}/inbox`} className="btn-secondary">
+                Inbox
+              </Link>
+            </div>
           ) : (
-            <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-              View on Vercel ↗
-            </a>
+            <div className="flex flex-col items-start gap-1">
+              <p className="text-sm muted">Answers new GoHighLevel leads on its own — there is nothing to operate here.</p>
+              <a href={rest.dashboardUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost -ml-2 text-xs">
+                Check that it&apos;s running ↗
+              </a>
+            </div>
           )}
         </div>
       )}
@@ -141,22 +165,59 @@ function EditField({
   value,
   onChange,
   textarea,
+  maxLength,
 }: {
   label: string;
   name: string;
   value: string;
   onChange: (v: string) => void;
   textarea?: boolean;
+  maxLength: number;
 }) {
-  const className = "input";
   return (
-    <label className="flex flex-col gap-1 text-xs text-zinc-500">
+    <label className="field-label">
       {label}
       {textarea ? (
-        <textarea name={name} value={value} onChange={(e) => onChange(e.target.value)} rows={2} className={className} />
+        <textarea name={name} value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} rows={3} className="input" />
       ) : (
-        <input name={name} value={value} onChange={(e) => onChange(e.target.value)} className={className} />
+        <input name={name} value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} className="input" />
       )}
     </label>
+  );
+}
+
+/** What is waiting on the operator in this pipeline, each linking to where it's handled. */
+function KeyNumbers({ href, numbers }: { href: string; numbers: DashboardNumbers }) {
+  const items = [
+    { label: "Ready to email", value: numbers.readyToEmail, to: `${href}?status=new` },
+    { label: "Waiting on a reply", value: numbers.waitingOnReply, to: `${href}?status=contacted` },
+    { label: "Replied", value: numbers.replied, to: `${href}?status=responded` },
+    { label: "To call", value: numbers.onCallDeck, to: `${href}/cold-call` },
+  ];
+  return (
+    <div className="flex flex-col gap-2">
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
+            <dt className="text-xs muted">{item.label}</dt>
+            <dd>
+              <Link
+                href={item.to}
+                aria-label={`${item.label}: ${item.value.toLocaleString("en-US")}`}
+                className="text-lg font-semibold tabular-nums hover:underline"
+              >
+                {item.value.toLocaleString("en-US")}
+              </Link>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {numbers.needsALook > 0 && (
+        <p className="notice-warning">
+          {numbers.needsALook === 1 ? "1 reply needs" : `${numbers.needsALook.toLocaleString("en-US")} replies need`} a look — open the
+          pipeline to see {numbers.needsALook === 1 ? "it" : "them"}.
+        </p>
+      )}
+    </div>
   );
 }

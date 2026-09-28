@@ -1,37 +1,27 @@
-// Prisma schema for Pipelines — local host for email/SMS marketing pipelines.
-// Each pipeline that needs its own data gets its own model prefix
-// (AgentLead/AgentEmailLog/ScrapedAgentCity for dataleadsell) so pipelines
-// stay independent within this one shared database.
-//
-// Backed by Neon Postgres (not a local SQLite file) so the same data is
-// visible from both this Mac and the Vercel deployment — see .env for
-// which Neon database this points at.
+// Prisma schema for Pipelines — Wright AI Solutions' outreach dashboard.
+// Each pipeline keeps its own lead/send-log tables (AgentLead/EmailSendLog
+// for dataleadsell, Lead/LeadEmailSendLog for Cold Outreach) so their data
+// and stats stay independent; the rules that decide who gets emailed live
+// once, in src/lib/outreach/, and work against both.
 
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
 }
 
-// Postgres (Neon, via Vercel) instead of a local SQLite file — a deployed
-// serverless function has no persistent local disk, so this has to be a
-// real network database reachable from both this Mac and Vercel.
-//
-// Prisma 7 moved connection URLs out of the schema entirely — see
-// prisma.config.ts for PIPELINES_DATABASE_URL/PIPELINES_DIRECT_URL (deliberately
-// not the generic DATABASE_URL the Vercel Neon integration itself injects,
-// which points at "neondb", another project's (budget-app) database on
-// this same Neon store) and db.ts for the actual runtime connection, which
-// goes through Neon's driver adapter rather than this datasource block at
-// all.
+// Prisma 7 keeps connection URLs out of the schema: prisma.config.ts gives
+// the CLI PIPELINES_DIRECT_URL (migrations), and src/lib/db.ts connects the
+// running app with PIPELINES_DATABASE_URL — through Neon's driver for a
+// *.neon.tech host, or the standard `pg` driver for any other Postgres
+// (local development, CI).
 datasource db {
   provider = "postgresql"
 }
 
 // Editable copy for each dashboard card. Keyed by the pipeline id in
-// lib/pipelines.ts (technical wiring — cwd, ports, hrefs — stays in code,
-// only the human-facing description is editable). A pipeline with no row
-// here yet falls back to the defaults in lib/pipeline-meta-defaults.ts, so
-// nothing has to be pre-seeded.
+// lib/pipelines.ts (technical wiring stays in code, only the human-facing
+// description is editable). A pipeline with no row here falls back to the
+// defaults in lib/pipeline-meta-defaults.ts, so nothing has to be seeded.
 model PipelineMeta {
   id                  String   @id
   name                String
@@ -41,64 +31,256 @@ model PipelineMeta {
   updatedAt           DateTime @updatedAt
 }
 
-// A recipient who replied "STOP"/"unsubscribe" to any pipeline's outreach.
-// Checked before every send (both pipelines, plus the daily automated
-// run) — CAN-SPAM requires honoring an opt-out, and the outreach email
-// templates now promise one, so this is what makes that promise true
-// rather than just text nobody enforces.
+// Global switches that apply to every pipeline. A single row, id "global";
+// a missing row means the defaults below.
+model AppSettings {
+  id                        String    @id
+  // The outbound kill switch: while true, every send path (single, bulk,
+  // daily cron — both pipelines) refuses before touching SMTP.
+  outboundPaused            Boolean   @default(false)
+  pausedAt                  DateTime?
+  // Whether an address already pitched by one pipeline may be pitched by
+  // the other. Off by default: one cold pitch per inbox, full stop.
+  allowCrossPipelineRepeats Boolean   @default(false)
+  // The last send the email service refused or couldn't be reached for
+  // (any pipeline), shown in Settings → Connections next to the last
+  // successful send.
+  lastSendFailedAt          DateTime?
+  lastSendFailure           String?
+  // The last "Test connection" of the mail service (Settings → Connections):
+  // when, and why it failed (null when it passed).
+  mailTestedAt              DateTime?
+  mailTestError             String?
+  // The last time Yelp was asked anything (a search, a daily run or a
+  // "Test connection"): when, and why it failed (null when it answered).
+  yelpCheckedAt             DateTime?
+  yelpCheckError            String?
+  updatedAt                 DateTime  @updatedAt
+}
+
+// A recipient who asked not to be emailed. Checked before every send in
+// both pipelines — CAN-SPAM requires honoring an opt-out, and every
+// outreach email promises one.
 model SuppressedEmail {
-  email     String   @id
+  email     String   @id // always lower-case
   reason    String?
+  // Where it came from: "inbound_reply" (detected in /api/email-inbound)
+  // or "manual" (the "Mark opted out" button).
+  source    String?
+  // The words in the reply that were read as an opt-out, so a wrong
+  // classification is visible on the lead page and can be reversed there.
+  evidence  String?
   createdAt DateTime @default(now())
 }
 
-// Desired daily-automation schedule per pipeline, editable from that
-// pipeline's own page. This is the operator's "what I want it set to"
-// record, not the live trigger itself — the actual Vercel Cron fire time
-// lives in vercel.json (Vercel Hobby cron can't be changed without a
-// redeploy), so a change saved here takes effect once vercel.json is
-// updated to match and redeployed.
+// The send ledger: one row per address that has been given the first-touch
+// pitch by a pipeline. Written inside the same transaction that claims the
+// lead, before any SMTP call, so two overlapping sends can't both email the
+// same address and a crash after sending can never cause a second send.
+model OutreachRecipient {
+  id                String    @id @default(cuid())
+  pipeline          String // "dataleadsell" | "cold-outreach"
+  email             String // lower-case
+  leadId            String? // AgentLead.id or Lead.id, depending on pipeline
+  // claimed: reserved, SMTP call in flight (or the process died mid-send)
+  // sent: the provider accepted the message
+  // unknown: the connection dropped mid-send; delivery can't be confirmed
+  // refused: the recipient's mail server permanently refused the address
+  //          (e.g. 550 user unknown); kept so the address is never retried
+  state             String    @default("claimed")
+  claimedAt         DateTime  @default(now())
+  sentAt            DateTime?
+  providerMessageId String?
+  lastError         String?
+
+  @@unique([pipeline, email])
+  @@index([email])
+}
+
+// One row per automated (cron) run, so every run has a visible outcome on
+// the page — including runs that were skipped or failed.
+model PipelineRun {
+  id                String    @id @default(cuid())
+  pipeline          String // "cold-outreach" | "dataleadsell" | "all"
+  kind              String // "daily" | "stale-contacts"
+  status            String    @default("running") // running | succeeded | partial | failed | skipped
+  startedAt         DateTime  @default(now())
+  finishedAt        DateTime?
+  summary           String?
+  // Per-lead failure reasons, one per line.
+  errors            String?
+  // What a daily Cold Outreach run actually did, shown beside its settings:
+  // Yelp businesses checked, new leads saved with an address, emails sent.
+  businessesChecked Int?
+  leadsFound        Int?
+  emailsSent        Int?
+
+  @@index([pipeline, kind, startedAt])
+}
+
+// Every inbound reply the email Worker delivered, recorded in the same
+// transaction as its effects (reply time, status, opt-out). A re-delivery
+// of the same reply finds its row here and changes nothing again.
+model InboundReply {
+  id              String    @id @default(cuid())
+  // "mid:<Message-ID>" when the Worker sends one, otherwise
+  // "hash:<sha256 of sender, subject and body>" (matched within a window).
+  dedupeKey       String
+  fromEmail       String
+  subject         String?
+  optedOut        Boolean
+  // "pipeline:leadId" for each lead the reply was recorded on.
+  matched         String[]
+  // The replier's own words (quoted history and signature removed), so an
+  // unmatched reply can be read and attached to the right lead.
+  text            String?
+  receivedAt      DateTime  @default(now())
+  // Set when the operator attached an unmatched reply to a lead
+  // ("attached:<pipeline>:<leadId>"), marked its address opted out
+  // ("opted_out") or dismissed it ("dismissed").
+  resolvedAt      DateTime?
+  resolution      String?
+  // Set when the reply "needs a look": the rules weren't confident it is a
+  // positive reply or an opt-out (reply-classifier.ts). Its leads are
+  // flagged, and nothing is emailed to the address until the operator
+  // resolves it; the reason is one sentence for the lead page.
+  reviewReason    String?
+  // What kind of message this was: "reply" (a person wrote it),
+  // "auto_reply" (out-of-office/autoresponder — recorded in the lead's
+  // history only) or "bounce" (a delivery-failure notice — marks the
+  // failed recipient's send bounced). See src/lib/outreach/auto-mail.ts.
+  kind            String    @default("reply")
+  // Why it was read as an automatic reply or a bounce (header, subject,
+  // SMTP diagnostic), shown on the Replies page.
+  kindReason      String?
+  // For a bounce: the address that couldn't be delivered to, if named.
+  failedRecipient String?
+  // Which version of the reply and automatic-mail rules made the kind,
+  // opt-out and review verdicts above (see src/lib/outreach/rules-version.ts).
+  rulesVersion    String?
+  // For a reply a person wrote: the classifier's verdict — "opt_out",
+  // "positive", "declined", "acknowledged" or "needs_look". A "declined" or
+  // "acknowledged" reply holds every further email to fromEmail (send.ts)
+  // without asking the operator to look. Null for automatic replies and
+  // bounces.
+  verdict         String?
+
+  @@index([dedupeKey, receivedAt])
+  @@index([receivedAt])
+  @@index([fromEmail, verdict])
+}
+
+// An operator correcting one of the automatic heuristics — the production
+// signal for how often they get it wrong (shown on the Replies page):
+// opt_out_reversed  an auto-detected opt-out removed from the do-not-email list
+// opt_out_missed    "Mark opted out" on a lead whose reply wasn't read as one
+// wrong_address     "Mark bounced" on an address the lookup found (not typed in)
+// address_corrected a found address changed by hand before it was pitched
+// decline_reversed  a lead closed by a reply read as a plain no, reopened
+// courtesy_was_reply "Mark replied" on a lead whose reply was read as a thank-you
+model OutreachCorrection {
+  id           String   @id @default(cuid())
+  kind         String
+  pipeline     String?
+  leadId       String?
+  email        String?
+  // What the heuristic had decided (e.g. the opt-out trigger words).
+  detail       String?
+  // The version of the rules that made the corrected decision, when known.
+  rulesVersion String?
+  createdAt    DateTime @default(now())
+
+  @@index([kind, createdAt])
+}
+
+// Daily-automation settings per pipeline, editable from that pipeline's
+// page and read live by the cron route. The fire time itself is fixed in
+// vercel.json (see docs/operator.md "Daily automation").
 model PipelineSchedule {
   id        String   @id // pipeline id, e.g. "vault-pipeline"
   enabled   Boolean  @default(true)
-  hour      Int      @default(8) // local Arizona time (MST, UTC-7, no DST)
-  minute    Int      @default(33)
+  // The database still has unused "hour" and "minute" columns (the run time
+  // is in vercel.json); prisma/pending/drop_unused_columns drops them.
   leadCount Int      @default(30)
   updatedAt DateTime @updatedAt
 }
 
 // --- dataleadsell.com outreach pipeline ---
 // Sells Probate Property Leads subscriptions (by county) to real estate
-// agents. Same shape as Vault's own outreach pipeline (bizhub's Lead model)
-// — discover via Google Maps scrape, find contact info, email/SMS outreach,
-// track replies/bounces — just targeting real estate agents instead of
-// generic small businesses, and scoped to the counties dataleadsell.com
-// currently sells: Maricopa County AZ, Salt Lake County UT, Utah County UT.
+// agents in the counties dataleadsell.com sells: Maricopa County AZ, Salt
+// Lake County UT, Utah County UT. Agents come from Yelp and (for Maricopa)
+// Arizona's ADRE license roster.
 model AgentLead {
-  id           String    @id @default(cuid())
-  name         String
-  brokerage    String?
-  email        String?
-  phone        String?
-  address      String?
-  city         String? // the city the scrape query targeted
-  county       String? // Maricopa | Salt Lake | Utah
-  state        String?
-  website      String?
-  source       String?
-  status       String    @default("new") // new|contacted|responded|subscribed|not_interested|lost
-  starred      Boolean   @default(false)
-  emailCheckedAt DateTime? // set whenever a bulk/individual email lookup ran, found or not — lets a sweep skip leads already tried
-  lastEmailedAt DateTime?
-  lastTextedAt DateTime?
-  repliedAt    DateTime?
-  ourReplyAt   DateTime?
-  notes        String?
-  nextFollowUpDate DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  // The database still has unused "lastTextedAt" and "nextFollowUpDate"
+  // columns; prisma/pending/drop_unused_columns drops them.
+  id                  String    @id @default(cuid())
+  name                String
+  brokerage           String?
+  email               String? // lower-case
+  phone               String?
+  address             String?
+  city                String? // the city the discovery query targeted
+  county              String? // Maricopa | Salt Lake | Utah
+  state               String? // two-letter code
+  website             String?
+  source              String?
+  status              String    @default("new") // see src/lib/lead-status.ts
+  callOutcome         String? // last cold-call outcome, see src/lib/lead-status.ts
+  starred             Boolean   @default(false)
+  emailCheckedAt      DateTime? // set whenever an email lookup finished, found or not — lets a sweep skip leads already tried
+  // Set when a lookup couldn't reach the lead's website (timeout, 5xx…):
+  // the lead isn't counted as checked, and the sweep retries it later.
+  emailLookupFailedAt DateTime?
+  // Why the address is believed to be this lead's: the site it was found on
+  // showed the lead's phone/street/city, or it was entered by hand.
+  emailEvidence       String?
+  // Which version of the address and guessed-site rules accepted the
+  // address (null when it was entered or checked by hand).
+  emailRulesVersion   String?
+  // Set when this lead must never be auto-sent (e.g. its address is
+  // already held by another lead). Shown on the lead page.
+  sendBlockedReason   String?
+  // The latest send attempt that failed or was refused (cleared by a
+  // successful send), shown on the lead list and page. sendRefusalCount
+  // counts temporary refusals of this address by the recipient's mail
+  // server; after a few the address is treated as refused for good.
+  lastSendFailedAt    DateTime?
+  lastSendFailure     String?
+  sendRefusalCount    Int       @default(0)
+  lastEmailedAt       DateTime?
+  repliedAt           DateTime?
+  ourReplyAt          DateTime?
+  // A reply arrived while the lead was in a status a reply doesn't move it
+  // out of automatically (Lost, Not interested). Shown as "Replied — needs
+  // review" until the operator moves the lead or dismisses it.
+  replyNeedsReview    Boolean   @default(false)
+  // Why the reply needs a look, shown with the flag: it arrived while the
+  // lead was Lost / Not interested, or it may be asking not to be emailed.
+  replyReviewReason   String?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  emailLogs EmailSendLog[]
+  emailLogs  EmailSendLog[]
+  activities AgentLeadActivity[]
+
+  @@index([status])
+  @@index([email])
+}
+
+// Reply and call history for a dataleadsell lead, plus notes the operator
+// logs — the same as Cold Outreach's LeadActivity. Kept apart from the
+// lead's own Notes field, so automatically recorded history never counts
+// against the operator's notes limit.
+model AgentLeadActivity {
+  id     String    @id @default(cuid())
+  leadId String
+  lead   AgentLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type   String // call | email | meeting | note
+  notes  String
+  date   DateTime  @default(now())
+
+  @@index([leadId, date])
 }
 
 model EmailSendLog {
@@ -109,17 +291,20 @@ model EmailSendLog {
   sentAt            DateTime   @default(now())
   bounced           Boolean    @default(false)
   bouncedAt         DateTime?
-  // The sending provider's id for this specific send (currently just
-  // nodemailer's locally-generated Message-ID via ZeptoMail's SMTP relay —
-  // see send-email.ts for why that's not yet useful for bounce-webhook
-  // correlation the way it was with Resend's HTTP API). Bounces are marked
-  // via the manual "Mark bounced" button until a real webhook is wired up.
+  // nodemailer's Message-ID for this send. ZeptoMail's SMTP relay doesn't
+  // return its own tracking id, so bounces are recorded with the manual
+  // "Mark bounced" button rather than a webhook.
   providerMessageId String?    @unique
+  // The subject line as sent, and which version of the pitch's wording
+  // (src/lib/email-template-version.ts) — null for sends before these existed.
+  subject           String?
+  templateVersion   String?
+
+  @@index([leadId])
 }
 
-// Tracks which (city, county) targets the scraper has already covered, so
-// "Run pipeline" cycles through the county pool instead of re-scraping the
-// same city — same pattern as Vault's ScrapedCity.
+// Tracks which (city, county) targets the Yelp search has already covered,
+// so "Run pipeline" cycles through the county pool instead of repeating.
 model ScrapedAgentCity {
   id        String   @id @default(cuid())
   city      String
@@ -130,42 +315,87 @@ model ScrapedAgentCity {
   @@unique([city, county, state])
 }
 
-// --- Cold Outreach pipeline (Vault, ported as-is) ---
-// This is Vault's own client-acquisition pipeline (bizhub's Lead model and
-// stage machine), copied in full so it runs standalone here rather than
-// only being reachable by linking out to bizhub. Generic small-business
-// outreach for Wright AI Solutions, not scoped to a single product the way
-// dataleadsell is. See LEAD_GEN_PIPELINE_SPEC.md for the exact stage
-// transition rules this implements.
+// Arizona ADRE licensees (Maricopa County, active, real-estate category),
+// loaded once from ADRE's ~50 MB roster so "Import Maricopa agents" works
+// through them in roster order across many clicks — each licensee is
+// checked once, including the ones no email was found for — instead of
+// re-downloading the file and re-checking the same first rows every time.
+model AdreLicensee {
+  id             String    @id // ADRE license number when the roster has one, else a hash of name/type/address
+  county         String
+  position       Int // order in the roster, so processing order is stable
+  name           String
+  brokerage      String?
+  phone          String?
+  address        String?
+  city           String?
+  licenseType    String // Broker | Salesperson
+  checkedAt      DateTime?
+  // created | no_email | unverified_site | address_in_use | opted_out | existing_name | unreachable | error
+  outcome        String?
+  // Set when the licensee's website couldn't be reached; they stay
+  // unchecked and are tried again an hour later.
+  lookupFailedAt DateTime?
+  leadId         String?
+  loadedAt       DateTime  @default(now())
+
+  @@index([county, checkedAt, position])
+}
+
+// When each county's roster was last loaded into AdreLicensee.
+model AdreRoster {
+  county        String   @id
+  loadedAt      DateTime
+  licenseeCount Int
+}
+
+// --- Cold Outreach pipeline ---
+// Wright AI Solutions' own client acquisition: small businesses found via
+// Yelp, pitched by email, non-responders routed to a cold-call deck. Stage
+// transitions are defined in src/lib/lead-status.ts.
 model Lead {
-  id               String    @id @default(cuid())
-  name             String
-  company          String?
-  email            String?
-  phone            String?
-  address          String?
-  city             String? // the city the scrape query targeted, not parsed from address
-  state            String?
-  website          String?
-  source           String?
-  status           String    @default("new")
-  // new | contacted | responded | appointment_set | working_for | paying_client
-  // | cold_call_list | contactless_list | lost
-  callOutcome      String? // interested|not_interested|too_busy|no_answer|no_need|unable_to_contact
-  starred          Boolean   @default(false)
-  emailCheckedAt   DateTime? // set whenever a bulk/individual email lookup ran, found or not — lets a sweep skip leads already tried
-  lastEmailedAt    DateTime?
-  repliedAt        DateTime? // a REAL reply was detected (automated or manual override)
-  ourReplyAt       DateTime? // we replied back — always manual, never auto-set
-  estimatedValue   Float?
-  notes            String?
-  nextFollowUpDate DateTime?
-  appointmentAt    DateTime? // set when status moves to appointment_set
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  // The database still has unused "estimatedValue" (replaced by
+  // estimatedValueCents) and "nextFollowUpDate" columns;
+  // prisma/pending/drop_unused_columns drops them.
+  id                  String    @id @default(cuid())
+  name                String
+  company             String?
+  email               String? // lower-case
+  phone               String?
+  address             String?
+  city                String? // the city the discovery query targeted, not parsed from address
+  state               String? // two-letter code
+  website             String?
+  source              String?
+  status              String    @default("new") // see src/lib/lead-status.ts
+  callOutcome         String? // see src/lib/lead-status.ts
+  starred             Boolean   @default(false)
+  emailCheckedAt      DateTime? // set whenever an email lookup finished, found or not — lets a sweep skip leads already tried
+  emailLookupFailedAt DateTime? // see AgentLead.emailLookupFailedAt
+  emailEvidence       String? // see AgentLead.emailEvidence
+  emailRulesVersion   String? // see AgentLead.emailRulesVersion
+  // See AgentLead.sendBlockedReason.
+  sendBlockedReason   String?
+  lastSendFailedAt    DateTime? // see AgentLead.lastSendFailedAt
+  lastSendFailure     String?
+  sendRefusalCount    Int       @default(0)
+  lastEmailedAt       DateTime?
+  repliedAt           DateTime? // a real reply was detected (inbound webhook or "Mark replied")
+  ourReplyAt          DateTime? // we replied back — always manual
+  replyNeedsReview    Boolean   @default(false) // see AgentLead.replyNeedsReview
+  replyReviewReason   String? // see AgentLead.replyReviewReason
+  // Whole cents, so totals never pick up floating-point error.
+  estimatedValueCents Int?
+  notes               String?
+  appointmentAt       DateTime? // set when status moves to appointment_set
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   activities LeadActivity[]
   emailLogs  LeadEmailSendLog[]
+
+  @@index([status])
+  @@index([email])
 }
 
 model LeadActivity {
@@ -175,11 +405,13 @@ model LeadActivity {
   type   String // call | email | meeting | note
   notes  String
   date   DateTime @default(now())
+
+  @@index([leadId, date])
 }
 
-// One row per outreach send attempt for the Lead model — separate from
-// AgentLead's EmailSendLog above so each pipeline's send history and stats
-// stay independent, same as their other data.
+// One row per outreach send for the Lead model — separate from AgentLead's
+// EmailSendLog above so each pipeline's send history and stats stay
+// independent, same as their other data.
 model LeadEmailSendLog {
   id                String    @id @default(cuid())
   leadId            String?
@@ -190,11 +422,16 @@ model LeadEmailSendLog {
   bouncedAt         DateTime?
   // See EmailSendLog.providerMessageId above.
   providerMessageId String?   @unique
+  // See EmailSendLog.subject / templateVersion above.
+  subject           String?
+  templateVersion   String?
+
+  @@index([leadId])
 }
 
-// Tracks which "city, state" pairs the scraper has already used for the
-// Lead pipeline, so the random picker for the next scrape target never
-// repeats one until the whole pool is exhausted.
+// Tracks which "city, state" pairs the Yelp search has already used for the
+// Lead pipeline, so the random picker never repeats one until the whole
+// pool is exhausted.
 model ScrapedCity {
   id        String   @id @default(cuid())
   city      String

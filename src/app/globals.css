@@ -1,11 +1,28 @@
 @import "tailwindcss";
 
+/*
+ * Theme: follows the system setting unless the viewer picked Light or Dark
+ * in the header (stored in localStorage, applied to <html data-theme> by
+ * the inline script in layout.tsx before first paint).
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
 :root {
   --background: #f7f7fb;
   --foreground: #18181b;
   --accent: #6366f1;
   --accent-hover: #4f46e5;
   --accent-soft: #eef2ff;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -17,26 +34,51 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0a0c;
     --foreground: #f4f4f5;
     --accent: #818cf8;
     --accent-hover: #a5b4fc;
     --accent-soft: rgba(99, 102, 241, 0.14);
+    color-scheme: dark;
   }
 }
 
-* {
-  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+:root[data-theme="dark"] {
+  --background: #0a0a0c;
+  --foreground: #f4f4f5;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: rgba(99, 102, 241, 0.14);
+  color-scheme: dark;
+}
+
+/*
+ * Only interactive elements animate their hover and focus changes (buttons,
+ * inputs and cards get theirs from the component classes below); text,
+ * table rows and layout change instantly, so long lists and theme switches
+ * stay cheap.
+ */
+a,
+summary {
+  transition-property: color, background-color, border-color, text-decoration-color, box-shadow;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }
 
 body {
   background:
     radial-gradient(1200px 500px at 10% -10%, var(--accent-soft), transparent),
-    radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent),
-    var(--background);
+    radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent), var(--background);
   background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
@@ -47,7 +89,25 @@ body {
   color: white;
 }
 
+dialog::backdrop {
+  background: rgb(9 9 11 / 0.5);
+}
+
+/* Base shapes the component classes below build on. */
+@utility btn {
+  @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:min-h-9;
+}
+@utility notice {
+  @apply rounded-lg border px-3 py-2 text-sm;
+}
+
 /* --- Shared component classes, used across every pipeline page --- */
+/*
+ * Buttons and inputs are at least 44px tall on touch-sized screens (WCAG
+ * 2.5.5 target size) and compact from the sm breakpoint up. Muted text uses
+ * zinc-600/zinc-400 or darker so it keeps 4.5:1 contrast on the card and
+ * page backgrounds in both themes.
+ */
 @layer components {
   .card {
     @apply rounded-xl border border-zinc-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition dark:border-zinc-800 dark:bg-zinc-900/80;
@@ -57,27 +117,64 @@ body {
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-indigo-500 to-indigo-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm shadow-indigo-600/20 transition hover:from-indigo-400 hover:to-indigo-500 hover:shadow-md hover:shadow-indigo-600/30 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+    @apply btn bg-gradient-to-b from-indigo-500 to-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:from-indigo-400 hover:to-indigo-500 hover:shadow-md hover:shadow-indigo-600/30;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800;
+    @apply btn border border-zinc-300 bg-white text-zinc-800 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100;
+    @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100;
+  }
+  /* Destructive or irreversible actions (opt out, mark lost, bounce). */
+  .btn-danger {
+    @apply btn border border-red-300 bg-white text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-300 dark:hover:bg-red-950;
+  }
+  .btn-danger-solid {
+    @apply btn bg-red-600 text-white hover:bg-red-500;
   }
 
   .input {
-    @apply w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 shadow-sm transition placeholder:text-zinc-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100;
+    @apply min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 shadow-sm transition placeholder:text-zinc-500 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-1 focus:ring-offset-white dark:focus:border-indigo-400 dark:focus:ring-indigo-400 dark:focus:ring-offset-zinc-950 disabled:opacity-60 aria-[invalid=true]:border-red-500 aria-[invalid=true]:focus:ring-red-600 dark:aria-[invalid=true]:focus:ring-red-400 sm:min-h-9 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-400;
+  }
+
+  .field-label {
+    @apply flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300;
+  }
+  .field-error {
+    @apply text-xs font-normal text-red-700 dark:text-red-300;
+  }
+  .muted {
+    @apply text-zinc-600 dark:text-zinc-400;
   }
 
   .tab-active {
-    @apply rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 px-3 py-1 text-xs font-medium text-white shadow-sm shadow-indigo-600/30 transition;
+    @apply inline-flex min-h-11 items-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 px-3 py-1 text-xs font-medium text-white shadow-sm shadow-indigo-600/30 transition sm:min-h-7;
   }
   .tab-inactive {
-    @apply rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700;
+    @apply inline-flex min-h-11 items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-200 sm:min-h-7 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700;
   }
 
+  .notice-info {
+    @apply notice border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200;
+  }
+  .notice-success {
+    @apply notice border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200;
+  }
+  .notice-warning {
+    @apply notice border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200;
+  }
+  .notice-error {
+    @apply notice border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200;
+  }
+
+  /* Gradient headings, for fixed wording only: the gradient fills every
+     glyph, so an emoji in user-entered text would render as a solid blob. */
   .accent-text {
     @apply bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-300;
+  }
+  /* The same accent as a solid colour, for headings that show user-entered
+     text (a lead's name), so emoji keep their own colours. */
+  .accent-text-solid {
+    @apply text-indigo-700 dark:text-indigo-300;
   }
 }

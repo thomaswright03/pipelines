@@ -1,74 +1,91 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/db";
-import { textRequestsOptOut, suppressEmail } from "@/lib/email-suppression";
+import { z } from "zod";
+import { isAuthorizedBearer } from "@/lib/auth-header";
+import { logError, logWarn } from "@/lib/log";
+import { isDatabaseUnavailable } from "@/lib/db-health";
+import { handleInboundReply } from "@/lib/outreach/inbound";
 
 // Receives a parsed inbound email from the Cloudflare Email Worker that
-// catches replies sent to thomas@wright-ai-solutions.com (see
-// cloudflare-email-worker/ at the repo root for that Worker's source).
-// Cloudflare Email Routing has no built-in webhook of its own — the Worker
-// is what turns "someone replied" into an HTTP call here.
+// catches replies to the outreach sender address (the Worker lives outside
+// this repo). Cloudflare Email Routing has no webhook of its own — the
+// Worker turns "someone replied" into this authenticated POST.
 //
-// Both dataleadsell (AgentLead) and Cold Outreach (Lead) currently send
-// from the same address, so a reply's "From" is matched against both
-// tables — whichever one has a lead with that email gets marked replied,
-// the same way the manual "Mark replied" buttons do.
-const EXPECTED_AUTH = `Bearer ${process.env.EMAIL_INBOUND_SECRET}`;
+// Contract (docs/deployment.md → "Reply tracking"): every response carries `retry`.
+// 2xx: recorded (or already recorded — `duplicate: true`); don't resend.
+// 400 / 401: the request itself is wrong; resending won't help.
+// 503: nothing was recorded (e.g. the database is unreachable); the Worker
+// must resend the same payload with backoff. Recording is idempotent, so a
+// resend is always safe. The body is { error, code: "db_unavailable" |
+// "internal", retry: true } — the underlying cause goes to the server log
+// only.
+//
+// `headers` is optional: the message's headers as { name: value } (or
+// value[] for a repeated header). With them, automatic replies and bounce
+// notices are recognised by their standard headers (Auto-Submitted,
+// X-Autoreply, Precedence, X-Failed-Recipients…) rather than by wording.
+const inboundSchema = z.object({
+  from: z.string().trim().min(3).max(500),
+  subject: z.string().max(2_000).optional().nullable(),
+  text: z.string().max(200_000).optional().nullable(),
+  messageId: z.string().trim().max(1_000).optional().nullable(),
+  headers: z
+    .record(z.string().max(200), z.union([z.string().max(20_000), z.array(z.string().max(20_000)).max(50)]))
+    .refine((h) => Object.keys(h).length <= 300, "Too many headers")
+    .optional()
+    .nullable(),
+});
 
-type InboundEmail = { from: string; subject: string; text: string };
+const EXPECTED_BODY = "{ from, subject, text, messageId, headers }";
 
-function extractEmailAddress(from: string): string {
-  // Handles both "Jane Smith <jane@example.com>" and a bare "jane@example.com".
-  const match = from.match(/<([^>]+)>/);
-  return (match ? match[1] : from).trim().toLowerCase();
+/** What was wrong with a rejected payload, by field name only — never its content. */
+function describeIssues(error: z.ZodError): { fields: string[]; message: string } {
+  const problems = new Map<string, string>();
+  for (const issue of error.issues) {
+    const field = issue.path.length > 0 ? String(issue.path[0]) : "(body)";
+    if (problems.has(field)) continue;
+    const limit = "maximum" in issue ? ` (at most ${String(issue.maximum)}${issue.origin === "string" ? " characters" : ""})` : "";
+    const problem =
+      issue.code === "too_big"
+        ? `is too long${limit}`
+        : issue.code === "too_small"
+          ? "is empty or too short"
+          : `is invalid (${issue.message})`;
+    problems.set(field, `${field} ${problem}`);
+  }
+  return { fields: [...problems.keys()], message: `Rejected: ${[...problems.values()].join("; ")}. Expected ${EXPECTED_BODY}.` };
+}
+
+/** A 400 that is also logged, so a Worker dropping replies (a missed opt-out, perhaps) shows up in the server log. */
+function rejected(reason: string, message: string, context: Record<string, string>) {
+  logWarn("api.email-inbound", `Rejected an inbound reply: ${reason}`, context);
+  return Response.json({ error: message, retry: false }, { status: 400 });
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.EMAIL_INBOUND_SECRET || request.headers.get("authorization") !== EXPECTED_AUTH) {
-    return new Response("Unauthorized", { status: 401 });
+  if (!isAuthorizedBearer(request.headers.get("authorization"), process.env.EMAIL_INBOUND_SECRET)) {
+    return Response.json({ error: "Unauthorized", retry: false }, { status: 401 });
   }
 
-  const body = (await request.json()) as InboundEmail;
-  const fromEmail = extractEmailAddress(body.from);
-  if (!fromEmail) {
-    return new Response("No from address", { status: 400 });
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return rejected("body isn't JSON", `Body must be JSON: ${EXPECTED_BODY}`, {});
+  }
+  const parsed = inboundSchema.safeParse(payload);
+  if (!parsed.success) {
+    const { fields, message } = describeIssues(parsed.error);
+    return rejected("invalid fields", message, { fields: fields.join(",") });
   }
 
-  const notesStamp = `[Reply received ${new Date().toLocaleString()}]: ${body.subject}\n${body.text}`.trim();
-  const matched: string[] = [];
-
-  // CAN-SPAM requires honoring an opt-out — both email templates now say
-  // "reply STOP", so this is what actually makes that true: the sender
-  // goes on a permanent suppression list checked before every future send
-  // (see email-suppression.ts), on top of the normal reply handling below.
-  const optedOut = textRequestsOptOut(body.text);
-  if (optedOut) {
-    await suppressEmail(fromEmail, "Replied STOP/unsubscribe");
+  try {
+    return Response.json({ ...(await handleInboundReply(parsed.data)), retry: false });
+  } catch (err) {
+    const code = isDatabaseUnavailable(err) ? "db_unavailable" : "internal";
+    logError("api.email-inbound", err, { from: parsed.data.from, code });
+    return Response.json(
+      { error: "Couldn't record the reply — nothing was saved. Resend it.", code, retry: true },
+      { status: 503, headers: { "Retry-After": "60" } },
+    );
   }
-
-  const agentLead = await prisma.agentLead.findFirst({ where: { email: fromEmail, status: "contacted" } });
-  if (agentLead) {
-    await prisma.agentLead.update({
-      where: { id: agentLead.id },
-      data: {
-        repliedAt: new Date(),
-        status: optedOut ? "not_interested" : "responded",
-        notes: [agentLead.notes, notesStamp].filter(Boolean).join("\n\n"),
-      },
-    });
-    matched.push(`dataleadsell:${agentLead.id}`);
-  }
-
-  const lead = await prisma.lead.findFirst({ where: { email: fromEmail, status: "contacted" } });
-  if (lead) {
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { repliedAt: new Date(), status: optedOut ? "lost" : "responded" },
-    });
-    await prisma.leadActivity.create({
-      data: { leadId: lead.id, type: "email", notes: notesStamp },
-    });
-    matched.push(`cold-outreach:${lead.id}`);
-  }
-
-  return Response.json({ matched, optedOut });
 }

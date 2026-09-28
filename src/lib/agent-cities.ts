@@ -2,7 +2,7 @@
 // to (Maricopa County AZ, Salt Lake County UT, Utah County UT) — the scrape
 // pool for finding real estate agents to pitch a subscription to. Add a
 // county's cities here when dataleadsell.com adds that county as a plan.
-export type AgentCityTarget = { city: string; county: string; state: string };
+type AgentCityTarget = { city: string; county: string; state: string };
 
 export const AGENT_CITIES: AgentCityTarget[] = [
   // Maricopa County, AZ
@@ -60,4 +60,15 @@ export const AGENT_CITIES: AgentCityTarget[] = [
   { city: "Santaquin", county: "Utah", state: "UT" },
 ];
 
-export const AGENT_COUNTIES = [...new Set(AGENT_CITIES.map((c) => c.county))];
+/** The counties dataleadsell.com sells, with their state — the only valid choices anywhere a county is picked. */
+export const SOLD_COUNTIES: { county: string; state: string }[] = [
+  ...new Map(AGENT_CITIES.map((c) => [c.county, { county: c.county, state: c.state }])).values(),
+];
+
+export function stateForCounty(county: string): string | null {
+  return SOLD_COUNTIES.find((c) => c.county === county)?.state ?? null;
+}
+
+export function citiesInCounty(county: string): string[] {
+  return AGENT_CITIES.filter((c) => c.county === county).map((c) => c.city);
+}

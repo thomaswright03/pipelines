@@ -1,0 +1,30 @@
+# Reference configuration for the reply-tracking Email Worker
+# (src/index.ts). Copy to wrangler.toml, fill in the values, then:
+#
+#   npx wrangler queues create pipelines-inbound-retry
+#   npx wrangler secret put EMAIL_INBOUND_SECRET     # same value as the app's
+#   npx wrangler secret put VERCEL_BYPASS_SECRET     # Vercel "Protection Bypass for Automation"
+#   npx wrangler deploy
+#
+# Then, in Cloudflare → Email → Email Routing → Routes, send the outreach
+# sender address(es) to this Worker. See docs/deployment.md → "Reply tracking".
+
+name = "pipelines-email-inbound"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[vars]
+INBOUND_URL = "https://<your-production-domain>/api/email-inbound"
+# Optional: also forward every reply to this (verified) mailbox.
+# FORWARD_TO = "owner@example.com"
+
+[[queues.producers]]
+binding = "RETRY_QUEUE"
+queue = "pipelines-inbound-retry"
+
+[[queues.consumers]]
+queue = "pipelines-inbound-retry"
+max_batch_size = 10
+# 72 hours of resends at up to one an hour needs ~80 attempts; the Worker
+# itself stops (and logs an ALERT line) once 72 hours have passed.
+max_retries = 100
