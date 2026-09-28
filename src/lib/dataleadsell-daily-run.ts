@@ -10,7 +10,7 @@ import { pickNextAgentCity, markAgentCityUsed } from "@/lib/agent-city-picker";
 import { runDailyDiscoveryAndSend, UNSENT_DAILY, type DailyRunOptions } from "@/lib/outreach/daily-run";
 import type { RunOutcome } from "@/lib/outreach/runs";
 
-/** Kept small: the pipeline's sending domain is new and needs warming up. */
+/** Kept small so volume grows gradually and bounces stay low. */
 const DEFAULT_AGENTS_PER_RUN = 10;
 
 /** How many sendable agents the next daily run will email (it only sends the ones daily runs found). */
