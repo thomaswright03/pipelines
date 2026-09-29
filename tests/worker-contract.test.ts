@@ -134,6 +134,13 @@ describe("the Worker reads real MIME", () => {
     expect(payload).toMatchObject({ from: "someone@shop.test", text: "Café?\nYes", messageId: null });
   });
 
+  it("uses the envelope sender when the From header has no address in it", () => {
+    const withoutAddress = raw(["From: Mail Delivery System", "Subject: Undelivered", "", "It bounced."]);
+    expect(buildPayload(withoutAddress, "postmaster@shop.test").from).toBe("postmaster@shop.test");
+    // With no usable envelope sender either, the header is sent as-is (the app refuses it and the Worker logs that).
+    expect(buildPayload(withoutAddress, "").from).toBe("Mail Delivery System");
+  });
+
   it("shrinks an oversized payload for the retry queue, keeping the headers the app reads", () => {
     const big = { ...buildPayload(REPLY, "x@y.test"), text: "a".repeat(300_000) };
     big.headers = { ...big.headers, "Auto-Submitted": "auto-replied", "X-Junk": "b".repeat(20_000) };

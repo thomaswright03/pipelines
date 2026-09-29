@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isAuthorizedBearer } from "@/lib/auth-header";
 import { logError, logWarn } from "@/lib/log";
 import { isDatabaseUnavailable } from "@/lib/db-health";
-import { handleInboundReply } from "@/lib/outreach/inbound";
+import { extractEmailAddress, handleInboundReply } from "@/lib/outreach/inbound";
 
 // Receives a parsed inbound email from the Cloudflare Email Worker that
 // catches replies to the outreach sender address (the Worker lives outside
@@ -24,7 +24,12 @@ import { handleInboundReply } from "@/lib/outreach/inbound";
 // notices are recognised by their standard headers (Auto-Submitted,
 // X-Autoreply, Precedence, X-Failed-Recipients…) rather than by wording.
 const inboundSchema = z.object({
-  from: z.string().trim().min(3).max(500),
+  from: z
+    .string()
+    .trim()
+    .min(3)
+    .max(500)
+    .refine((from) => extractEmailAddress(from) !== null, "no email address in it, like name@example.com"),
   subject: z.string().max(2_000).optional().nullable(),
   text: z.string().max(200_000).optional().nullable(),
   messageId: z.string().trim().max(1_000).optional().nullable(),

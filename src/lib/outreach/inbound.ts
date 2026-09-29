@@ -106,19 +106,27 @@ const INBOUND_LOCK_NAMESPACE = 4243;
 const MAX_STORED_REPLY_CHARS = 2_000;
 const MAX_ATTEMPTS_PER_LEAD = 3;
 
-/** "Jane Smith <Jane@Example.com>" or "jane@example.com" → "jane@example.com". */
-function extractEmailAddress(from: string): string {
-  const match = from.match(/<([^>]+)>/);
-  return (match ? match[1]! : from).trim().toLowerCase();
+const ADDRESS_RE = /[a-z0-9._%+'!#$&*=?^`{|}~-]+@(?:[a-z0-9-]+\.)+[a-z]{2,}/i;
+
+/**
+ * The sender's address, lowercased: "Jane Smith <Jane@Example.com>",
+ * "jane@example.com" and "MAILER-DAEMON@mx.example.com (Mail Delivery
+ * System)" all give the address. Null when `from` holds no address at all
+ * (the route refuses such a message).
+ */
+export function extractEmailAddress(from: string): string | null {
+  const bracketed = from.match(/<([^<>]*)>/)?.[1] ?? "";
+  const match = ADDRESS_RE.exec(bracketed) ?? ADDRESS_RE.exec(from);
+  return match ? match[0].toLowerCase() : null;
 }
 
 /** The key a re-delivery of the same reply maps to. */
-function inboundDedupeKey(message: InboundEmail): string {
+function inboundDedupeKey(message: InboundEmail, fromEmail: string): string {
   const messageId = message.messageId?.trim().replace(/^<|>$/g, "");
   if (messageId) return `mid:${messageId}`;
   const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
   const digest = createHash("sha256")
-    .update([extractEmailAddress(message.from), normalize(message.subject), normalize(message.text)].join("\n"))
+    .update([fromEmail, normalize(message.subject), normalize(message.text)].join("\n"))
     .digest("hex");
   return `hash:${digest}`;
 }
@@ -129,8 +137,9 @@ const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL, GAR
 
 export async function handleInboundReply(message: InboundEmail, now: Date = new Date()): Promise<InboundResult> {
   const fromEmail = extractEmailAddress(message.from);
+  if (!fromEmail) throw new Error("handleInboundReply: `from` holds no email address (the route refuses these)");
   let classification = classifyReply({ subject: message.subject, text: message.text });
-  const dedupeKey = inboundDedupeKey(message);
+  const dedupeKey = inboundDedupeKey(message, fromEmail);
   // A bounce is recognised on the raw text (DSN fields sit below what the
   // reply classifier would keep); an opt-out always wins over "automatic".
   const bounce = classification.optOut ? null : detectBounce({ ...message, from: fromEmail }, OWN_DOMAINS);

@@ -95,7 +95,7 @@ same reply.
 | Status | Meaning | Worker must |
 |---|---|---|
 | `200` | Recorded, or already recorded (`"duplicate": true`) | Stop. |
-| `400` | The body isn't `{ from, subject, text, messageId, headers }`. The `error` names each failing field ("subject is too long (at most 2000 characters)"), and the app logs an `api.email-inbound` warning with the field names (never the content) | Not retry; log it. |
+| `400` | The body isn't `{ from, subject, text, messageId, headers }`, or `from` holds no email address (`"abc"`, `"Mail Delivery System"`). The `error` names each failing field ("subject is too long (at most 2000 characters)", "from is invalid (no email address in it…)"), and the app logs an `api.email-inbound` warning with the field names (never the content) | Not retry; log it. |
 | `401` | Wrong or missing token | Not retry; fix the secret. |
 | `503` (or any other 5xx, or no response) | Nothing was recorded. The body is `{ "error", "code", "retry": true }` with `code` `db_unavailable` (the database couldn't be reached) or `internal`; the cause is only in the server log | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
 
