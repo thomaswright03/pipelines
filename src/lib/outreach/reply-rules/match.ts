@@ -18,7 +18,7 @@ import { CONTACT_DETAIL_RE, INTEREST_SIGNALS, NEGATION_WORD_RE, NOT_A_NEGATION_R
 export type Found = { index: number; text: string; /** How to name it in a reason, when not by quoting `text`. */ label?: string };
 
 /** The first match of any of `patterns` in `text` that `accept` allows. */
-export function firstMatch(text: string, patterns: readonly RegExp[], accept: (m: Found) => boolean = () => true): Found | null {
+function firstMatch(text: string, patterns: readonly RegExp[], accept: (m: Found) => boolean = () => true): Found | null {
   let best: Found | null = null;
   for (const re of patterns) {
     const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
@@ -33,7 +33,7 @@ export function firstMatch(text: string, patterns: readonly RegExp[], accept: (m
 }
 
 /** Whether a positive signal at `index` is negated in its own clause ("not that interested"). */
-export function negatedInClause(text: string, index: number, ignore: RegExp | null): boolean {
+function negatedInClause(text: string, index: number, ignore: RegExp | null): boolean {
   const clause =
     text
       .slice(Math.max(0, index - 80), index)
@@ -67,7 +67,7 @@ export function showsClearInterest(text: string): boolean {
 }
 
 /** Whether the unsubscribe at `index` is asked about for later ("can I unsubscribe later if…?") rather than requested. */
-export function asksAboutStoppingLater(text: string, index: number, length: number): boolean {
+function asksAboutStoppingLater(text: string, index: number, length: number): boolean {
   const clause =
     text
       .slice(Math.max(0, index - 60), index)

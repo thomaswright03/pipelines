@@ -113,7 +113,7 @@ export async function updateHaulerAction(leadId: string, input: ColdOutreachLead
 
 // --- Discovery ---
 
-export type HaulerSearchState = { error?: string; message?: string };
+type HaulerSearchState = { error?: string; message?: string };
 
 // See vault-pipeline.ts: every lookup ends 45 s after the click.
 const RUN_TIME_BUDGET_MS = 45 * 1000;

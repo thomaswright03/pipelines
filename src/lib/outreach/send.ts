@@ -109,7 +109,7 @@ export async function findExistingPitch(
 }
 
 /** Why a reply from an address holds every send to it. */
-export type ReplyHold =
+type ReplyHold =
   /** A reply waiting for the operator: on a lead ("on Jane's page in Cold Outreach") or on the Replies page. */
   | { kind: "needs_look"; where: string }
   /** A plain no or a courtesy note: nothing more is sent, and nobody needs to look. */
@@ -121,7 +121,7 @@ export type ReplyHold =
  * page that matched no lead and needs a look, or a reply that said no or
  * only thanks (not dismissed from the Replies page).
  */
-export async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHold>> {
+async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHold>> {
   const holds = new Map<string, ReplyHold>();
   if (emails.length === 0) return holds;
   for (const pipeline of ALL_PIPELINES) {

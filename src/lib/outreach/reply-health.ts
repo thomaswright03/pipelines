@@ -13,7 +13,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** A week without any inbound message while emails are out is a warning. */
 export const REPLY_WATCH_WINDOW_DAYS = 7;
 /** Sends younger than this haven't had a fair chance of a reply yet. */
-export const REPLY_GRACE_DAYS = 2;
+const REPLY_GRACE_DAYS = 2;
 /**
  * This many pitches past the grace period without a single inbound message
  * after them — not even an out-of-office or a bounce — is a warning even
