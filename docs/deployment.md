@@ -113,13 +113,31 @@ to ZeptoMail while it is set (`src/lib/outbound-switch.ts`, tested in `tests/kil
 To stop sending:
 
 1. Vercel → the project → **Settings → Environment Variables** → **Add**: key `OUTBOUND_EMAIL_DISABLED`,
-   value `1`, environment **Production** → Save.
-2. **Deployments** → the current production deployment → **⋯ → Redeploy** (environment variables take
-   effect only in a new deployment; this takes a minute or two).
-3. Open the app: the header shows **Sending off (server)** and Settings says "Outbound email: off (server
-   setting)". A send in progress when the redeploy finishes is the last one.
+   value `1`, environment **Production** → Save. This alone changes nothing yet: a running deployment keeps
+   the environment it started with.
+2. **Deployments** → the current production deployment → **⋯ → Redeploy** (keep "Use existing Build Cache"
+   ticked; that makes it quicker). The redeploy usually finishes in **1–3 minutes**; the deployment's page
+   shows **Ready** when it has. Until then the old deployment keeps serving — and sending.
+3. Confirm it took effect: reload any page of the app. The header shows **Sending off (server)** (**Off** on
+   a phone) and Settings says "Outbound email: off (server setting)". If the header still shows no such pill,
+   the new deployment isn't live yet (check that the redeploy targeted Production and is **Ready**).
+4. Afterwards, the next daily run of each pipeline is recorded as **Skipped** ("Outbound email is switched
+   off on the server…") in the pipeline page's run history, and any send attempt answers "Outbound email is
+   switched off on the server (OUTBOUND_EMAIL_DISABLED is set) — nothing was sent."
 
-To send again, delete the variable (or set it to `0`) and redeploy. The Settings switch can't override it.
+**What can still go out during those minutes.** A bulk send runs from the operator's browser one email at
+a time: closing that tab stops it at once. The daily runs fire at the times in `vercel.json` (15:00, 15:33
+and 16:03 UTC); if one is due within the next few minutes, also do step 5.
+
+5. **Optional, immediate, no redeploy:** Vercel → the project → **Settings → Cron Jobs** → **Disable Cron
+   Jobs**. This takes effect at once and stops the daily runs (and the stale-contacts move) until they are
+   re-enabled; it doesn't stop single or bulk sends. For a stop that needs neither the app nor a redeploy,
+   delete (or regenerate) the SMTP password of the sending Mail Agent in ZeptoMail — every send then fails
+   with a login error and nothing is delivered, and a bulk send stops by itself after three failures in a
+   row. Undo both afterwards (a new SMTP password also has to go into `ZEPTOMAIL_SMTP_PASSWORD`).
+
+To send again, delete the variable (or set it to `0`) and redeploy the same way; the header pill disappears
+once the new deployment is live. The Settings switch can't override the variable.
 
 ## Settings → Connections
 

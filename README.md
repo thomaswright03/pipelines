@@ -14,8 +14,8 @@ access is gated by Vercel Deployment Protection (SSO). Two pipelines live here:
 Each pipeline has a lead list, a call deck for phone follow-up and Stats. **Replies** (`/replies`) tracks
 inbound mail, **Settings** holds the kill switch, connections and the do-not-email list, and **Operator
 guide** (`/help`) is the runbook, with a glossary. To stop all outbound email without the app, set
-`OUTBOUND_EMAIL_DISABLED=1` in Vercel and redeploy ([docs/deployment.md](docs/deployment.md) → "Emergency
-stop").
+`OUTBOUND_EMAIL_DISABLED=1` in Vercel and redeploy; it applies when the redeploy is live, usually within 1–3
+minutes ([docs/deployment.md](docs/deployment.md) → "Emergency stop" has the steps and how to confirm it).
 
 | Document | For | What's in it |
 | --- | --- | --- |

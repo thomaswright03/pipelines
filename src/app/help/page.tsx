@@ -62,8 +62,11 @@ export default function HelpPage() {
         <p>
           <strong>If the app itself won&apos;t load</strong> (or you can&apos;t sign in), stop sending from the hosting dashboard instead:
           in Vercel, open the project → <em>Settings</em> → <em>Environment Variables</em>, add <code>OUTBOUND_EMAIL_DISABLED</code> with
-          the value <code>1</code> for Production, then redeploy the latest deployment. Every send path refuses while it is set, and the
-          header shows <em>Sending off (server)</em>. Delete the variable and redeploy to turn sending back on.
+          the value <code>1</code> for Production, then redeploy the latest deployment. It takes effect when the redeploy finishes — usually
+          1–3 minutes — and until then email can still go out: close any tab that is running a bulk send. Reload the app to check: the
+          header shows <em>Sending off (server)</em> (<em>Off</em> on a phone) once it is in force. Delete the variable and redeploy to turn
+          sending back on. The full steps, including stopping the daily runs at once from Vercel&apos;s Cron Jobs settings, are in the
+          deployment guide&apos;s &ldquo;Emergency stop&rdquo;.
         </p>
       </Section>
 
