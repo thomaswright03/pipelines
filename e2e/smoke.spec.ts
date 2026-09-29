@@ -540,6 +540,26 @@ test("at 375px the header stays one row with every status pill showing, and the 
   await expect(status).toContainText("Test mode: mail saved, not sent.");
 });
 
+test("the dashboard's numbers line up in every row of tiles, at phone, tablet and desktop widths", async ({ page }) => {
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    // Each tile's number, with the top of the tile it sits in.
+    const numbers = await page
+      .locator("dl dd a[aria-label]")
+      .evaluateAll((links) =>
+        links.map((a) => ({
+          tileTop: Math.round(a.closest("div")!.getBoundingClientRect().top),
+          bottom: Math.round(a.getBoundingClientRect().bottom),
+        })),
+      );
+    expect(numbers.length, `${width}px`).toBeGreaterThanOrEqual(8);
+    const rows = new Map<number, Set<number>>();
+    for (const { tileTop, bottom } of numbers) rows.set(tileTop, (rows.get(tileTop) ?? new Set()).add(bottom));
+    for (const [top, bottoms] of rows) expect([...bottoms], `${width}px, tiles at y=${top}`).toHaveLength(1);
+  }
+});
+
 test("at 375px the do-not-email list shows each address whole, with its date, reason and a 44px Remove", async ({ page }) => {
   const long = "accounts.receivable.department@very-long-business-name-example.test";
   await withDb(async (db) => {

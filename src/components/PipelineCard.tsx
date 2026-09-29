@@ -198,7 +198,8 @@ function KeyNumbers({ href, numbers }: { href: string; numbers: DashboardNumbers
     <div className="flex flex-col gap-2">
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {items.map((item) => (
-          <div key={item.label} className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
+          // Tiles in a row stretch to the tallest; the number sits at the bottom, so a label that wraps doesn't lift its number.
+          <div key={item.label} className="flex flex-col justify-between gap-0.5 rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
             <dt className="text-xs muted">{item.label}</dt>
             <dd>
               <Link
