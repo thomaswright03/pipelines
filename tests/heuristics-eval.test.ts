@@ -20,7 +20,7 @@ import { REPLY_CORPUS, REPLY_DEV_OUTCOMES, REPLY_HELD_OUT, REPLY_UNLISTED_HELD_O
 import { ADDRESS_CORPUS, ADDRESS_HELD_OUT } from "./corpus/addresses";
 import { AUTO_REPLY_DEV, AUTO_REPLY_HELD_OUT, BOUNCE_DEV, BOUNCE_HELD_OUT } from "./corpus/auto-mail";
 import { REVIEW_DEV, REVIEW_HELD_OUT, REVIEW_UNLISTED_HELD_OUT } from "./corpus/review";
-import { REAL_REPLY_HELD_OUT, type ReplyOutcome } from "./corpus/real-replies";
+import { REAL_REPLY_DEV, REAL_REPLY_HELD_OUT, type ReplyOutcome } from "./corpus/real-replies";
 import { REPLY_HELD_OUT_R10 } from "./corpus/replies-held-out-r10";
 import { REPLY_HELD_OUT_R11 } from "./corpus/replies-held-out-r11";
 import { SITE_DEV, SITE_HELD_OUT } from "./corpus/sites";
@@ -102,7 +102,7 @@ function isUnsafe(intent: Intent, verdict: Verdict): boolean {
 }
 
 /** Scores one split of labelled replies on the app's outcomes, and prints it with every unsafe, missed or needs-a-look case. */
-function scoreReplies(name: string, cases: IntentCase[]): ReplySplitScore {
+function scoreReplies(name: string, cases: IntentCase[], provenance: "synthetic" | "real" = "synthetic"): ReplySplitScore {
   const result: ReplySplitScore = {
     name,
     total: cases.length,
@@ -152,7 +152,7 @@ function scoreReplies(name: string, cases: IntentCase[]): ReplySplitScore {
   const v = result.verdicts;
   console.log(
     [
-      `Reply outcomes [${name}, synthetic]: ${result.total} replies; unsafe ${result.unsafe.length}; ` +
+      `Reply outcomes [${name}, ${provenance}]: ${result.total} replies; unsafe ${result.unsafe.length}; ` +
         `needs a look ${rate(v.needs_look!, result.total)}; declined ${v.declined}, acknowledged ${v.acknowledged}; ` +
         `opt-outs suppressed automatically ${rate(result.autoOptOuts, result.optOuts)}; ` +
         `interested replies counted automatically ${rate(result.autoPositives, result.positives)}; ` +
@@ -229,22 +229,30 @@ describe("heuristics on the labelled evaluation sets", () => {
     );
   });
 
-  // Anonymised real replies (tests/corpus/real-replies.ts), scored on the
-  // three outcomes the app acts on. Until the owner supplies some, every
+  // Anonymised real replies (tests/corpus/real-replies.ts), a development
+  // and a held-out split, each scored and printed on its own with the same
+  // safety floor as the synthetic sets. Until the owner supplies some, every
   // score above is on synthetic cases only — the run says so.
-  it(`reply outcomes on real replies (${REAL_REPLY_HELD_OUT.length} held-out)`, () => {
-    if (REAL_REPLY_HELD_OUT.length === 0) {
+  it(`reply outcomes on real replies (${REAL_REPLY_DEV.length} dev, ${REAL_REPLY_HELD_OUT.length} held-out)`, () => {
+    for (const [name, cases] of [
+      ["real replies, dev", REAL_REPLY_DEV],
+      ["real replies, held-out", REAL_REPLY_HELD_OUT],
+    ] as const) {
+      const split = scoreReplies(
+        `${name}${cases.length > 0 && cases.length < 50 ? " (fewer than 50, read as indicative only)" : ""}`,
+        cases.map((c) => ({ text: c.text, subject: c.subject, intent: c.expected })),
+        "real",
+      );
+      expect(split.unsafe, `unsafe outcomes on the ${name} split`).toEqual([]);
+      expect(split.optOutsHeldOnly, `opt-outs read as a plain no or a thank-you on the ${name} split`).toEqual([]);
+      expect(split.positivesMissed, `interested replies read as a plain no or a thank-you on the ${name} split`).toEqual([]);
+    }
+    if (REAL_REPLY_DEV.length + REAL_REPLY_HELD_OUT.length === 0) {
       console.log(
-        "Real replies [held-out]: none yet — every reply score above is on SYNTHETIC cases written by the rules' author. " +
+        "Real replies: none yet — every reply score above is on SYNTHETIC cases written by the rules' author. " +
           "See docs/measuring-rules.md to add anonymised real replies.",
       );
-      return;
     }
-    const split = scoreReplies(
-      `real replies${REAL_REPLY_HELD_OUT.length < 50 ? " (fewer than 50, read as indicative only)" : ""}`,
-      REAL_REPLY_HELD_OUT.map((c) => ({ text: c.text, subject: c.subject, intent: c.expected })),
-    );
-    expect(split.unsafe, "unsafe outcomes on real replies").toEqual([]);
   });
 
   // Automatic replies: a false "automatic" hides a real reply (the lead
