@@ -545,14 +545,12 @@ test("the dashboard's numbers line up in every row of tiles, at phone, tablet an
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
     // Each tile's number, with the top of the tile it sits in.
-    const numbers = await page
-      .locator("dl dd a[aria-label]")
-      .evaluateAll((links) =>
-        links.map((a) => ({
-          tileTop: Math.round(a.closest("div")!.getBoundingClientRect().top),
-          bottom: Math.round(a.getBoundingClientRect().bottom),
-        })),
-      );
+    const numbers = await page.locator("dl dd a[aria-label]").evaluateAll((links) =>
+      links.map((a) => ({
+        tileTop: Math.round(a.closest("div")!.getBoundingClientRect().top),
+        bottom: Math.round(a.getBoundingClientRect().bottom),
+      })),
+    );
     expect(numbers.length, `${width}px`).toBeGreaterThanOrEqual(8);
     const rows = new Map<number, Set<number>>();
     for (const { tileTop, bottom } of numbers) rows.set(tileTop, (rows.get(tileTop) ?? new Set()).add(bottom));
