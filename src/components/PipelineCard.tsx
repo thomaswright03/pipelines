@@ -6,6 +6,7 @@ import Link from "next/link";
 import { updatePipelineMetaAction } from "@/lib/actions/pipeline-meta";
 import type { PipelineMetaFields } from "@/lib/pipeline-meta-defaults";
 import type { DashboardNumbers } from "@/lib/dashboard";
+import HowThisWorks from "@/components/HowThisWorks";
 
 type InternalProps = {
   kind: "internal";
@@ -118,19 +119,24 @@ export default function PipelineCard({
             </div>
           </div>
 
-          {meta.productDescription && (
-            <div>
-              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Product</div>
-              <p className="break-words text-sm muted">{meta.productDescription}</p>
-            </div>
-          )}
-          {meta.pipelineDescription && (
-            <div>
-              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Pipeline</div>
-              <p className="break-words text-sm muted">{meta.pipelineDescription}</p>
-            </div>
-          )}
+          {/* What needs doing first; what the pipeline is, for whoever wants it, behind a disclosure. */}
           {rest.kind === "internal" && <KeyNumbers href={rest.href} numbers={rest.numbers} />}
+          {(meta.productDescription || meta.pipelineDescription) && (
+            <HowThisWorks summary="About this pipeline">
+              {meta.productDescription && (
+                <p className="break-words">
+                  <strong className="font-medium text-zinc-700 dark:text-zinc-300">Product: </strong>
+                  {meta.productDescription}
+                </p>
+              )}
+              {meta.pipelineDescription && (
+                <p className="break-words">
+                  <strong className="font-medium text-zinc-700 dark:text-zinc-300">Pipeline: </strong>
+                  {meta.pipelineDescription}
+                </p>
+              )}
+            </HowThisWorks>
+          )}
         </>
       )}
 
