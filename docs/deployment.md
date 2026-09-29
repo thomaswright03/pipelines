@@ -151,6 +151,30 @@ the operator and names no settings; this table is for the developer they're told
 | Daily run, stale contacts | The last run succeeded and was less than 26 hours ago | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab |
 | Yelp search | The latest Yelp request (a search, a daily run or **Test connection**, which asks for one business) answered | "Yelp isn't set up" → `YELP_API_KEY` missing; "rejected our access key" → the key is wrong or revoked |
 
+## Post-deploy smoke check: the reply loop
+
+Run this after every production deploy that touches sending or replies, and once after the reply Worker is
+set up. It proves, with real traffic, that a pitch leaves, that a reply to it comes back through the Worker,
+and that the reply is recorded on the right lead. Anyone with access to the app can run it; it takes about
+five minutes.
+
+1. **Settings → Connections → Check the reply loop.** Enter an address you can read. Each address gets one
+   pitch ever, so use a fresh plus-address each time (`you+check7@gmail.com` reaches `you@gmail.com`).
+   Press **Send test pitch** and confirm. This creates a Cold Outreach lead called "Reply check" and sends
+   it the real Cold Outreach pitch through the live mail service. It is refused while sending is paused.
+2. **Reply** to that email from your inbox: "Yes, interested" to check the positive path, or "STOP" to
+   check the opt-out path.
+3. **Reload Settings** after a minute or two. The check shows **Passed** with when the reply was recorded,
+   how it was read and where the lead is now: **Responded** for "Yes, interested"; **Lost** for "STOP",
+   with the address on the do-not-email list. The lead page's History shows the reply, and the
+   **Sending email** and **Receiving replies** rows above show **Working** with the times of this traffic.
+4. If it still says "no reply has been recorded" 15 minutes after you replied, replies aren't reaching the
+   app: work through "Reply tracking: the email Worker" above (the usual cause is Vercel Deployment
+   Protection answering the Worker with 401 — the Worker's log shows it).
+5. **Clean up:** delete the "Reply check" lead from its page (a STOP check also leaves its plus-address on
+   the do-not-email list, which is harmless). While it exists it counts in Cold Outreach's numbers like any
+   lead, and after a week without a reply it moves to the call deck.
+
 ## Owner-only setup
 
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
@@ -197,7 +221,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
    make the `CI / build-lint-test` check required, so a pull request with a failing test, lint, format or
    build can't be merged. The repository can't show whether this is on; confirm it here once done.
 5. **Press Test connection** for email and Yelp in **Settings → Connections** after deploying, so each shows
-   "Working" from a real login/search rather than "Not confirmed yet".
+   "Working" from a real login/search rather than "Not confirmed yet", then run the reply-loop check
+   ("Post-deploy smoke check" above) once reply tracking is reachable (item 2).
 6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get the
    other pipeline's pitch. Leave it off (the default) or turn it on in Settings.
 7. **Lawful basis for the outreach.** This is a legal review, not a code change. See README → "Known limitations".

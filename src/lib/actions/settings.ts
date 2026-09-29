@@ -9,6 +9,7 @@ import { describeConnectionTestError, verifyMailTransport } from "@/lib/send-ema
 import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { formatDateTime } from "@/lib/time";
 import { addSuppression, removeSuppressionByEmail, type ActionResult } from "@/lib/outreach/lead-actions";
+import { startReplyCheck } from "@/lib/outreach/reply-check";
 
 export async function setOutboundPausedAction(paused: boolean): Promise<ActionResult> {
   try {
@@ -113,4 +114,23 @@ export async function testConnectionAction(service: "mail" | "yelp"): Promise<Ac
     }
   }
   return { ok: false, error: "Unknown service." };
+}
+
+/**
+ * Settings → Connections "Check the reply loop": sends the real Cold
+ * Outreach pitch to an address the operator controls (reply-check.ts).
+ */
+export async function startReplyCheckAction(email: string): Promise<ActionResult> {
+  try {
+    const result = await startReplyCheck(String(email ?? ""));
+    revalidatePath("/settings");
+    revalidatePath("/vault-pipeline", "layout");
+    return result.ok ? { ok: true, message: result.message } : { ok: false, error: result.error };
+  } catch (err) {
+    logError("action.startReplyCheck", err);
+    return {
+      ok: false,
+      error: failureMessage(err, "Something went wrong — check Cold Outreach before trying again, in case the pitch went out."),
+    };
+  }
 }

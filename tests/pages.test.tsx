@@ -352,6 +352,29 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect(pipeline.text).toContain("2 replies came from an address that isn't on any lead — 1 read as interested.");
   });
 
+  it("show the reply-loop check on Settings, with what came back", async () => {
+    const lead = await makeColdLead({
+      name: "Reply check",
+      email: "owner+c1@example.test",
+      source: "Reply check (Settings)",
+      status: "responded",
+      lastEmailedAt: new Date(),
+    });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "mid:check",
+        fromEmail: "owner+c1@example.test",
+        optedOut: false,
+        matched: [`cold-outreach:${lead.id}`],
+        verdict: "positive",
+      },
+    });
+    const settings = await renderPage(Settings(pageProps()));
+    expect(settings.getByRole("button", { name: "Send test pitch" })).toBeTruthy();
+    const check = settings.getByRole("list", { name: "Recent reply-loop checks" }).textContent ?? "";
+    expect(check).toMatch(/Passed\. Pitch sent .*; your reply was recorded .*, read as interested\. The lead is now Responded\./);
+  });
+
   it("show Settings with outbound email paused", async () => {
     await setOutboundPaused(true);
     const settings = await renderPage(Settings(pageProps()));

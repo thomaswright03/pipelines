@@ -7,6 +7,9 @@ import { getAppSettings } from "@/lib/outreach/settings";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { getConnectionStatus } from "@/lib/integration-status";
 import ConnectionStatusList from "@/components/ConnectionStatusList";
+import ReplyCheck, { type ReplyCheckRow } from "@/components/ReplyCheck";
+import { listReplyChecks, type ReplyCheckView } from "@/lib/outreach/reply-check";
+import { statusLabel } from "@/lib/lead-status";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -23,17 +26,48 @@ function whyText(s: { source: string | null; evidence: string | null; reason: st
   return s.reason ?? "—";
 }
 
+const READ_AS: Record<string, string> = {
+  opt_out: "an opt-out (the address is now on the do-not-email list)",
+  positive: "interested",
+  declined: "a plain no",
+  acknowledged: "a thank-you only",
+  needs_look: "needing a look",
+};
+
+function toReplyCheckRow(check: ReplyCheckView): ReplyCheckRow {
+  const reply = check.reply;
+  return {
+    leadId: check.leadId,
+    email: check.email,
+    state: check.state,
+    sentAt: check.sentAt ? formatDateTime(check.sentAt) : null,
+    status: statusLabel(check.status),
+    reply: reply
+      ? {
+          receivedAt: formatDateTime(reply.receivedAt),
+          readAs:
+            reply.kind === "reply"
+              ? (READ_AS[reply.verdict ?? ""] ?? "a reply")
+              : reply.kind === "bounce"
+                ? "a bounce (the address couldn't be delivered to)"
+                : "an automatic reply",
+        }
+      : null,
+  };
+}
+
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const raw = await searchParams;
   const q = first(raw.q).trim().slice(0, 100);
   const requestedPage = Math.max(1, Number.parseInt(first(raw.page), 10) || 1);
   const where = q ? { email: { contains: q.toLowerCase() } } : {};
 
-  const [settings, matching, suppressedCount, connections] = await Promise.all([
+  const [settings, matching, suppressedCount, connections, replyChecks] = await Promise.all([
     getAppSettings(),
     prisma.suppressedEmail.count({ where }),
     prisma.suppressedEmail.count(),
     getConnectionStatus(),
+    listReplyChecks(),
   ]);
   const pages = Math.max(1, Math.ceil(matching / DNE_PAGE_SIZE));
   const page = Math.min(requestedPage, pages);
@@ -76,6 +110,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </p>
         </div>
         <ConnectionStatusList items={connections} />
+        <ReplyCheck checks={replyChecks.map(toReplyCheckRow)} />
       </section>
 
       <section aria-labelledby="dne-heading" className="card flex flex-col gap-3 p-4">

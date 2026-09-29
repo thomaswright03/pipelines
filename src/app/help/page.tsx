@@ -161,6 +161,11 @@ export default function HelpPage() {
             replies, it turns green when the first reply arrives; mark replies by hand until then.
           </li>
           <li>
+            <strong>Check the reply loop</strong> (under the list) proves sending and replies together: enter an address you can read, press{" "}
+            <strong>Send test pitch</strong>, reply to the email, and reload Settings — it shows <em>Passed</em> once your reply is
+            recorded. Use a new address each time (you+check2@… works), and delete the &ldquo;Reply check&rdquo; lead afterwards.
+          </li>
+          <li>
             <strong>Check</strong> — something needs a look; the <em>Next step</em> line says what.
           </li>
           <li>
