@@ -236,12 +236,26 @@ export const REPLY_DEV_OUTCOMES: { text: string; subject?: string; expected: "op
   { text: "I'd appreciate it if you didn't email me again.", expected: "needs_look" },
   { text: "Kindly exclude me from future mailings.", expected: "needs_look" },
   { text: "I do not wish to be contacted.", expected: "needs_look" },
-  { text: "Please no further contact.", expected: "needs_look" },
   { text: "Put me on your do not contact list", expected: "needs_look" },
   { text: "Take this address off whatever list you bought.", expected: "needs_look" },
   { text: "cancel my subscription to these emails", expected: "needs_look" },
   { text: "Kindly desist from sending further emails.", expected: "needs_look" },
   { text: "Pls rmv", expected: "needs_look" },
+  // Round 12, from the review: formal stop requests are opt-outs (first
+  // "Please no further contact." was only held for a look), and "Please do"
+  // followed by "not" is never a yes.
+  { text: "Please no further contact.", expected: "opt_out" },
+  { text: "Please do not send any further correspondence.", expected: "opt_out" },
+  { text: "Do not send further correspondence.", expected: "opt_out" },
+  { text: "No further correspondence please.", expected: "opt_out" },
+  { text: "No further emails, please.", expected: "opt_out" },
+  { text: "Please cease all correspondence.", expected: "opt_out" },
+  { text: "Kindly discontinue all communications with this office.", expected: "opt_out" },
+  { text: "Please do not contact me further.", expected: "opt_out" },
+  { text: "I request no further contact from your company.\n\nRegards,\nP. Alvarez", expected: "opt_out" },
+  { text: "Please do not.", expected: "needs_look" },
+  { text: "Please do not send any further correspondence. What does it cost, though?", expected: "needs_look" },
+  { text: "Please do! Send the details.", expected: "positive" },
 ];
 
 // --- Held-out split ------------------------------------------------------

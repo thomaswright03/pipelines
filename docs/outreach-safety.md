@@ -55,7 +55,8 @@ the bulk send, and the daily cron.
   the last three all **hold every further email to the address** (single send, bulk send, daily run, in
   either pipeline):
   - **Opt-out**: an explicit request not to be emailed ("STOP", "Unsubscribe", "Remove me", "Please stop
-    emailing me", "take me off your list", common Spanish, French, German, Portuguese, Italian and Dutch
+    emailing me", "take me off your list", formal ones such as "Please do not send any further
+    correspondence" and "Cease all correspondence", common Spanish, French, German, Portuguese, Italian and Dutch
     phrasings) with nothing else in the reply that sounds interested. The address goes on the do-not-email
     list at once, every send checks that list, and a lead we were working moves to Lost (Not interested in
     dataleadsell). The words that triggered it are shown on the lead page, and a wrong opt-out can be
@@ -76,7 +77,7 @@ the bulk send, and the daily cron.
     reply after all (recorded as a correction).
   - **Needs a look**: everything else — a stop request that also sounds interested ("Stop! This is exactly
     what I need. Call me."), a request that names only calls or texts, words that *may* be asking not to be
-    emailed ("Kindly exclude me from future mailings", "no further contact", "Pls rmv"), a complaint
+    emailed ("Kindly exclude me from future mailings", "I never signed up for this", "Pls rmv"), a complaint
     ("wrong person", "who is this?", "spam"), a no mixed with interest, a hedge ("Thanks, I guess?"),
     another language, or nothing recognisable. Every lead with that address, in either pipeline, is flagged
     **Reply needs a look**; the reply doesn't count as a reply or as an opt-out; a Contacted lead stays off

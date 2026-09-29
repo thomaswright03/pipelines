@@ -57,6 +57,8 @@ export const FILLER_RE =
 const ME = String.raw`(?:me|us|this\s+(?:e-?mail\s+)?(?:address|account|e-?mail))`;
 const CONTACT_VERB = String.raw`(?:e-?mail|contact|message|text|write\s+to|reach\s+out\s+to|send\s+(?:me|us)\s+(?:any\s*more\s+|more\s+)?(?:e-?mails?|messages?|anything|stuff))`;
 const NEG = String.raw`(?:do\s+not|don'?t|dont|never|please\s+don'?t)`;
+// What a formal stop request asks to end: "no further correspondence", "cease all communications".
+const CORRESPONDENCE = String.raw`(?:e-?mails?|e-?mailing|messages?|contact|correspondence|communications?|mailings?|solicitations?|outreach)`;
 const LIST = String.raw`(?:(?:your|the|this|all|any|every|ur)\s+)?(?:(?:e-?mail(?:ing)?|mailing|contact|distribution|marketing|call)\s+)?lists?`;
 
 // Explicit requests anywhere in the new text.
@@ -74,7 +76,7 @@ export const STOP_REQUESTS: RegExp[] = [
   /\b(?:stop|quit|cease)\s+(?:e-?mailing|contacting|messaging|spamming|texting|calling|sending(?:\s+me)?(?:\s+(?:e-?mails?|these|this|messages?))?|writing\s+to|reaching\s+out)\b/i,
   // "don't email me", "do not contact us", "don't reach out to me again", "don't send me emails"
   new RegExp(
-    String.raw`\b${NEG}\s+(?:ever\s+)?${CONTACT_VERB}(?:\s+${ME})?(?=\s+(?:again|anymore|any\s+more|ever)\b|\s*[.!,;]|\s*$)`,
+    String.raw`\b${NEG}\s+(?:ever\s+)?${CONTACT_VERB}(?:\s+${ME})?(?=\s+(?:again|anymore|any\s+more|ever|further)\b|\s*[.!,;]|\s*$)`,
     "im",
   ),
   new RegExp(
@@ -82,13 +84,17 @@ export const STOP_REQUESTS: RegExp[] = [
     "i",
   ),
   new RegExp(String.raw`\b${NEG}\s+(?:e-?mail|contact|message|reach\s+out|write)\s+(?:again|anymore|any\s+more)\b`, "i"),
-  /\bno\s+more\s+(?:e-?mails?|messages?|contact)\b/i,
+  // "No more emails", "no further correspondence please", "I request no further contact".
+  new RegExp(String.raw`\bno\s+(?:more|further)\s+${CORRESPONDENCE}\b`, "i"),
   // "do not send further emails", "don't send me anything else"
   new RegExp(
     String.raw`\b${NEG}\s+send\s+(?:(?:me|us)\s+)?(?:any\s*(?:more|thing)|further|more|other|anything(?:\s+else)?)(?:\s+(?:e-?mails?|messages?|stuff))?(?=\s*[.!,;]|\s*$|\s+(?:e-?mails?|messages?|again|to\s+(?:me|us|this)))`,
     "im",
   ),
-  // "delete my email", "lose my address", "forget this email address", "scrub my email from your list"
+  // "Please do not send any further correspondence", "don't send us more communications"
+  new RegExp(String.raw`\b${NEG}\s+send\s+(?:(?:me|us)\s+)?(?:any\s+)?(?:further|more|additional)\s+${CORRESPONDENCE}\b`, "i"),
+  // "Cease all correspondence", "please discontinue all contact", "stop all further emails"
+  new RegExp(String.raw`\b(?:cease|discontinue|halt|stop)\s+(?:all|any)\s+(?:further\s+)?${CORRESPONDENCE}\b`, "i"),
   // "delete my email", "lose my address", "lose my number", "forget this email address", "scrub my email from your list"
   /\b(?:delete|erase|purge|lose|forget|scrub|drop)\s+(?:my|our|this)\s+(?:e-?mail(?:\s+address)?|address|info(?:rmation)?|contact(?:\s+(?:info|details))?|details|data|(?:(?:phone|cell|mobile)\s+)?number)\b(?!\s+(?:from\s+last|for\s+now|in(?:to)?\s|on\s|to\s))/i,
   /\b(?:delete|erase|scrub|drop)\s+(?:me|us)\s+from\b/i,
