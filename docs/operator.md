@@ -99,7 +99,10 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
   5,000-character limit. Leads whose Notes already exceed it (from before this change) stay editable; their
   Notes just can't grow.
 - A reply from an address that is on no lead (an assistant, a personal inbox, a forward) is kept with its
-  text and listed on **Replies**, with a count next to "Replies" in the header. **Attach** records it on the
+  text and listed on **Replies**, with a count next to "Replies" in the header (green when some read as
+  interested). Replies read as interested are marked **Interested**, listed first and counted separately —
+  they are usually a prospect writing from another address, so attach them to the right lead so it moves to
+  Responded. **Attach** records it on the
   lead you pick exactly as if it had come from the lead's own address (for an opt-out, the lead's address
   also goes on the do-not-email list; a plain no closes the lead); **Dismiss** removes it from the list. An
   unmatched reply that needs a look, says no or only says thanks holds its address until it is attached,

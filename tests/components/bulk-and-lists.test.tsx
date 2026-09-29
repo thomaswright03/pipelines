@@ -248,10 +248,19 @@ describe("Unmatched replies", () => {
     // Role queries over the whole list are slow in jsdom under coverage on
     // CI, where the default 1 s wait once ran out before the dialog showed.
     const slow = { timeout: 5_000 };
-    fireEvent.click(await screen.findByRole("button", { name: "Attach" }, slow));
-    fireEvent.click(await screen.findByRole("button", { name: "Add reply" }, slow));
+    // Text queries scoped to buttons: role queries walk the accessibility tree and are the slow part.
+    fireEvent.click(await screen.findByText("Attach", { selector: "button" }, slow));
+    fireEvent.click(await screen.findByText("Add reply", { selector: "button" }, slow));
     expect(await screen.findByText("Added the reply to Acme Plumbing.", undefined, slow)).toBeTruthy();
     expect(replies.attachReplyAction).toHaveBeenCalledWith("r1", "cold-outreach", "lead-1");
+  });
+
+  it("marks an interested reply, and warns before it is dismissed", async () => {
+    replies.dismissReplyAction.mockResolvedValue({ ok: true, message: "Dismissed the reply." });
+    render(<UnmatchedReplies replies={[{ ...reply, text: "Yes, send me pricing" }]} />);
+    expect(screen.getByText(/Someone wrote back keen/).textContent).toMatch(/^Interested\..*moves to Responded\.$/);
+    fireEvent.click(screen.getByText("Dismiss", { selector: "button" }));
+    expect((await screen.findByText(/It reads as interested/)).textContent).toMatch(/no lead is marked as replied unless you attach it/);
   });
 
   it("says why a reply needs a look, and can put its address on the do-not-email list", async () => {

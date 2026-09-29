@@ -10,7 +10,7 @@ import { getAppSettings } from "@/lib/outreach/settings";
 import { outboundDisabledByEnvironment } from "@/lib/outbound-switch";
 import { describeMailDestination } from "@/lib/mail-transport-kind";
 import { logError } from "@/lib/log";
-import { countUnmatchedReplies } from "@/lib/outreach/inbound";
+import { countUnmatchedInterested, countUnmatchedReplies } from "@/lib/outreach/inbound";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import { databaseReachable } from "@/lib/db-health";
 import DatabaseUnavailable from "@/components/DatabaseUnavailable";
@@ -94,12 +94,13 @@ async function UnlessDatabaseDown({ children }: { children: React.ReactNode }) {
 async function NavWithCounts() {
   await connection();
   let unmatched = 0;
+  let interested = 0;
   try {
-    unmatched = await countUnmatchedReplies();
+    [unmatched, interested] = await Promise.all([countUnmatchedReplies(), countUnmatchedInterested()]);
   } catch (err) {
     logError("layout.unmatchedReplies", err);
   }
-  return <SiteNav unmatchedReplies={unmatched} />;
+  return <SiteNav unmatchedReplies={unmatched} interestedReplies={interested} />;
 }
 
 /**

@@ -312,6 +312,28 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect(() => Missing()).toThrow("NEXT_NOT_FOUND");
   });
 
+  it("show interested replies from unknown addresses first, labelled and counted", async () => {
+    const reply = (fromEmail: string, text: string, verdict: string, extra = {}) =>
+      prisma.inboundReply.create({
+        data: { dedupeKey: `mid:${fromEmail}`, fromEmail, text, optedOut: false, matched: [], verdict, ...extra },
+      });
+    await reply("boss@fan.test", "Forwarded — my boss is interested, call 480-555-0000", "positive");
+    await reply("noise@else.test", "Pls rmv", "needs_look", { reviewReason: "It may be asking not to be emailed (“rmv”)." });
+
+    const page = await renderPage(Replies());
+    expect(page.text).toContain("Match each reply below to the lead it belongs to, or dismiss it.");
+    expect(page.text).toContain("1 interested, listed first; 1 other.");
+    const items = page.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(items[0]).toMatch(/^boss@fan\.test.*Interested\. Someone wrote back keen/);
+    expect(items[1]).toMatch(/^noise@else\.test.*Needs a look\./);
+
+    const layout = await renderPage(RootLayout({ children: <p>Inside</p>, params: Promise.resolve({}) } as never));
+    const repliesLink = layout.getAllByRole("link").find((link) => link.getAttribute("href") === "/replies");
+    expect(repliesLink?.textContent).toBe("Replies2 waiting to be matched, 1 interested");
+    const pipeline = await renderPage(AgentList(pageProps()));
+    expect(pipeline.text).toContain("2 replies came from an address that isn't on any lead — 1 read as interested.");
+  });
+
   it("show Settings with outbound email paused", async () => {
     await setOutboundPaused(true);
     const settings = await renderPage(Settings(pageProps()));

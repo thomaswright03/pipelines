@@ -2,8 +2,7 @@
 // replies not arriving, replies waiting to be matched, a daily run that
 // stopped. Renders nothing when all is well; the full reply status and the
 // run history stay with the tools below the list.
-import Link from "next/link";
-import { plural } from "@/lib/format";
+import { UnmatchedRepliesNotice } from "@/components/ReplyStatus";
 import { formatDateTime } from "@/lib/time";
 import type { ReplyHealth } from "@/lib/outreach/reply-health";
 
@@ -21,14 +20,7 @@ export default function PipelineAlerts({ replyHealth, staleWarning = null }: { r
           </a>
         </p>
       )}
-      {replyHealth.unmatched > 0 && (
-        <p className="notice-info">
-          {plural(replyHealth.unmatched, "reply", "replies")} came from an address that isn&apos;t on any lead.{" "}
-          <Link href="/replies" className="font-medium underline underline-offset-2">
-            Match {replyHealth.unmatched === 1 ? "it" : "them"} to a lead
-          </Link>
-        </p>
-      )}
+      <UnmatchedRepliesNotice health={replyHealth} />
     </div>
   );
 }

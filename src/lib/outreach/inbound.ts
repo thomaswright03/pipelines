@@ -418,29 +418,44 @@ type UnmatchedReply = {
 
 const UNMATCHED = { matched: { isEmpty: true }, resolvedAt: null } as const;
 
+/** Unmatched replies the rules read as interested: a live prospect writing from another address. */
+const UNMATCHED_INTERESTED = { ...UNMATCHED, kind: "reply", verdict: "positive" } as const;
+
+const UNMATCHED_SELECT = {
+  id: true,
+  fromEmail: true,
+  subject: true,
+  text: true,
+  optedOut: true,
+  kind: true,
+  kindReason: true,
+  failedRecipient: true,
+  reviewReason: true,
+  verdict: true,
+  receivedAt: true,
+} as const;
+
+/**
+ * The latest `take` replies waiting to be matched to a lead: the ones read
+ * as interested first (they are the most valuable, and easy to lose among
+ * opt-outs and noise), then the rest, each group newest first.
+ */
 export async function listUnmatchedReplies(take = 20): Promise<UnmatchedReply[]> {
-  return prisma.inboundReply.findMany({
-    where: UNMATCHED,
-    orderBy: { receivedAt: "desc" },
-    take,
-    select: {
-      id: true,
-      fromEmail: true,
-      subject: true,
-      text: true,
-      optedOut: true,
-      kind: true,
-      kindReason: true,
-      failedRecipient: true,
-      reviewReason: true,
-      verdict: true,
-      receivedAt: true,
-    },
-  });
+  const orderBy = { receivedAt: "desc" } as const;
+  const interested = await prisma.inboundReply.findMany({ where: UNMATCHED_INTERESTED, orderBy, take, select: UNMATCHED_SELECT });
+  if (interested.length >= take) return interested;
+  const shown = new Set(interested.map((reply) => reply.id));
+  const rest = await prisma.inboundReply.findMany({ where: UNMATCHED, orderBy, take, select: UNMATCHED_SELECT });
+  return [...interested, ...rest.filter((reply) => !shown.has(reply.id)).slice(0, take - interested.length)];
 }
 
 export function countUnmatchedReplies(): Promise<number> {
   return prisma.inboundReply.count({ where: UNMATCHED });
+}
+
+/** How many of the replies waiting to be matched read as interested. */
+export function countUnmatchedInterested(): Promise<number> {
+  return prisma.inboundReply.count({ where: UNMATCHED_INTERESTED });
 }
 
 /** When the last reply of any kind arrived, for "is reply tracking working?". */

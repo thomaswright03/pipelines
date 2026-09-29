@@ -22,6 +22,11 @@ type UnmatchedReplyView = {
   receivedAt: string; // formatted
 };
 
+/** A reply the rules read as interested (and nothing else about it needs a look). */
+function isInterested(reply: UnmatchedReplyView): boolean {
+  return !reply.bounce && !reply.optedOut && !reply.reviewReason && reply.verdict === "positive";
+}
+
 /** The list of replies no lead's address matched, each with "Attach to lead…" and "Dismiss". */
 export default function UnmatchedReplies({ replies }: { replies: UnmatchedReplyView[] }) {
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -120,6 +125,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
   }
 
   const holds = reply.verdict === "declined" || reply.verdict === "acknowledged";
+  const interested = isInterested(reply);
 
   async function dismiss() {
     const confirmed = await confirm({
@@ -127,6 +133,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
       body: (
         <p>
           It leaves this list without changing any lead.
+          {interested && " It reads as interested: no lead is marked as replied unless you attach it."}
           {(reply.reviewReason || holds) &&
             " The address can then be emailed again — if the reply asks to stop, use Mark opted out instead."}
         </p>
@@ -147,12 +154,18 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
   }
 
   return (
-    <li className="card flex flex-col gap-2 p-4">
+    <li className={`card flex flex-col gap-2 p-4 ${interested ? "border-l-4 border-l-emerald-500 dark:border-l-emerald-400" : ""}`}>
       {dialog}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="break-all text-sm font-semibold">{reply.fromEmail}</p>
         <p className="text-sm muted">{reply.receivedAt}</p>
       </div>
+      {interested && (
+        <p className="notice-success">
+          <strong>Interested.</strong> Someone wrote back keen from an address that isn&apos;t on any lead. Find the lead it belongs to and
+          attach it, so that lead moves to Responded.
+        </p>
+      )}
       {reply.bounce && (
         <p className="notice-warning">
           Bounce notice — one of our emails couldn&apos;t be delivered, but the notice doesn&apos;t say which address in a way the app could
