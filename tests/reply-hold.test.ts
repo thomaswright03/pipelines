@@ -112,7 +112,7 @@ describe("a reply that needs a look holds email to the address", () => {
 
   it("holds an address whose unmatched reply needs a look until it is dismissed", async () => {
     mail = captureMail();
-    await inbound({ from: "stranger@shop.test", text: "Please no further contact." });
+    await inbound({ from: "stranger@shop.test", text: "Kindly exclude me from future mailings." });
     const reply = await prisma.inboundReply.findFirstOrThrow();
     expect(reply).toMatchObject({ optedOut: false, matched: [] });
     const lead = await makeColdLead({ email: "stranger@shop.test", status: "new" });
