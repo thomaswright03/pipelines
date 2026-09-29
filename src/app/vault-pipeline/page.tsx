@@ -19,6 +19,7 @@ import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { peekNextCity } from "@/lib/vault-city-picker";
 import { countUnsentDailyLeads } from "@/lib/vault-daily-run";
+import { countReadyToEmail } from "@/lib/outreach/send";
 
 export const metadata: Metadata = { title: "Cold Outreach — Leads" };
 export const dynamic = "force-dynamic";
@@ -31,20 +32,21 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     ...searchWhere(params.q, ["name", "company", "email", "city"]),
   };
 
-  const [filteredTotal, total, counts, schedule, settings, runs, unsent, dailyRunUnsent, blocked, replyHealth, nextCity] =
-    await Promise.all([
+  const [filteredTotal, total, counts, schedule, settings, runs, ready, dailyRunUnsent, blocked, replyHealth, nextCity] = await Promise.all(
+    [
       prisma.lead.count({ where }),
       prisma.lead.count(),
       prisma.lead.groupBy({ by: ["status"], _count: true }),
       getPipelineSchedule(VAULT_SCHEDULE_ID),
       getAppSettings(),
       recentRuns("cold-outreach", "daily", 5),
-      getPipeline("cold-outreach").countSendable(prisma),
+      countReadyToEmail("cold-outreach"),
       countUnsentDailyLeads(),
       getPipeline("cold-outreach").countBlockedNew(prisma),
       getReplyHealth(),
       peekNextCity(prisma),
-    ]);
+    ],
+  );
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.lead.findMany({
     where,
@@ -120,7 +122,8 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         <OutreachControls
           pipeline="cold-outreach"
           paused={settings.outboundPaused}
-          unsent={unsent}
+          unsent={ready.readyToEmail}
+          willSkip={ready.newWithAddress - ready.readyToEmail}
           dailyRunUnsent={dailyRunUnsent}
           blocked={blocked}
           nextCity={`${nextCity.city}, ${nextCity.state}`}

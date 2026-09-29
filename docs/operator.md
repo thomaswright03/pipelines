@@ -18,7 +18,9 @@ reading Connections.
 
 The **dashboard** (`/`, headed "Cold email outreach") says what the tool does and shows, for each
 pipeline, how many leads are ready to email, waiting on a reply, in Responded and on the call deck (each a
-link), plus how many replies need a look. Words like *call deck*, *held back*, *needs a look* and *ADRE* are
+link), plus how many replies need a look. "Ready to email" is what **Send outreach** would email right now:
+New leads whose address was already pitched, is shared with another lead in the batch, is on the
+do-not-email list or has a reply waiting aren't counted (the pipeline page says how many it will skip). Words like *call deck*, *held back*, *needs a look* and *ADRE* are
 explained in the Operator guide's **Glossary** (`/help#glossary`, linked from the dashboard), and each
 status badge explains itself on hover.
 

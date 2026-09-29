@@ -157,6 +157,24 @@ describe("the lead lists", () => {
   });
 });
 
+describe("the ready-to-email count", () => {
+  it("matches what a bulk send will email, and says how many it will skip", async () => {
+    await makeAgentLead({ name: "Ann", email: "shared@team.test" });
+    await makeAgentLead({ name: "Bea", email: "shared@team.test" });
+    await makeAgentLead({ name: "Cal", email: "pitched@agent.test" });
+    await makeAgentLead({ name: "Dee", email: "dee@agent.test" });
+    await prisma.outreachRecipient.create({ data: { pipeline: "dataleadsell", email: "pitched@agent.test", state: "sent" } });
+
+    const { previewBulkSend } = await import("@/lib/outreach/send");
+    expect(await previewBulkSend("dataleadsell")).toMatchObject({ willSend: 2, totalEligible: 4 });
+    const page = await renderPage(AgentList(pageProps()));
+    expect(page.text).toContain("2 agents ready to email.");
+    expect(page.text).toContain("2 other New agents with an address will be skipped");
+    const dashboard = await renderPage(Dashboard());
+    expect(dashboard.getAllByText("Ready to email")[0]!.parentElement?.textContent).toMatch(/2/);
+  });
+});
+
 describe("a lead page", () => {
   it("offers the send for a New lead, with the pitch preview and its template version", async () => {
     const lead = await makeColdLead({ name: "Pat Owner", company: "Bob's Bakery" });

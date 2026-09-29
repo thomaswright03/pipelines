@@ -141,7 +141,8 @@ export type PipelineAdapter = {
   markLatestSendBounced(db: Db, leadId: string, at: Date): Promise<boolean>;
   hasBeenEmailed(db: Db, leadId: string): Promise<boolean>;
   /** Leads the bulk send may pitch: new, with an address, not flagged, no reply waiting for a look. */
-  listSendable(db: Db, limit: number): Promise<OutreachLead[]>;
+  /** New leads with an address that aren't held back, oldest first (all of them without `limit`). */
+  listSendable(db: Db, limit?: number): Promise<OutreachLead[]>;
   countSendable(db: Db): Promise<number>;
   /** New leads with an address that can't be sent (flagged, or a reply waiting for a look), for the "why nothing to send" hint. */
   countBlockedNew(db: Db): Promise<number>;
