@@ -92,7 +92,8 @@ jobs:
       # send with Stop, pause/resume, lead form validation, editing and
       # deleting a lead, attaching an unmatched reply, confirm-dialog focus,
       # tab titles, the lead list at phone-to-desktop widths, the one-row
-      # desktop header and the do-not-email list at 375px. Mail goes
+      # header (phone and desktop, every status pill showing) and the
+      # do-not-email list at 375px. Mail goes
       # to a local outbox; the app uses a separate local database.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

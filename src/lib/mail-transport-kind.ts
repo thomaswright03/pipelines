@@ -16,6 +16,8 @@ type MailDestination = {
   delivers: boolean;
   /** For the header pill; null when nothing needs pointing out (live ZeptoMail). */
   badge: string | null;
+  /** The pill's one-word form on a phone (the full text is in the menu). */
+  shortBadge: string | null;
   /** For Settings: where mail goes, in plain words. */
   description: string;
 };
@@ -36,13 +38,20 @@ function isLoopback(host: string): boolean {
 export function describeMailDestination(env: Env = process.env): MailDestination {
   const kind = resolveTransportKind(env);
   if (kind === "zeptomail") {
-    return { kind, delivers: true, badge: null, description: "Live — emails are delivered to recipients through ZeptoMail." };
+    return {
+      kind,
+      delivers: true,
+      badge: null,
+      shortBadge: null,
+      description: "Live — emails are delivered to recipients through ZeptoMail.",
+    };
   }
   if (kind === "outbox") {
     return {
       kind,
       delivers: false,
-      badge: "Test mode — emails are saved, not delivered",
+      badge: "Test mode: mail saved, not sent",
+      shortBadge: "Test mode",
       description: "Test mode — emails are saved as files in the outbox folder, not delivered. Nobody receives them.",
     };
   }
@@ -52,6 +61,7 @@ export function describeMailDestination(env: Env = process.env): MailDestination
       kind,
       delivers: false,
       badge: "Mail not set up",
+      shortBadge: "No mail",
       description:
         "The app is set to send through a mail server, but no server address is set, so every send will fail. Tell your developer the mail server address is missing.",
     };
@@ -61,14 +71,16 @@ export function describeMailDestination(env: Env = process.env): MailDestination
     return {
       kind,
       delivers: false,
-      badge: `Mail captured locally (${where})`,
+      badge: `Local mail catcher: ${where}`,
+      shortBadge: "Local mail",
       description: `Mail goes to ${where} — a local mail catcher on this machine. Nobody receives it.`,
     };
   }
   return {
     kind,
     delivers: true,
-    badge: `Mail sent via ${where}`,
+    badge: `Mail via ${where}`,
+    shortBadge: "SMTP",
     description: `Mail is handed to the SMTP server at ${where}. If that server relays mail, recipients receive it.`,
   };
 }

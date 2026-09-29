@@ -26,7 +26,10 @@ status badge explains itself on hover.
 
 The **header** shows up to three pills, on every page and at every width: **Sending paused** (the Settings
 switch) or **Sending off (server)** (the `OUTBOUND_EMAIL_DISABLED` environment variable), **Replies not
-arriving** (see "Is it working?" below), and, outside production, where "sent" mail really goes.
+arriving** (see "Is it working?" below), and, outside production, where "sent" mail really goes. Where the
+header is narrow (a phone, or a laptop-width window) each pill shows one word — **Paused**/**Off**,
+**Replies**, **Test mode**/**Local mail** — so the header stays one row; hover over or tab to a pill for
+what it means, and on a phone the Menu lists each in full.
 
 Each call-deck card shows the lead's company or brokerage, city/state with the local time, when the pitch
 was emailed (or "Never emailed"), the latest history entry, and a link that opens the lead page in a new

@@ -224,14 +224,16 @@ describe("where mail goes", () => {
   it("only claims nobody receives mail for the outbox or an SMTP catcher on this machine", () => {
     expect(describeMailDestination({ EMAIL_TRANSPORT: "outbox" })).toMatchObject({
       delivers: false,
-      badge: "Test mode — emails are saved, not delivered",
+      badge: "Test mode: mail saved, not sent",
+      shortBadge: "Test mode",
     });
     expect(describeMailDestination({ EMAIL_TRANSPORT: "smtp", SMTP_HOST: "127.0.0.1", SMTP_PORT: "1025" })).toMatchObject({
       delivers: false,
-      badge: "Mail captured locally (127.0.0.1:1025)",
+      badge: "Local mail catcher: 127.0.0.1:1025",
+      shortBadge: "Local mail",
     });
     const relay = describeMailDestination({ EMAIL_TRANSPORT: "smtp", SMTP_HOST: "mail.example.org", SMTP_PORT: "587" });
-    expect(relay).toMatchObject({ delivers: true, badge: "Mail sent via mail.example.org:587" });
+    expect(relay).toMatchObject({ delivers: true, badge: "Mail via mail.example.org:587", shortBadge: "SMTP" });
     expect(relay.description).not.toMatch(/Nobody receives/);
     expect(describeMailDestination({ VERCEL: "1" })).toMatchObject({ kind: "zeptomail", delivers: true, badge: null });
   });

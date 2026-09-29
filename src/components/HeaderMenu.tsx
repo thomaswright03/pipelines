@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 
 /**
  * The header's navigation and theme control. From the `sm` breakpoint up
- * they sit inline in the header; on a phone they fold behind a Menu button,
- * so the header is one row (about 60 px) instead of three. The menu closes
+ * they sit inline in the header; on a phone they fold behind a Menu (icon)
+ * button, so the header is one row (about 60 px) instead of three. The menu closes
  * when a link is followed.
  */
 export default function HeaderMenu({ children }: { children: React.ReactNode }) {
@@ -47,12 +47,13 @@ export default function HeaderMenu({ children }: { children: React.ReactNode }) 
         aria-expanded={open}
         aria-controls="site-menu"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 sm:hidden dark:text-zinc-200 dark:hover:bg-zinc-800"
+        title="Menu"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 sm:hidden dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         <svg aria-hidden viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
           {open ? <path d="M5 5l10 10M15 5L5 15" /> : <path d="M3 6h14M3 10h14M3 14h14" />}
         </svg>
-        Menu
+        <span className="sr-only">Menu</span>
       </button>
       <div
         id="site-menu"
