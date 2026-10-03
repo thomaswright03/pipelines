@@ -84,7 +84,7 @@ describe("the call deck", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save and next" }));
     expect(await screen.findByRole("button", { name: "Saving…" })).toHaveProperty("disabled", true);
     await act(async () => pending.reject(new TypeError("Failed to fetch")));
-    expect(await screen.findByText(/Couldn't reach the server — the call wasn't saved/)).toBeTruthy();
+    expect(await screen.findByText(/couldn't confirm whether the call was saved\. Reload the page/)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "First Lead" })).toBeTruthy();
   });
 

@@ -7,6 +7,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import CharacterCount from "@/components/CharacterCount";
 import type { z } from "zod";
 import { fieldErrorsOf, type FieldErrors, type FormState } from "@/lib/lead-forms";
+import { unconfirmedMessage } from "@/components/ActionMessage";
 
 /**
  * Controlled form state for the "add lead/agent" forms: values survive a
@@ -74,7 +75,7 @@ export function useLeadForm<T extends Record<string, string>>(
         setLinks(result.fieldLinks ?? {});
         setFormError(result.error ?? "Couldn't save — try again.");
       } catch {
-        setFormError("Couldn't reach the server — nothing was saved. Check your connection and try again.");
+        setFormError(unconfirmedMessage("it was saved"));
       }
     });
   }

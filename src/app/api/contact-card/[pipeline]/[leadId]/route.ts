@@ -4,7 +4,7 @@ import { buildVCard, vcardFileName } from "@/lib/vcard";
 import { parsePipelineId } from "@/lib/outreach/pipeline-id";
 import { getPipeline } from "@/lib/outreach/pipelines";
 
-// "Add to Contacts" from either pipeline's cold-call deck. Served inline so
+// "Add to Contacts" from any pipeline's cold-call deck. Served inline so
 // a phone browser opens its native Add Contact sheet instead of saving a file.
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ pipeline: string; leadId: string }> }) {
   const { pipeline: rawPipeline, leadId } = await params;

@@ -1,4 +1,4 @@
-// Both pipelines' Inbox pages: what was sent, what failed, and who replied.
+// Every pipeline's Inbox pages: what was sent, what failed, and who replied.
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { INBOX_LIMIT, type InboxTab, type PipelineInbox } from "@/lib/outreach/inbox";

@@ -14,6 +14,7 @@ import CharacterCount from "@/components/CharacterCount";
 /** The most a call's notes can hold (the server keeps the same cap). */
 const CALL_NOTES_LIMIT = 2_000;
 import { firstUnhandled, readSavedDeck, recordCall, sessionDeckStorage, writeSavedDeck, type LoggedCall } from "@/lib/call-deck-session";
+import { unconfirmedMessage } from "@/components/ActionMessage";
 
 const CLOCK_TICK_MS = 30_000;
 
@@ -110,7 +111,7 @@ export default function ColdCallFlashcards({ pipeline, deck }: { pipeline: Pipel
       if (result.ok) next({ lead: current, outcome });
       else setError(result.error);
     } catch {
-      setError("Couldn't reach the server — the call wasn't saved. Check your connection and try again.");
+      setError(unconfirmedMessage("the call was saved"));
     } finally {
       setSubmitting(false);
     }

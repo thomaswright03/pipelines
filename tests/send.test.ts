@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { prisma } from "@/lib/db";
-import { previewBulkSend, sendBulkChunk, sendFirstTouch } from "@/lib/outreach/send";
+import { countReadyToEmail, previewBulkSend, sendBulkChunk, sendFirstTouch } from "@/lib/outreach/send";
+import { getPipeline } from "@/lib/outreach/pipelines";
 import { setAllowCrossPipelineRepeats, setOutboundPaused } from "@/lib/outreach/settings";
 import { suppressEmail } from "@/lib/email-suppression";
 import { sendOutreachEmailAction } from "@/lib/actions/outreach";
-import { captureMail, makeAgentLead, makeColdLead, smtpError } from "./helpers";
+import { captureMail, makeAgentLead, makeColdLead, makeHaulerLead, smtpError } from "./helpers";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -307,5 +308,121 @@ describe("SMTP failures", () => {
     );
     expect(chunk).toMatchObject({ sent: 1, processedIds: [leads[0]!.id] });
     expect(mail.messages).toHaveLength(1);
+  });
+});
+
+describe("the ready-to-email count", () => {
+  /** One lead (or reply, or ledger row) for every reason a send skips an address, in all three pipelines. */
+  async function seedEveryReason() {
+    // Sendable, and two leads sharing one address (emailed once).
+    await makeColdLead({ email: "ok@shop.test" });
+    await makeColdLead({ email: "shared@shop.test" });
+    await makeColdLead({ email: "shared@shop.test" });
+    // A mixed-case address whose lower-case form opted out.
+    await makeColdLead({ email: "Mixed@Shop.test" });
+    await suppressEmail("mixed@shop.test", { reason: "test", source: "manual" });
+    // On the do-not-email list.
+    await makeColdLead({ email: "stop@shop.test" });
+    await suppressEmail("stop@shop.test", { reason: "test", source: "manual" });
+    // Pitched by another pipeline (counts only while cross-pipeline repeats are off), by this one, refused earlier.
+    await makeColdLead({ email: "agent-pitched@shop.test" });
+    await prisma.outreachRecipient.create({ data: { pipeline: "dataleadsell", email: "agent-pitched@shop.test", state: "sent" } });
+    await makeColdLead({ email: "pitched@shop.test" });
+    await prisma.outreachRecipient.create({ data: { pipeline: "cold-outreach", email: "pitched@shop.test", state: "sent" } });
+    await makeColdLead({ email: "refused@shop.test" });
+    await prisma.outreachRecipient.create({ data: { pipeline: "cold-outreach", email: "refused@shop.test", state: "refused" } });
+    // A reply that needs a look on another pipeline's lead, or unmatched on the Replies page (and one resolved).
+    await makeColdLead({ email: "flagged@shop.test" });
+    await makeAgentLead({ email: "flagged@shop.test", status: "contacted", replyNeedsReview: true });
+    await makeColdLead({ email: "unmatched@shop.test" });
+    await prisma.inboundReply.create({
+      data: { dedupeKey: "u1", fromEmail: "unmatched@shop.test", optedOut: false, matched: [], reviewReason: "Unclear." },
+    });
+    await makeColdLead({ email: "resolved@shop.test" });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "u2",
+        fromEmail: "resolved@shop.test",
+        optedOut: false,
+        matched: [],
+        reviewReason: "Unclear.",
+        resolvedAt: new Date(),
+      },
+    });
+    // Already answered with a plain no (and one whose answer was dismissed).
+    await makeColdLead({ email: "no@shop.test" });
+    await prisma.inboundReply.create({
+      data: { dedupeKey: "a1", fromEmail: "no@shop.test", optedOut: false, matched: [], verdict: "declined" },
+    });
+    await makeColdLead({ email: "dismissed@shop.test" });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "a2",
+        fromEmail: "dismissed@shop.test",
+        optedOut: false,
+        matched: [],
+        verdict: "acknowledged",
+        resolution: "dismissed",
+      },
+    });
+    // Not New-with-an-address-and-not-held-back at all.
+    await makeColdLead({ email: "blocked@shop.test", sendBlockedReason: "Duplicate address — test" });
+    await makeColdLead({ email: "look@shop.test", replyNeedsReview: true });
+    await makeColdLead({ email: "done@shop.test", status: "contacted" });
+    await makeColdLead({ email: null });
+    // dataleadsell: one sendable, one the Cold Outreach ledger holds.
+    await makeAgentLead({ email: "agent@realty.test" });
+    await makeAgentLead({ email: "pitched@shop.test" });
+    // Garbage AI: one sendable, one in Mountain High's area, and an address shared by an excluded and an allowed hauler.
+    await makeHaulerLead({ email: "office@desert.test", city: "Phoenix", state: "AZ" });
+    await makeHaulerLead({ email: "office@frontrange.test", city: "Denver", state: "CO" });
+    await makeHaulerLead({ email: "office@both.test", city: "Greeley", state: "CO" });
+    await makeHaulerLead({ email: "office@both.test", city: "Mesa", state: "AZ" });
+  }
+
+  it("is exactly what a bulk send would email, in every pipeline and with either cross-pipeline setting", async () => {
+    await seedEveryReason();
+    const expected = {
+      "cold-outreach": [
+        { readyToEmail: 4, newWithAddress: 13 }, // ok, shared, resolved, dismissed
+        { readyToEmail: 5, newWithAddress: 13 }, // + agent-pitched
+      ],
+      dataleadsell: [
+        { readyToEmail: 1, newWithAddress: 2 },
+        { readyToEmail: 2, newWithAddress: 2 }, // pitched@ was pitched by Cold Outreach
+      ],
+      "garbage-ai": [
+        { readyToEmail: 2, newWithAddress: 4 },
+        { readyToEmail: 2, newWithAddress: 4 },
+      ],
+    } as const;
+    for (const [index, allow] of [false, true].entries()) {
+      await setAllowCrossPipelineRepeats(allow);
+      for (const pipeline of ["cold-outreach", "dataleadsell", "garbage-ai"] as const) {
+        const count = await countReadyToEmail(pipeline);
+        const preview = await previewBulkSend(pipeline);
+        expect(count, `${pipeline}, repeats ${allow ? "allowed" : "off"}`).toEqual(expected[pipeline][index]);
+        expect(count).toEqual({ readyToEmail: preview.willSend, newWithAddress: preview.totalEligible });
+      }
+    }
+  });
+
+  it("takes a fixed number of queries however many leads there are", async () => {
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "Lead" (id, name, email, status, "createdAt", "updatedAt")
+      SELECT 'bulk-' || n, 'Bulk ' || n, 'bulk' || n || '@shop.test', 'new', now(), now() FROM generate_series(1, 3000) n`);
+    await prisma.outreachRecipient.create({ data: { pipeline: "cold-outreach", email: "bulk1@shop.test", state: "sent" } });
+    const listSendable = vi.spyOn(getPipeline("cold-outreach"), "listSendable");
+    const queryRaw = prisma.$queryRaw.bind(prisma);
+    const queries = vi
+      .spyOn(prisma, "$queryRaw")
+      .mockImplementation(((...args: Parameters<typeof queryRaw>) => queryRaw(...args)) as typeof prisma.$queryRaw);
+    onTestFinished(() => {
+      listSendable.mockRestore();
+      queries.mockRestore();
+    });
+    expect(await countReadyToEmail("cold-outreach")).toEqual({ readyToEmail: 2999, newWithAddress: 3000 });
+    expect(listSendable).not.toHaveBeenCalled();
+    expect(queries).toHaveBeenCalledTimes(1);
   });
 });

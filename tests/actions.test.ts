@@ -119,7 +119,7 @@ describe("settings actions", () => {
     expect((await getAppSettings()).allowCrossPipelineRepeats).toBe(true);
     expect(await setAllowCrossPipelineRepeatsAction(false)).toMatchObject({
       ok: true,
-      message: "Each address now gets at most one pitch across both pipelines.",
+      message: "Each address now gets at most one pitch across all pipelines.",
     });
   });
 

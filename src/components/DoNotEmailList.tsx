@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addSuppressionAction, removeSuppressionByEmailAction } from "@/lib/actions/settings";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type SuppressionRow = { email: string; since: string; why: string };
@@ -23,7 +23,7 @@ export function DoNotEmailRows({ rows }: { rows: SuppressionRow[] }) {
         const result = await fn();
         setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — the list didn't change. Try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the list changed") });
       }
       router.refresh();
     });
@@ -38,7 +38,7 @@ export function DoNotEmailRows({ rows }: { rows: SuppressionRow[] }) {
             On the list since {row.since}. Why: <q className="font-medium">{row.why}</q>
           </p>
           <p className="mt-2">
-            Only do this if they did <strong>not</strong> ask to stop — for example, an entry added by mistake. Both pipelines may email
+            Only do this if they did <strong>not</strong> ask to stop — for example, an entry added by mistake. Every pipeline may email
             this address again.
           </p>
         </>
@@ -136,7 +136,7 @@ export function AddSuppressionForm() {
         }
         setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — the list didn't change. Try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the list changed") });
       }
       router.refresh();
     });

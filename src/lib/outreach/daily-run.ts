@@ -1,27 +1,33 @@
-// The daily automated run both pipelines share: search one new city on
-// Yelp, check up to the configured number of the results for an email
-// address, save the ones an address was found for, then pitch every
-// sendable lead the daily runs have found — this run's plus any an earlier
-// run found but didn't get to (out of time, or the email service was down).
-// A failed search is recorded and doesn't stop the leftover leads from
-// being emailed. Discovery and sending go through the same shared rules as
-// the buttons on the pages (this folder), so a cron run and a manual bulk
-// send can overlap without double-sending.
+// The daily automated run every pipeline shares (Cold Outreach,
+// dataleadsell and Garbage AI): search one new city on Yelp, check up to
+// the configured number of the results for an email address, save the
+// ones an address was found for, then pitch every sendable lead the daily
+// runs have found — this run's plus any an earlier run found but didn't
+// get to (out of time, or the email service was down). A failed search is
+// recorded and doesn't stop the leftover leads from being emailed. While
+// outbound email is paused (Settings or OUTBOUND_EMAIL_DISABLED) the run
+// does nothing at all: no search, no lookups, no sends. Discovery and
+// sending go through the same shared rules as the buttons on the pages
+// (this folder), so a cron run and a manual bulk send can overlap without
+// double-sending.
 //
 // Each pipeline supplies only what differs (its spec, in
-// src/lib/vault-daily-run.ts and src/lib/dataleadsell-daily-run.ts): the
-// Yelp term, its city picker, its lead table and its wording.
+// src/lib/vault-daily-run.ts, src/lib/dataleadsell-daily-run.ts and
+// src/lib/garbage-ai-daily-run.ts): the Yelp term, its city picker, its
+// lead table, its wording, and — for Garbage AI — the results it must
+// never pitch.
 import type { Prisma } from "@/generated/prisma/client";
-import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
+import { findBusinessesViaYelp, YelpError, type YelpCandidate } from "@/lib/yelp-discovery";
 import { withRetry } from "@/lib/with-retry";
-import { createLeadsFromCandidates, type DiscoveryResult } from "@/lib/outreach/discovery";
+import { createLeadsFromCandidates, type DiscoveryCandidate, type DiscoveryResult } from "@/lib/outreach/discovery";
 import { describeError, logError } from "@/lib/log";
 import { sendFirstTouch } from "@/lib/outreach/send";
 import { getAppSettings } from "@/lib/outreach/settings";
+import { getPipeline } from "@/lib/outreach/pipelines";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import type { RunOutcome } from "@/lib/outreach/runs";
 
-/** The `source` of every lead a daily run saves (in either pipeline's table). */
+/** The `source` of every lead a Cold Outreach or dataleadsell daily run saves (Garbage AI has its own). */
 export const DAILY_RUN_SOURCE = "Yelp search (daily automated run)";
 
 // Vercel Hobby functions stop at 60 s, and the run must record its outcome
@@ -37,7 +43,7 @@ const RUN_LIMIT_MS = 55_000;
 const SEND_WORST_CASE_MS = 20_000;
 const SEND_DELAY_MS = 500;
 /** Most leftover leads one run will queue; the time budget usually stops it well before. */
-export const MAX_SEND_QUEUE = 100;
+const MAX_SEND_QUEUE = 100;
 
 export type DailyRunOptions = {
   sendDelayMs?: number;
@@ -48,7 +54,7 @@ export type DailyRunOptions = {
   now?: () => number;
 };
 
-/** New leads with an address that a daily run found and hasn't emailed yet (valid for both lead tables). */
+/** New leads with an address that a Cold Outreach or dataleadsell daily run found and hasn't emailed yet. */
 export const UNSENT_DAILY = {
   source: DAILY_RUN_SOURCE,
   status: "new",
@@ -73,6 +79,14 @@ type DailyRunSpec<T extends DailyRunTarget> = {
   describeTarget(target: T): string;
   /** New, sendable leads found by daily runs, oldest first, at most `take`. */
   listUnsent(take: number): Promise<{ id: string; name: string }[]>;
+  /** The `source` saved on the leads this run finds (default DAILY_RUN_SOURCE). */
+  source?: string;
+  /**
+   * Leaves out the results this pipeline must never pitch, before any
+   * lookup, and says how many in the summary's words ("left out 4 that…").
+   * Without it every result is a candidate.
+   */
+  screen?(results: YelpCandidate[]): { kept: DiscoveryCandidate[]; leftOut: string | null };
 };
 
 // Refusals are the rules working (address already pitched, opted out, the
@@ -99,17 +113,20 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   const target = await withRetry(() => spec.pickTarget());
   const where = spec.describeTarget(target);
   let listed: number | null = null;
+  let leftOut: string | null = null;
   let discovery: DiscoveryResult | null = null;
   let discoveryError: string | null = null;
   try {
     const results = await findBusinessesViaYelp(spec.searchTerm, `${target.city}, ${target.state}`);
     listed = results.length;
     await withRetry(() => spec.markTargetUsed(target));
-    discovery = await createLeadsFromCandidates(spec.pipeline, results.slice(0, businessesPerRun), {
+    const screened = spec.screen ? spec.screen(results) : { kept: results, leftOut: null };
+    leftOut = screened.leftOut;
+    discovery = await createLeadsFromCandidates(spec.pipeline, screened.kept.slice(0, businessesPerRun), {
       city: target.city,
       county: target.county ?? null,
       state: target.state,
-      source: DAILY_RUN_SOURCE,
+      source: spec.source ?? DAILY_RUN_SOURCE,
       maxCreate: businessesPerRun,
       deadline: startedAt + (options.discoveryBudgetMs ?? DISCOVERY_BUDGET_MS),
       now,
@@ -122,7 +139,10 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   const created = discovery?.created ?? [];
   const examined = discovery?.examined ?? 0;
   const createdIds = new Set(created.map((l) => l.id));
-  const queue = await spec.listUnsent(MAX_SEND_QUEUE);
+  // A pipeline whose sends are held in code (pipelines.ts) still finds
+  // leads, but its run emails nobody.
+  const hold = getPipeline(spec.pipeline).sendHold;
+  const queue = hold ? [] : await spec.listUnsent(MAX_SEND_QUEUE);
   const carriedOver = queue.filter((l) => !createdIds.has(l.id)).length;
   const sendsEndBy = startedAt + (options.sendBudgetMs ?? RUN_LIMIT_MS);
 
@@ -165,12 +185,13 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
     discovery && listed !== null
       ? [
           `Searched ${where}: Yelp listed ${listed} ${listed === 1 ? spec.listedNoun.one : spec.listedNoun.many}`,
+          ...(leftOut ? [leftOut] : []),
           `checked ${examined} for an email${discovery.stoppedEarly ? " (stopped early: out of time)" : ""}`,
           `found ${created.length} new ${created.length === 1 ? "address" : "addresses"}`,
         ]
       : [`Couldn't search ${where}${listed === null ? " on Yelp" : " for email addresses"}, so no new ${spec.foundNoun} were found`];
   if (carriedOver) parts.push(`${carriedOver} left over from earlier runs`);
-  parts.push(`emailed ${sent}`);
+  parts.push(hold ? "sending is on hold, so nobody was emailed" : `emailed ${sent}`);
   if (skipped) parts.push(`${skipped} skipped by the send rules`);
   if (refused) parts.push(`${refused} ${refused === 1 ? "address" : "addresses"} refused by the recipient's mail server`);
   if (failed) parts.push(`${failed} failed to send`);

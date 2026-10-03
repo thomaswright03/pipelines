@@ -1,4 +1,4 @@
-// Pieces shared by both pipelines' lead pages (server components), and the
+// Pieces shared by every pipeline's lead pages (server components), and the
 // page layout itself, so a layout change is made once for both.
 import type { ReactNode } from "react";
 import Link from "next/link";

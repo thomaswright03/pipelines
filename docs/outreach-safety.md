@@ -9,9 +9,16 @@ the bulk send, and the daily cron.
   - Two sends that overlap (two tabs, or a cron run and a click) can't both email the same address.
   - If the process dies after sending, the address is never pitched again.
   - Addresses are compared lower-cased.
-  - By default an address gets one pitch across **both** pipelines. **Settings → Same address in both
-    pipelines** allows one pitch per pipeline instead.
+  - By default an address gets one pitch across **all** pipelines (Cold Outreach, dataleadsell and Garbage
+    AI). **Settings → Same address across pipelines** allows one pitch per pipeline instead.
 - **First pitch only to New leads.** The server refuses a send for any other status and says why.
+- **Per-pipeline never-email rules.** A pipeline can name leads it must never pitch (`neverPitch` on its
+  adapter in `src/lib/outreach/pipelines.ts`). Garbage AI never pitches current clients, national haulers,
+  city/county departments or any hauler in Mountain High Disposal's service area
+  (`src/lib/garbage-ai-targeting.ts`). The send refuses such a lead before claiming anything, the bulk preview
+  and "Ready to email" count skip it, and the lead page shows the reason instead of a Send button. A pipeline
+  can also be held in code (`sendHold`; Garbage AI's `GARBAGE_AI_SENDING_HELD`, currently off), which refuses
+  every send from it.
 - **Refused addresses leave the queue.** When the recipient's mail server refuses an address for good (a
   5xx at RCPT TO, such as "550 5.1.1 User unknown", or a 5.1.x/5.2.x mailbox status), the ledger keeps the
   address as `refused` so it is never tried again from any lead, and the lead is flagged **Address refused
@@ -53,7 +60,7 @@ the bulk send, and the daily cron.
   verdicts (`src/lib/outreach/reply-classifier.ts`, precedence documented at the top of the file; the word
   lists are in `src/lib/outreach/reply-rules/`). Only the first two count as an opt-out or as a reply;
   the last three all **hold every further email to the address** (single send, bulk send, daily run, in
-  either pipeline):
+  any pipeline):
   - **Opt-out**: an explicit request not to be emailed ("STOP", "Unsubscribe", "Remove me", "Please stop
     emailing me", "take me off your list", formal ones such as "Please do not send any further
     correspondence" and "Cease all correspondence", common Spanish, French, German, Portuguese, Italian and Dutch
@@ -79,7 +86,7 @@ the bulk send, and the daily cron.
     what I need. Call me."), a request that names only calls or texts, words that *may* be asking not to be
     emailed ("Kindly exclude me from future mailings", "I never signed up for this", "Pls rmv"), a complaint
     ("wrong person", "who is this?", "spam"), a no mixed with interest, a hedge ("Thanks, I guess?"),
-    another language, or nothing recognisable. Every lead with that address, in either pipeline, is flagged
+    another language, or nothing recognisable. Every lead with that address, in any pipeline, is flagged
     **Reply needs a look**; the reply doesn't count as a reply or as an opt-out; a Contacted lead stays off
     the call deck; and nothing is emailed to the address until the operator resolves it on the lead page:
     **Mark opted out**, **Mark replied**, a status move, or **Keep as …** (which asks for confirmation).

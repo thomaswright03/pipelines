@@ -1,5 +1,5 @@
 // Aggregate numbers for each pipeline's "Stats" page, computed fresh
-// on every load, by one builder for both pipelines so the definitions
+// on every load, by one builder for every pipeline so the definitions
 // can't drift apart. Day boundaries ("today", "last 7 days", the per-day bars)
 // follow the operator's time zone (src/lib/time.ts), not the server's UTC.
 import { Prisma } from "@/generated/prisma/client";
@@ -94,7 +94,7 @@ function toBreakdown(groups: { key: string | null; count: number }[], missingLab
   return limit ? items.slice(0, limit) : items;
 }
 
-// The two lead tables (and their send logs) share every column counted
+// The lead tables (and their send logs) share every column counted
 // here; Prisma's delegate types can't be unified across models, so the
 // builder talks to them through these minimal views (as pipelines.ts does).
 type Where = Record<string, unknown>;
@@ -211,7 +211,7 @@ async function countPerZoneDay(table: string, column: "createdAt" | "sentAt", si
   return rows.map((r) => ({ day: r.day, count: Number(r.n) }));
 }
 
-/** Every number on a pipeline's Stats page, with the same definitions for both pipelines. */
+/** Every number on a pipeline's Stats page, with the same definitions for every pipeline. */
 async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()): Promise<BaseStats> {
   const source = STATS_SOURCES[pipelineId];
   const leads = source.leads();

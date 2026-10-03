@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { GET as reportGET } from "@/app/api/cron/daily-report/route";
-import { buildDailyReport, renderDailyReport } from "@/lib/daily-report";
+import { buildDailyReport, renderDailyReport, reportAppUrl } from "@/lib/daily-report";
 import { savePipelineSchedule, DATALEADSELL_SCHEDULE_ID, GARBAGE_AI_SCHEDULE_ID, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { captureMail, makeColdLead, makeHaulerLead, smtpError } from "./helpers";
@@ -146,6 +146,21 @@ describe("daily report contents", () => {
     await setOutboundPaused(false);
     const unpaused = await buildDailyReport();
     expect(unpaused.sections.find((s) => s.id === "dataleadsell")!.problems).toContain("The daily run didn't happen in the last 24 hours.");
+  });
+});
+
+describe("the report's link to the app", () => {
+  it("uses DAILY_REPORT_APP_URL, else the Vercel production domain, else leaves the link out", async () => {
+    expect(reportAppUrl({ DAILY_REPORT_APP_URL: "https://staging.example.test", VERCEL_PROJECT_PRODUCTION_URL: "prod.example.test" })).toBe(
+      "https://staging.example.test",
+    );
+    expect(reportAppUrl({ VERCEL_PROJECT_PRODUCTION_URL: "prod.example.test" })).toBe("https://prod.example.test");
+    expect(reportAppUrl({})).toBeNull();
+
+    const report = await buildDailyReport(new Date());
+    expect(renderDailyReport(report).text).not.toMatch(/https?:\/\//);
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "pipelines.example.test");
+    expect(renderDailyReport(report).text.endsWith("\n\nhttps://pipelines.example.test")).toBe(true);
   });
 });
 

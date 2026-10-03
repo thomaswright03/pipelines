@@ -65,7 +65,7 @@ type DeckRow = {
   activities: { date: Date; notes: string }[];
 };
 type Where = Prisma.LeadWhereInput & Prisma.AgentLeadWhereInput;
-// Both lead tables have every column read here; arguments are valid for both.
+// Every lead table has every column read here; arguments are valid for each.
 type DeckTable = {
   findMany(args: Prisma.LeadFindManyArgs & Prisma.AgentLeadFindManyArgs): Promise<DeckRow[]>;
   findUnique(args: Prisma.LeadFindUniqueArgs & Prisma.AgentLeadFindUniqueArgs): Promise<DeckRow | null>;

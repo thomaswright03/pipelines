@@ -1,4 +1,4 @@
-// Manual lead actions shared by both pipelines. Each checks that it makes
+// Manual lead actions shared by every pipeline. Each checks that it makes
 // sense for the lead's current status (the server is the authority — the
 // buttons merely mirror these rules) and returns a message saying exactly
 // what changed.
@@ -12,6 +12,7 @@ import {
   COLD_CALL_OUTCOMES,
   coldCallResult,
   CUSTOMER_STATUSES,
+  BOUNCE_MOVES_TO_LOST,
   declinedStatus,
   isLostReason,
   isStatusOf,
@@ -160,9 +161,6 @@ export async function markBounced(pipelineId: PipelineId, leadId: string): Promi
   );
 }
 
-// Statuses a bounce ends outreach for: we were still trying to reach them.
-const BOUNCE_MOVES_TO_LOST: readonly string[] = ["contacted", "responded", "cold_call_list", "contactless_list"];
-
 /**
  * The bounce rules shared by "Mark bounced" and bounce notices arriving on
  * the reply inbox (inbound.ts): the latest send is marked bounced, and a
@@ -306,7 +304,7 @@ export async function addSuppression(rawEmail: string, note: string): Promise<Ac
       }
     }
   });
-  return ok(`Added ${email} to the do-not-email list. Neither pipeline will email it.`);
+  return ok(`Added ${email} to the do-not-email list. No pipeline will email it.`);
 }
 
 /**
@@ -327,7 +325,7 @@ export async function removeSuppressionByEmail(rawEmail: string): Promise<Action
       await pipeline.clearSendBlockedByPrefix(tx, email, OPTED_OUT_BLOCK_PREFIX);
     }
   });
-  return ok(`Removed ${email} from the do-not-email list. Both pipelines may email it again.`);
+  return ok(`Removed ${email} from the do-not-email list. Every pipeline may email it again.`);
 }
 
 export async function setStarred(pipelineId: PipelineId, leadId: string, starred: boolean): Promise<ActionResult> {

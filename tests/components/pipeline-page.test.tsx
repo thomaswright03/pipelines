@@ -51,7 +51,7 @@ describe("OutreachControls", () => {
     vault.runPipelineScrapeAction.mockRejectedValue(new TypeError("Failed to fetch"));
     render(<OutreachControls pipeline="cold-outreach" paused={false} unsent={0} dailyRunUnsent={0} blocked={0} nextCity="Mesa, AZ" />);
     fireEvent.click(screen.getByRole("button", { name: "Find leads in the next city" }));
-    expect(await screen.findByText(/Couldn't reach the server — nothing was run/)).toBeTruthy();
+    expect(await screen.findByText(/couldn't confirm whether the search ran/)).toBeTruthy();
   });
 
   it("tells hand-added leads apart from the ones the daily run will email", () => {

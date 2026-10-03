@@ -11,9 +11,7 @@ import { getPipeline } from "@/lib/outreach/pipelines";
 import { replyLeadId } from "@/lib/outreach/inbox";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
-
-/** The longest reply the box accepts. */
-export const REPLY_MAX_LENGTH = 5_000;
+import { REPLY_MAX_LENGTH } from "@/lib/lead-forms";
 
 /** "Re: <their subject>", without stacking "Re: Re:". */
 export function replySubject(subject: string | null): string {

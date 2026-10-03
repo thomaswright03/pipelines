@@ -59,8 +59,9 @@ implementation lives in `workers/email-inbound/` (`src/index.ts`, with a small M
 and a `wrangler.toml.example` that says how to deploy it). It parses the message, sends the request below,
 queues anything the app didn't record on a Cloudflare Queue and resends it with backoff for 72 hours, and
 can also forward each reply to a mailbox (`FORWARD_TO`). `tests/worker-contract.test.ts` runs it against the
-real route in CI: headers and `messageId` forwarded, the bypass header sent, a resend on 503 or no response,
-none on 400/401, and an `ALERT:` log line after 72 hours. If production runs a different Worker, it must
+real route in CI: headers and `messageId` forwarded, the bypass header sent, a resend on 503, no response or
+a 401/403/404 (with an `ALERT:` line on each such refusal), none on 400, and an `ALERT:` log line after 72
+hours. If production runs a different Worker, it must
 follow the same contract. It must send:
 
 ```
@@ -96,7 +97,7 @@ same reply.
 |---|---|---|
 | `200` | Recorded, or already recorded (`"duplicate": true`) | Stop. |
 | `400` | The body isn't `{ from, subject, text, messageId, headers }`, or `from` holds no email address (`"abc"`, `"Mail Delivery System"`). The `error` names each failing field ("subject is too long (at most 2000 characters)", "from is invalid (no email address in it…)"), and the app logs an `api.email-inbound` warning with the field names (never the content) | Not retry; log it. |
-| `401` | Wrong or missing token | Not retry; fix the secret. |
+| `401` (or `403`/`404` from Vercel Deployment Protection or a wrong URL, before the app) | Wrong or missing token, a missing/wrong protection-bypass secret, or the wrong `INBOUND_URL`. Nothing was recorded; the body says `"retry": true` | Keep the reply: resend it with the same backoff as a 503 and log an alert on every failed attempt, so replies and opt-outs that arrive while the setting is wrong are recorded once it is fixed (within the 72 hours). |
 | `503` (or any other 5xx, or no response) | Nothing was recorded. The body is `{ "error", "code", "retry": true }` with `code` `db_unavailable` (the database couldn't be reached) or `internal`; the cause is only in the server log | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
 
 Resending is always safe: a reply is recorded once no matter how many times it is delivered. Cloudflare
@@ -201,11 +202,13 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
      Automation**.
    - Set the Worker to send the generated secret as the `x-vercel-protection-bypass` header, alongside its
      Bearer token.
-   - Until then, Vercel's SSO wall answers the Worker with its own 401, and replies and opt-outs must be
-     marked by hand.
+   - Until then, Vercel's SSO wall answers the Worker with its own 401. The reference Worker keeps each
+     such reply on its retry queue and resends it for 72 hours, logging an `ALERT:` line each time, so
+     replies that arrive while the bypass is missing are recorded once it is set up within that window;
+     anything older must be marked by hand. (A Worker that doesn't follow this contract drops them.)
    - Deploy `workers/email-inbound` (steps at the top of its `wrangler.toml.example`) in place of the current
      Worker, or bring the current one up to the same contract: send `messageId` and follow the retry contract
-     in "Reply tracking: the email Worker" above (resend any 5xx or failed request with backoff for at least 72 hours). Route the
+     in "Reply tracking: the email Worker" above (resend any 5xx, 401/403/404 or failed request with backoff for at least 72 hours). Route the
      outreach sender addresses to it in Cloudflare → Email Routing, and set up a notification on the Worker's
      `ALERT:` log lines.
    - Update the Worker to forward the message's headers as `headers` (at least `Auto-Submitted`,
@@ -223,7 +226,7 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 5. **Press Test connection** for email and Yelp in **Settings → Connections** after deploying, so each shows
    "Working" from a real login/search rather than "Not confirmed yet", then run the reply-loop check
    ("Post-deploy smoke check" above) once reply tracking is reachable (item 2).
-6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get the
+6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get each
    other pipeline's pitch. Leave it off (the default) or turn it on in Settings.
 7. **Lawful basis for the outreach.** This is a legal review, not a code change. See README → "Known limitations".
 8. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each

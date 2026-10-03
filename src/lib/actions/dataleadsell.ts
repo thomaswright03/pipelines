@@ -1,7 +1,7 @@
 "use server";
 
 // dataleadsell-only server actions (manual entry, Yelp search, the ADRE
-// import). Everything both pipelines share lives in ./outreach.ts.
+// import). Everything the pipelines share lives in ./outreach.ts.
 import { failureMessage } from "@/lib/db-health";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";

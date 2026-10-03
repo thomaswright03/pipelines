@@ -6,13 +6,17 @@ import { isDatabaseUnavailable } from "@/lib/db-health";
 import { extractEmailAddress, handleInboundReply } from "@/lib/outreach/inbound";
 
 // Receives a parsed inbound email from the Cloudflare Email Worker that
-// catches replies to the outreach sender address (the Worker lives outside
-// this repo). Cloudflare Email Routing has no webhook of its own — the
-// Worker turns "someone replied" into this authenticated POST.
+// catches replies to the outreach sender addresses (its source is in
+// workers/email-inbound/, deployed to Cloudflare separately). Cloudflare
+// Email Routing has no webhook of its own — the Worker turns "someone
+// replied" into this authenticated POST.
 //
 // Contract (docs/deployment.md → "Reply tracking"): every response carries `retry`.
 // 2xx: recorded (or already recorded — `duplicate: true`); don't resend.
-// 400 / 401: the request itself is wrong; resending won't help.
+// 400: the payload itself is malformed; resending won't help.
+// 401: wrong or missing secret — a configuration mistake, not a bad reply,
+// so the body says `retry: true`: the Worker keeps the reply and resends it
+// with backoff (alerting each time) until the secret is fixed.
 // 503: nothing was recorded (e.g. the database is unreachable); the Worker
 // must resend the same payload with backoff. Recording is idempotent, so a
 // resend is always safe. The body is { error, code: "db_unavailable" |
@@ -68,7 +72,7 @@ function rejected(reason: string, message: string, context: Record<string, strin
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedBearer(request.headers.get("authorization"), process.env.EMAIL_INBOUND_SECRET)) {
-    return Response.json({ error: "Unauthorized", retry: false }, { status: 401 });
+    return Response.json({ error: "Unauthorized", retry: true }, { status: 401 });
   }
 
   let payload: unknown;

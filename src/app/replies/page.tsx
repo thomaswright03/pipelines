@@ -26,9 +26,11 @@ export default async function RepliesPage() {
       <div className="flex flex-col gap-2">
         <h1 className="accent-text text-2xl font-bold tracking-tight">Replies</h1>
         <p className="text-sm">
-          {health.unmatched === 0
-            ? "Nothing to do here: every reply so far came from a lead's own address and was recorded on that lead."
-            : "Match each reply below to the lead it belongs to, or dismiss it."}
+          {health.unmatched > 0
+            ? "Match each reply below to the lead it belongs to, or dismiss it."
+            : health.lastReplyAt === null
+              ? "No replies have arrived yet. Each one will be recorded on the lead with that address; any from another address will wait here."
+              : "Nothing to do here: every reply so far came from a lead's own address and was recorded on that lead."}
         </p>
         <HowThisWorks>
           <p>

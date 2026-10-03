@@ -157,6 +157,19 @@ describe("the lead lists", () => {
   });
 });
 
+describe("copy about the pipelines", () => {
+  it("never says there are two: settings, lists and dialogs cover every pipeline", async () => {
+    const { readdir, readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const root = path.resolve(__dirname, "../src");
+    const files = (await readdir(root, { recursive: true })).filter((f) => /\.(ts|tsx)$/.test(f) && !f.startsWith("generated"));
+    const twoPipelines = /\b(both|neither|either) pipelines?\b|\btwo pipelines\b/i;
+    const offenders: string[] = [];
+    for (const file of files) if (twoPipelines.test(await readFile(path.join(root, file), "utf8"))) offenders.push(file);
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("the ready-to-email count", () => {
   it("matches what a bulk send will email, and says how many it will skip", async () => {
     await makeAgentLead({ name: "Ann", email: "shared@team.test" });
@@ -322,12 +335,39 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
       expect(page.getByText("Inside")).toBeTruthy();
       expect(page.getByRole("link", { name: "Call deck" })).toBeTruthy();
     }
-    expect((await renderPage(Replies())).getByRole("heading", { name: "Replies" })).toBeTruthy();
+    const replies = await renderPage(Replies());
+    expect(replies.getByRole("heading", { name: "Replies" })).toBeTruthy();
+    // Nothing has arrived: no claim about replies "so far".
+    expect(replies.text).toContain("No replies have arrived yet.");
+    expect(replies.text).not.toContain("every reply so far");
     const settings = await renderPage(Settings(pageProps()));
     expect(settings.getByRole("button", { name: "Pause all outbound email" })).toBeTruthy();
-    expect((await renderPage(Help())).text).toMatch(/Operator guide/);
+    const help = await renderPage(Help());
+    expect(help.text).toMatch(/Operator guide/);
+    // All three pipelines, with the Garbage AI rules and its daily run time.
+    expect(help.getByRole("heading", { name: "Garbage AI" })).toBeTruthy();
+    expect(help.text).toContain("Mountain High Disposal's service area (Denver metro and Northern Colorado)");
+    expect(help.text).toContain("Garbage AI at 8:00 AM Arizona time");
+    expect(help.text).toMatch(/Demo booked \/ Signed up/);
+    expect(help.text).not.toMatch(/both pipelines|neither pipeline|either pipeline/i);
     expect((await renderPage(<NotFound />)).getByRole("link", { name: "Back to dashboard" })).toBeTruthy();
     expect(() => Missing()).toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("say every reply so far was matched only once replies have arrived and all matched", async () => {
+    const lead = await makeColdLead({ email: "pat@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "mid:1",
+        fromEmail: "pat@shop.test",
+        text: "Yes, call me",
+        optedOut: false,
+        matched: [`cold-outreach:${lead.id}`],
+      },
+    });
+    const page = await renderPage(Replies());
+    expect(page.text).toContain("Nothing to do here: every reply so far came from a lead's own address");
+    expect(page.text).not.toContain("No replies have arrived yet.");
   });
 
   it("show interested replies from unknown addresses first, labelled and counted", async () => {
@@ -386,6 +426,18 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     const settings = await renderPage(Settings(pageProps()));
     expect(settings.getByRole("heading", { name: "Outbound email: off (server setting)" })).toBeTruthy();
     expect(settings.text).toMatch(/OUTBOUND_EMAIL_DISABLED is set in the hosting environment/);
+  });
+
+  it("tell the operator on a lead page which stop is on, and where it can be undone", async () => {
+    const lead = await makeColdLead();
+    await setOutboundPaused(true);
+    const paused = await renderPage(VaultLead(pageProps({ id: lead.id })));
+    expect(paused.text).toContain("Outbound email is paused — resume it in Settings to send.");
+
+    vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
+    const off = await renderPage(VaultLead(pageProps({ id: lead.id })));
+    expect(off.text).toContain("Sending is switched off on the server (OUTBOUND_EMAIL_DISABLED). Settings can't turn it back on");
+    expect(off.text).not.toContain("resume it in Settings");
   });
 });
 

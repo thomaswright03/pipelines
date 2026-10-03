@@ -3,7 +3,7 @@
 // number) instead of sitting in "Contacted" forever, with a History entry
 // saying so. A lead with a reply flagged "needs a look" (a possible "no" or
 // complaint) is not moved until the operator resolves the flag, so nobody
-// who complained lands on the call deck. Same rule for both pipelines; run
+// who complained lands on the call deck. Same rule for every pipeline; run
 // daily by /api/cron/stale-contacts.
 import { prisma } from "@/lib/db";
 import { ALL_PIPELINES, STALE_CONTACT_DAYS } from "@/lib/outreach/pipelines";

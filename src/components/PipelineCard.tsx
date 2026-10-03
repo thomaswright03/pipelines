@@ -7,6 +7,7 @@ import { updatePipelineMetaAction } from "@/lib/actions/pipeline-meta";
 import type { PipelineMetaFields } from "@/lib/pipeline-meta-defaults";
 import type { DashboardNumbers } from "@/lib/dashboard";
 import HowThisWorks from "@/components/HowThisWorks";
+import { unconfirmedMessage } from "@/components/ActionMessage";
 
 type InternalProps = {
   kind: "internal";
@@ -37,7 +38,7 @@ export default function PipelineCard({
       try {
         result = await updatePipelineMetaAction(pipelineId, formData);
       } catch {
-        result = { error: "Couldn't reach the server — nothing was saved. Try again." };
+        result = { error: unconfirmedMessage("the description was saved") };
       }
       if (result.error) {
         setError(result.error);

@@ -116,7 +116,7 @@ function shareOf(numerator: number, denominator: number, what: string): string {
   return `${n(numerator)} of ${n(denominator)} ${what} (${formatPercent(numerator / denominator)})`;
 }
 
-/** The numbers both pipelines share, with how each rate is worked out. */
+/** The numbers every pipeline shares, with how each rate is worked out. */
 export function EmailPerformance({
   s,
   conversion,

@@ -1,4 +1,4 @@
-// Editing and deleting leads (both pipelines).
+// Editing and deleting leads (every pipeline).
 //
 // The address is what the one-pitch rule is keyed on, so editing it is
 // guarded the same way adding a lead is: an address held by another lead,

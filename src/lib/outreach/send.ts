@@ -5,27 +5,32 @@
 //   first-touch pitch.
 // - Nothing is sent while outbound email is paused (Settings, or the
 //   OUTBOUND_EMAIL_DISABLED environment variable).
-// - Nothing is sent for a pipeline whose sends are held in code (Garbage
-//   AI, until its open decisions are settled; see garbage-ai-config.ts).
+// - Nothing is sent for a pipeline whose sends are held in code (its
+//   adapter's sendHold; Garbage AI's GARBAGE_AI_SENDING_HELD switch in
+//   garbage-ai-config.ts, off since 2026-09-28, so it sends today).
+// - Nothing is sent to a lead the pipeline never pitches (its adapter's
+//   neverPitch; Garbage AI's current clients, national haulers, agencies
+//   and Mountain High Disposal's area — see garbage-ai-targeting.ts).
 // - Nothing is sent to a suppressed (opted-out) address.
 // - Nothing is sent to an address whose reply is waiting for the operator
-//   ("Reply needs a look", on any lead in either pipeline, or unmatched on
+//   ("Reply needs a look", on any lead in any pipeline, or unmatched on
 //   the Replies page): the reply may be asking not to be emailed.
 // - Nothing is sent to an address that already answered with a plain no or
 //   only a courtesy note ("declined" / "acknowledged" replies): no look is
 //   needed, and no more cold email goes to it either.
 // - Each address gets at most one pitch per pipeline — and, unless the
-//   owner allows it in Settings, at most one pitch across both pipelines.
+//   owner allows it in Settings, at most one pitch across all pipelines.
 // - The lead and the address are claimed atomically *before* the SMTP call
 //   (a per-address advisory lock serialises concurrent claims), so
 //   overlapping bulk runs, a cron run and a manual click can't double-send,
 //   and a crash after sending leaves the claim in place so the lead is never
 //   pitched again.
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { logError, logWarn } from "@/lib/log";
 import { classifySendError, sendOutreachEmail } from "@/lib/send-email";
 import { getAppSettings, pausedMessage, recordSendFailure } from "@/lib/outreach/settings";
-import { ALL_PIPELINES, getPipeline, type Db, type OutreachLead } from "@/lib/outreach/pipelines";
+import { ALL_PIPELINES, getPipeline, type Db, type NeverPitchFacts, type OutreachLead } from "@/lib/outreach/pipelines";
 import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { statusLabel } from "@/lib/lead-status";
 import { HOLDING_VERDICTS } from "@/lib/outreach/reply-classifier";
@@ -117,7 +122,7 @@ type ReplyHold =
 
 /**
  * What holds sends to each of `emails` (lower-case), if anything: a lead
- * flagged "Reply needs a look" in either pipeline, a reply on the Replies
+ * flagged "Reply needs a look" in any pipeline, a reply on the Replies
  * page that matched no lead and needs a look, or a reply that said no or
  * only thanks (not dismissed from the Replies page).
  */
@@ -529,25 +534,69 @@ async function sortForSend(
   return { sendable, skipped };
 }
 
-/** Leads sorted per query, so the address lists stay well inside Postgres's parameter limit. */
-const READY_CHUNK = 1_000;
-
 /**
  * "Ready to email" as a send would see it right now: of the New leads with
- * an address that aren't held back (`newWithAddress`), how many a send
- * would actually email (`readyToEmail`) — the rest are skipped as already
- * pitched, on the do-not-email list, held by a reply, refused earlier,
- * never pitched by this pipeline, or a second lead with the same address.
+ * an address that aren't held back (`newWithAddress`), how many distinct
+ * addresses a send would actually email (`readyToEmail`) — the rest are
+ * skipped as already pitched or refused earlier (the send ledger), on the
+ * do-not-email list, held by a reply (needs a look on any lead or on the
+ * Replies page, or already answered), never pitched by this pipeline, or a
+ * second lead with the same address. The same rules sortForSend applies,
+ * as anti-joins in Postgres, so the dashboard and list pages make a fixed
+ * number of queries (one; two for Garbage AI) however many leads there
+ * are, instead of loading every sendable lead. Only a pipeline with a
+ * never-email rule (Garbage AI) reads rows back — just the columns the rule
+ * needs, of the leads that pass every other check — because that rule is
+ * code (garbage-ai-targeting.ts) and stays in one place.
  */
 export async function countReadyToEmail(pipelineId: PipelineId): Promise<{ readyToEmail: number; newWithAddress: number }> {
-  const [settings, leads] = await Promise.all([getAppSettings(), getPipeline(pipelineId).listSendable(prisma)]);
-  const seen = new Set<string>();
-  let readyToEmail = 0;
-  for (let i = 0; i < leads.length; i += READY_CHUNK) {
-    const { sendable } = await sortForSend(pipelineId, leads.slice(i, i + READY_CHUNK), settings.allowCrossPipelineRepeats, seen);
-    readyToEmail += sendable.length;
+  const pipeline = getPipeline(pipelineId);
+  const settings = await getAppSettings();
+  const leads = Prisma.raw(`"${pipeline.leadTable}"`);
+  // An address pitched by another pipeline only counts while repeats across pipelines aren't allowed.
+  const ledgerScope = settings.allowCrossPipelineRepeats ? Prisma.sql`AND r."pipeline" = ${pipelineId}` : Prisma.empty;
+  // Addresses whose reply waits for a look on a lead in any pipeline (few rows; anti-joined by hash below).
+  const flagged = Prisma.join(
+    ALL_PIPELINES.map((p) => Prisma.sql`SELECT "email" FROM ${Prisma.raw(`"${p.leadTable}"`)} WHERE "replyNeedsReview"`),
+    " UNION ALL ",
+  );
+  // c: what listSendable returns; ok: those a send would email (one row per lead; addresses compared lower-cased).
+  const ruleColumns = pipeline.hasNeverPitchRule
+    ? Prisma.sql`, l."name", l."address", l."city", l."state", ${pipeline.hasCompanyColumn ? Prisma.sql`l."company"` : Prisma.sql`NULL`} AS company`
+    : Prisma.empty;
+  const candidates = Prisma.sql`
+    WITH flagged AS (${flagged}), c AS (
+      SELECT lower(l."email") AS email ${ruleColumns}
+      FROM ${leads} l
+      WHERE l."status" = 'new' AND l."email" IS NOT NULL AND l."sendBlockedReason" IS NULL AND NOT l."replyNeedsReview"
+    ), ok AS (
+      SELECT * FROM c
+      WHERE NOT EXISTS (SELECT 1 FROM "SuppressedEmail" s WHERE s."email" = c.email)
+        AND NOT EXISTS (SELECT 1 FROM "OutreachRecipient" r WHERE r."email" = c.email ${ledgerScope})
+        AND NOT EXISTS (SELECT 1 FROM flagged f WHERE f."email" = c.email)
+        AND NOT EXISTS (
+          SELECT 1 FROM "InboundReply" u
+          WHERE u."fromEmail" = c.email AND u."kind" = 'reply' AND u."reviewReason" IS NOT NULL
+            AND cardinality(u."matched") = 0 AND u."resolvedAt" IS NULL)
+        AND NOT EXISTS (
+          SELECT 1 FROM "InboundReply" a
+          WHERE a."fromEmail" = c.email AND a."verdict" IN (${Prisma.join([...HOLDING_VERDICTS])})
+            AND (a."resolution" IS NULL OR a."resolution" <> 'dismissed'))
+    )`;
+
+  if (!pipeline.hasNeverPitchRule) {
+    const [row] = await prisma.$queryRaw<{ total: bigint; ready: bigint }[]>`
+      ${candidates}
+      SELECT (SELECT count(*) FROM c) AS total, (SELECT count(DISTINCT email) FROM ok) AS ready`;
+    return { readyToEmail: Number(row?.ready ?? 0), newWithAddress: Number(row?.total ?? 0) };
   }
-  return { readyToEmail, newWithAddress: leads.length };
+
+  const [[row], rows] = await Promise.all([
+    prisma.$queryRaw<{ total: bigint }[]>`${candidates} SELECT count(*) AS total FROM c`,
+    prisma.$queryRaw<NeverPitchFacts[]>`${candidates} SELECT "name", company, email, "address", "city", "state" FROM ok`,
+  ]);
+  const ready = new Set(rows.filter((lead) => !pipeline.neverPitch(lead)).map((lead) => lead.email));
+  return { readyToEmail: ready.size, newWithAddress: Number(row?.total ?? 0) };
 }
 
 export type BulkChunkResult = {

@@ -69,6 +69,24 @@ describe("the Garbage AI pages", () => {
     await expect(renderPage(Hauler(pageProps({ id: "missing" })))).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
+  it("say up front that a hauler in Mountain High's area is never emailed, on its page and in the list", async () => {
+    const denver = await makeHaulerLead({ name: "Hauler Co 2", city: "Denver", state: "CO" });
+    const escondido = await makeHaulerLead({ name: "Coast Hauling", city: "Escondido", state: "CA" });
+
+    const page = await renderPage(Hauler(pageProps({ id: denver.id })));
+    expect(page.queryByRole("button", { name: "Send outreach email" })).toBeNull();
+    expect(page.text).toContain("Never emailed: Garbage AI doesn't pitch this hauler (in Mountain High's service area).");
+
+    const other = await renderPage(Hauler(pageProps({ id: escondido.id })));
+    expect(other.getByRole("button", { name: "Send outreach email" }).hasAttribute("disabled")).toBe(false);
+    expect(other.text).not.toContain("Never emailed");
+
+    const list = await renderPage(List(pageProps()));
+    // The list's marker and the ready-to-email count agree: one sendable, one never emailed.
+    expect(list.getAllByText("Never emailed: in Mountain High's service area").length).toBeGreaterThan(0);
+    expect(list.text).toContain("1 hauler ready to email.");
+  });
+
   it("render the add, edit, stats, call deck, inbox and section nav", async () => {
     const lead = await makeHaulerLead({ name: "Desert Roll Off", status: "cold_call_list", phone: "+14805551001" });
     expect((await renderPage(New())).getByRole("heading", { name: "Add hauler" })).toBeTruthy();

@@ -13,7 +13,7 @@ import { SOLD_COUNTIES, citiesInCounty } from "@/lib/agent-cities";
 import BulkSendButton from "@/components/BulkSendButton";
 import { plural } from "@/lib/format";
 import FindEmailsButton from "@/components/FindEmailsButton";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import HowThisWorks from "@/components/HowThisWorks";
 
 /**
@@ -82,7 +82,7 @@ export default function OutreachControls({
             ? await runHaulerScrapeAction()
             : await runPipelineScrapeAction();
       } catch {
-        result = { ok: false, error: "Couldn't reach the server — nothing was run. Check your connection and try again." };
+        result = { ok: false, error: unconfirmedMessage("the search ran") };
       }
       setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       router.refresh();

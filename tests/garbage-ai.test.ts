@@ -1,7 +1,7 @@
 // The Garbage AI pipeline: its pitch, who it never pitches, where it never
 // searches, that its daily run finds and emails haulers, and that every
 // send path refuses while sending is held.
-import { afterEach, describe, expect, it, onTestFinished } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { buildHaulerOutreachEmail, GARBAGE_AI_TEMPLATE_VERSION, haulerGreetingName } from "@/lib/garbage-ai-email-template";
@@ -17,7 +17,9 @@ import { previewBulkSend, sendBulkChunk, sendFirstTouch } from "@/lib/outreach/s
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { allowedTransitions, coldCallResult, GARBAGE_AI_STATUSES, statusLabel } from "@/lib/lead-status";
 import { US_CITIES } from "@/lib/us-cities";
-import { captureMail, makeHaulerLead, page, stubFetch, YELP_PREFIX } from "./helpers";
+import { setOutboundPaused } from "@/lib/outreach/settings";
+import { OUTBOUND_DISABLED_ENV } from "@/lib/outbound-switch";
+import { captureMail, makeHaulerLead, page, smtpError, stubFetch, YELP_PREFIX } from "./helpers";
 
 type Route = { status?: number; body: string; contentType?: string };
 
@@ -149,7 +151,7 @@ describe("the daily Garbage AI run", () => {
 
     expect(outcome.status).toBe("succeeded");
     expect(outcome.numbers).toEqual({ businessesChecked: 2, leadsFound: 2, emailsSent: 2 });
-    expect(outcome.summary).toMatch(/Left out 4 that Garbage AI never pitches/);
+    expect(outcome.summary).toMatch(/Yelp listed 6 businesses, left out 4 that Garbage AI never pitches/);
     expect(outcome.summary).toMatch(/emailed 2/);
     expect(mail.messages).toHaveLength(2);
     expect(mail.messages[0]!.subject).toBe("Who's texting back your 9pm leads?");
@@ -181,7 +183,29 @@ describe("the daily Garbage AI run", () => {
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     expect(outcome.status).toBe("failed");
     expect(outcome.errors?.[0]).toMatch(/^Search of .+ failed:/);
+    expect(outcome.summary).toMatch(/^Couldn't search .+ on Yelp, so no new haulers were found, emailed 0\.$/);
     expect(await prisma.scrapedHaulerCity.count()).toBe(0);
+  });
+
+  it("reports send outcomes like the other daily runs: a refused address, a failed send, and a run where every send failed", async () => {
+    mail = captureMail();
+    stubFetch({ [YELP_PREFIX]: () => yelpHaulers([]) });
+    const old = new Date(Date.now() - 86_400_000);
+    await makeHaulerLead({ name: "Bad Address Hauling", email: "nobody@bad.test", source: GARBAGE_AI_DAILY_SOURCE, createdAt: old });
+    await makeHaulerLead({ name: "Good Hauling", email: "office@good.test", source: GARBAGE_AI_DAILY_SOURCE });
+    mail.refuse("nobody@bad.test");
+
+    const refused = await runDailyGarbageAi(30, { sendDelayMs: 0 });
+    // A refused address is that lead's problem, not a failed run.
+    expect(refused.status).toBe("succeeded");
+    expect(refused.summary).toMatch(/2 left over from earlier runs, emailed 1, 1 address refused by the recipient's mail server\.$/);
+
+    await makeHaulerLead({ name: "Down Hauling", email: "office@down.test", source: GARBAGE_AI_DAILY_SOURCE });
+    mail.fail(smtpError("connect ECONNREFUSED 127.0.0.1:587", { code: "ESOCKET", syscall: "connect" }));
+    const failed = await runDailyGarbageAi(30, { sendDelayMs: 0 });
+    // Nothing went out: failed, as for Cold Outreach and dataleadsell.
+    expect(failed.status).toBe("failed");
+    expect(failed.summary).toMatch(/emailed 0, 1 failed to send\.$/);
   });
 
   it("runs from the cron route, and is skipped when turned off on the page", async () => {
@@ -203,6 +227,32 @@ describe("the daily Garbage AI run", () => {
     expect(await getPipelineSchedule(GARBAGE_AI_SCHEDULE_ID)).toEqual({ enabled: false, businessesPerRun: 20 });
     const skipped = await (await garbageDailyGET(request())).json();
     expect(skipped).toMatchObject({ ok: true, status: "skipped", summary: "Daily automation is turned off on the Garbage AI page." });
+  });
+
+  it.each([
+    ["the Settings pause", "Outbound email is paused, so the daily run didn't search or send."],
+    [
+      "the server's OUTBOUND_EMAIL_DISABLED switch",
+      "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so the daily run didn't search or send.",
+    ],
+  ])("is skipped by %s: no search, no lookups, no sends", async (stop, summary) => {
+    mail = captureMail();
+    const calls = stubHaulerSearch();
+    await makeHaulerLead({ email: "queued@hauler.test", source: GARBAGE_AI_DAILY_SOURCE });
+    if (stop === "the Settings pause") await setOutboundPaused(true);
+    else vi.stubEnv(OUTBOUND_DISABLED_ENV, "1");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const res = await garbageDailyGET(
+      new NextRequest("http://localhost/api/cron/garbage-ai-daily", { headers: { authorization: "Bearer test-cron-secret" } }),
+    );
+    expect(await res.json()).toMatchObject({ ok: true, status: "skipped", summary });
+    expect(calls.calls).toEqual([]);
+    expect(mail.messages).toHaveLength(0);
+    expect(await prisma.scrapedHaulerCity.count()).toBe(0);
+    expect(await prisma.haulerLead.count()).toBe(1);
   });
 });
 

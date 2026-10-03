@@ -6,7 +6,7 @@ import { recordRun } from "@/lib/outreach/runs";
 import { routeStaleContacts, STALE_CONTACT_DAYS, type StaleContactResult } from "@/lib/outreach/stale-contacts";
 import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 
-// Daily (vercel.json): leads in either pipeline that were emailed 7+ days
+// Daily (vercel.json): leads in any pipeline that were emailed 7+ days
 // ago without a reply move to phone outreach. Vercel Cron sends
 // CRON_SECRET as a bearer token; anything else is refused.
 export const maxDuration = 60;

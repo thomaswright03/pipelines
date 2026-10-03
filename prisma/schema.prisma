@@ -1,8 +1,9 @@
 // Prisma schema for Pipelines — Wright AI Solutions' outreach dashboard.
 // Each pipeline keeps its own lead/send-log tables (AgentLead/EmailSendLog
-// for dataleadsell, Lead/LeadEmailSendLog for Cold Outreach) so their data
-// and stats stay independent; the rules that decide who gets emailed live
-// once, in src/lib/outreach/, and work against both.
+// for dataleadsell, Lead/LeadEmailSendLog for Cold Outreach,
+// HaulerLead/HaulerEmailSendLog for Garbage AI) so their data and stats
+// stay independent; the rules that decide who gets emailed live once, in
+// src/lib/outreach/, and work against all of them.
 
 generator client {
   provider = "prisma-client"
@@ -36,7 +37,7 @@ model PipelineMeta {
 model AppSettings {
   id                        String    @id
   // The outbound kill switch: while true, every send path (single, bulk,
-  // daily cron — both pipelines) refuses before touching SMTP.
+  // daily cron — every pipeline) refuses before touching SMTP.
   outboundPaused            Boolean   @default(false)
   pausedAt                  DateTime?
   // Whether an address already pitched by one pipeline may be pitched by
@@ -59,7 +60,7 @@ model AppSettings {
 }
 
 // A recipient who asked not to be emailed. Checked before every send in
-// both pipelines — CAN-SPAM requires honoring an opt-out, and every
+// every pipeline — CAN-SPAM requires honoring an opt-out, and every
 // outreach email promises one.
 model SuppressedEmail {
   email     String   @id // always lower-case
@@ -79,9 +80,9 @@ model SuppressedEmail {
 // same address and a crash after sending can never cause a second send.
 model OutreachRecipient {
   id                String    @id @default(cuid())
-  pipeline          String // "dataleadsell" | "cold-outreach"
+  pipeline          String // "dataleadsell" | "cold-outreach" | "garbage-ai"
   email             String // lower-case
-  leadId            String? // AgentLead.id or Lead.id, depending on pipeline
+  leadId            String? // AgentLead.id, Lead.id or HaulerLead.id, depending on pipeline
   // claimed: reserved, SMTP call in flight (or the process died mid-send)
   // sent: the provider accepted the message
   // unknown: the connection dropped mid-send; delivery can't be confirmed
@@ -101,7 +102,7 @@ model OutreachRecipient {
 // the page — including runs that were skipped or failed.
 model PipelineRun {
   id                String    @id @default(cuid())
-  pipeline          String // "cold-outreach" | "dataleadsell" | "all"
+  pipeline          String // "cold-outreach" | "dataleadsell" | "garbage-ai" | "all"
   kind              String // "daily" | "stale-contacts"
   status            String    @default("running") // running | succeeded | partial | failed | skipped
   startedAt         DateTime  @default(now())

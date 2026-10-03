@@ -279,7 +279,7 @@ describe("ColdOutreachStagePanel", () => {
     // still-disabled button would be lost.
     await waitFor(() => expect(screen.getByRole("button", { name: "Update" })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    expect(await screen.findByText("Couldn't reach the server — nothing was changed. Try again.")).toBeTruthy();
+    expect(await screen.findByText(/couldn't confirm whether the change went through/)).toBeTruthy();
   });
 
   it("turns a reply that was really a bounce into a bounce, after asking", async () => {

@@ -1,6 +1,6 @@
 "use server";
 
-// Server actions shared by both pipelines' pages. Each validates its
+// Server actions shared by every pipeline's pages. Each validates its
 // input, calls the shared rules in src/lib/outreach/, refreshes the pages
 // that show the result, and turns unexpected failures into a plain message
 // (the technical detail goes to the server log with the lead id).

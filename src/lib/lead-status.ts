@@ -121,6 +121,13 @@ function statusesFor(pipeline: PipelineId): readonly LeadStatus[] {
 }
 
 /** Where a lead goes when it says no (by reply or on a call): its own stage where the pipeline has one, else Lost. */
+/**
+ * Statuses a bounce ends outreach for (we were still trying to reach them):
+ * "Mark bounced" and a bounce notice move such a lead to Lost
+ * (outreach/lead-actions.ts), and the lead page's confirm says so.
+ */
+export const BOUNCE_MOVES_TO_LOST: readonly string[] = ["contacted", "responded", "cold_call_list", "contactless_list"];
+
 export function declinedStatus(pipeline: PipelineId): "not_interested" | "lost" {
   return pipeline === "cold-outreach" ? "lost" : "not_interested";
 }
@@ -256,7 +263,7 @@ export function coldCallResult(pipeline: PipelineId, outcome: ColdCallOutcome): 
 
 // Why a lead was marked Lost by hand (stored in callOutcome, like a call's
 // outcome). The one Lost control on a lead page — "Move to… → Lost" — asks
-// for one of these before it confirms, in both pipelines.
+// for one of these before it confirms, in every pipeline.
 export const LOST_REASONS = ["not_interested", "too_busy", "no_answer", "no_need", "unable_to_contact"] as const;
 type LostReason = (typeof LOST_REASONS)[number];
 

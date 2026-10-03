@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  DATALEADSELL_DAILY_RUN_TIME_LABEL,
+  GARBAGE_AI_DAILY_RUN_TIME_LABEL,
+  VAULT_DAILY_RUN_TIME_LABEL,
+} from "@/lib/pipeline-schedule-rules";
+import { GARBAGE_AI_DEMO_HOST, GARBAGE_AI_REFERENCE_CUSTOMER } from "@/lib/garbage-ai-config";
 
 export const metadata: Metadata = { title: "Operator guide" };
 
@@ -23,13 +29,28 @@ const link = "text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
 // Every word the screens use that a newcomer might not know, in one place.
 const GLOSSARY: [string, string][] = [
   ["Pitch", "The one outreach email each address gets. An address is never pitched twice."],
-  ["Lead / agent", "A business (Cold Outreach) or a real-estate agent (dataleadsell.com) the pipeline may email."],
+  [
+    "Lead / agent / hauler",
+    "Who a pipeline may email: a local business (Cold Outreach), a real-estate agent (dataleadsell.com) or a waste hauler (Garbage AI).",
+  ],
+  [
+    "Hauler",
+    "A trash, recycling or dumpster-rental company. Garbage AI pitches haulers an AI that texts back their online leads, with a demo.",
+  ],
+  [
+    "Never emailed (Garbage AI)",
+    `A hauler Garbage AI never pitches: a current client, a national hauler, a city or county department, or one in ${GARBAGE_AI_REFERENCE_CUSTOMER}'s Colorado service area. Its row and page say why.`,
+  ],
+  [
+    "Demo booked / Signed up",
+    `Garbage AI stages: a demo with ${GARBAGE_AI_DEMO_HOST} is booked; the hauler filled out the signup form after it.`,
+  ],
   ["Call deck", "Leads that didn't reply within a week of their pitch and have a phone number, shown one card at a time to call."],
   ["No phone number", "Leads that didn't reply within a week and have no number to call (also called contactless)."],
   ["Reply needs a look", "The app couldn't be sure what a reply means. Nothing is emailed to that address until you decide."],
   ["Plain no", "A reply that only says no (\u201cnot interested\u201d). The lead is closed and the address isn't emailed again."],
   ["Thank-you only", "A reply that only says thanks or got it. Noted on the lead; the address isn't emailed again."],
-  ["Do-not-email list", "Addresses that asked not to be emailed. Neither pipeline ever emails them (see Settings)."],
+  ["Do-not-email list", "Addresses that asked not to be emailed. No pipeline ever emails them (see Settings)."],
   ["Won't be auto-sent", "A New lead the bulk send and daily run skip; its page says why."],
   ["Bounced", "The email couldn't be delivered to the address."],
   ["Email version", "Which wording of the pitch was sent; a new version starts whenever the wording changes (Stats)."],
@@ -55,9 +76,10 @@ export default function HelpPage() {
           <Link href="/settings" className={link}>
             Settings
           </Link>{" "}
-          and press <strong>Pause all outbound email</strong>. Nothing is sent from either pipeline — single sends, bulk sends or the daily
-          run — until you press <strong>Resume outbound email</strong>. It takes effect on the very next email, even in the middle of a bulk
-          send. A red <em>Sending paused</em> label shows at the top of every page while it&apos;s on.
+          and press <strong>Pause all outbound email</strong>. Nothing is sent from any pipeline — single sends, bulk sends or a daily run —
+          until you press <strong>Resume outbound email</strong>, and the daily runs don&apos;t search for new leads meanwhile either. It
+          takes effect on the very next email, even in the middle of a bulk send. A red <em>Sending paused</em> label shows at the top of
+          every page while it&apos;s on.
         </p>
         <p>
           <strong>If the app itself won&apos;t load</strong> (or you can&apos;t sign in), stop sending from the hosting dashboard instead:
@@ -114,16 +136,20 @@ export default function HelpPage() {
             link on each pipeline page). Record each call&apos;s outcome; the deck remembers your place if you refresh.
           </li>
           <li>
-            <strong>Glance at the daily run.</strong> On{" "}
+            <strong>Glance at the daily runs.</strong> Each pipeline searches one new city and emails what it found once a day:{" "}
+            <Link href="/garbage-ai" className={link}>
+              Garbage AI
+            </Link>{" "}
+            at {GARBAGE_AI_DAILY_RUN_TIME_LABEL},{" "}
             <Link href="/vault-pipeline" className={link}>
               Cold Outreach
             </Link>{" "}
-            (and on{" "}
+            at {VAULT_DAILY_RUN_TIME_LABEL} and{" "}
             <Link href="/dataleadsell" className={link}>
               dataleadsell.com
             </Link>{" "}
-            once its daily run is turned on), <em>Recent runs</em> says what the last run found and emailed. A red line under a run says why
-            it failed.
+            at {DATALEADSELL_DAILY_RUN_TIME_LABEL} (once its daily run is turned on). On each page, <em>Recent runs</em> says what the last
+            run found and emailed. A red line under a run says why it failed.
           </li>
         </ol>
       </Section>
@@ -135,8 +161,8 @@ export default function HelpPage() {
         </p>
         <p>
           If someone replied to your inbox but their lead doesn&apos;t show it, open the lead and press <strong>Mark replied</strong>. If
-          they asked not to be emailed, press <strong>Mark opted out</strong> instead — the address goes on the do-not-email list and
-          neither pipeline will email it again. Then tell your developer that replies aren&apos;t reaching the app.
+          they asked not to be emailed, press <strong>Mark opted out</strong> instead — the address goes on the do-not-email list and no
+          pipeline will email it again. Then tell your developer that replies aren&apos;t reaching the app.
         </p>
       </Section>
 
@@ -147,6 +173,36 @@ export default function HelpPage() {
           pitch with a no or a thank-you, a mail server refused it, or the address needs checking. For &ldquo;needs checking&rdquo;, open
           the website shown on the lead, make sure the address belongs to that business or agent, then press{" "}
           <strong>Address checked — allow sending</strong> (or use <strong>Edit details</strong> to fix the address).
+        </p>
+      </Section>
+
+      <Section id="garbage-ai" title="Garbage AI">
+        <p>
+          <Link href="/garbage-ai" className={link}>
+            Garbage AI
+          </Link>{" "}
+          pitches trash, recycling and dumpster-rental <strong>haulers</strong> an AI that texts back every online lead they get, day or
+          night, and offers a 15-minute demo with {GARBAGE_AI_DEMO_HOST}. Its daily run, at {GARBAGE_AI_DAILY_RUN_TIME_LABEL}, searches Yelp
+          in one new US city, finds each hauler&apos;s address on its own website and emails the ones it found. It follows every rule the
+          other pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the emergency stop.
+        </p>
+        <p>
+          <strong>Who it never emails.</strong> These haulers are left out of every search, and if one is added by hand its page shows{" "}
+          <em>Never emailed</em> with the reason instead of a Send button:
+        </p>
+        <ul className="list-disc space-y-0.5 pl-5">
+          <li>current clients ({GARBAGE_AI_REFERENCE_CUSTOMER}, Eastern Waste &amp; Recycling, Garden State Bin Cleaning);</li>
+          <li>national and large regional haulers (WM, Republic Services, Waste Connections, GFL and the like);</li>
+          <li>city and county sanitation or public-works departments;</li>
+          <li>
+            any hauler in {GARBAGE_AI_REFERENCE_CUSTOMER}&apos;s service area (Denver metro and Northern Colorado) — those cities are never
+            searched either.
+          </li>
+        </ul>
+        <p>
+          <strong>Stages.</strong> After <em>Responded</em>, move a hauler to <em>Demo booked</em> when a demo is on the calendar, then{" "}
+          <em>Signed up</em> once they fill out the signup form, and <em>Paying client</em> when they pay. A &ldquo;no&rdquo; goes to{" "}
+          <em>Not interested</em>. Haulers who don&apos;t reply within a week go to its call deck, like the other pipelines.
         </p>
       </Section>
 
