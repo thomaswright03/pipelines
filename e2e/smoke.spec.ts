@@ -253,7 +253,7 @@ async function expectNoSidewaysScroll(page: Page) {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
-for (const width of [375, 768, 1280, 1440, 2560]) {
+for (const width of [375, 390, 768, 1280, 1440, 2560]) {
   test(`the lead list fits a ${width}px screen with every lead's status visible`, async ({ page }) => {
     const longName = "The Extremely Long Named Family Owned Plumbing Heating Cooling and Drain Cleaning Company of Phoenix";
     await seedColdLeads(3, { name: (i) => (i === 1 ? longName : `Business ${i}`), status: "contacted" });
@@ -278,6 +278,27 @@ for (const width of [375, 768, 1280, 1440, 2560]) {
       expect(box.x + box.width).toBeLessThanOrEqual(width);
     }
     await expect(list.getByRole("link", { name: longName }).filter({ visible: true })).toHaveAttribute("title", longName);
+
+    if (width < 768) {
+      // The long name shows at most two lines, and nothing of it is drawn over the contact line beneath.
+      const card = list.locator("li").filter({ hasText: "owner1@business1.test" });
+      const clamp = await card.evaluate((li) => {
+        const el = [...li.querySelectorAll<HTMLElement>("*")].find((e) => getComputedStyle(e).webkitLineClamp === "2")!;
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          // Overflow is clipped at the padding box, so that is the most of the name that can show.
+          visibleBottom: rect.bottom - parseFloat(style.borderBottomWidth),
+          textHeight: rect.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+          lineHeight: parseFloat(style.lineHeight),
+          clamped: el.scrollHeight > el.clientHeight,
+        };
+      });
+      expect(clamp.clamped).toBe(true);
+      expect(clamp.textHeight).toBeLessThanOrEqual(2 * clamp.lineHeight + 1);
+      const contact = (await card.getByText("owner1@business1.test").boundingBox())!;
+      expect(clamp.visibleBottom).toBeLessThanOrEqual(contact.y + 0.5);
+    }
   });
 }
 

@@ -157,12 +157,14 @@ export default function LeadTable({
                 <StarButton pipeline={pipeline} leadId={row.id} leadName={row.name} starred={row.starred} />
                 <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
                   <div className="flex items-start justify-between gap-2">
+                    {/* The padding (a 44px tap target) is on the link and the two-line clamp on the name inside it, so a
+                        long name's third line is cut off rather than drawn over the contact line below. */}
                     <Link
                       href={`${basePath}/${row.id}`}
                       title={row.name}
-                      className="-my-3 line-clamp-2 min-w-0 break-words py-3 font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
+                      className="-my-3 min-w-0 py-3 font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
                     >
-                      {row.name}
+                      <span className="line-clamp-2 break-words">{row.name}</span>
                     </Link>
                     <StatusBadge status={row.status} />
                   </div>
