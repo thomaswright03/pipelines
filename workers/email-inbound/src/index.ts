@@ -7,8 +7,16 @@
 // - The message's From, Subject, plain text, Message-ID and all headers are
 //   sent, so a re-delivered reply is recognised (messageId) and automatic
 //   replies and bounces are recognised by their headers.
-// - 2xx: recorded. 400/401 (and other 4xx except 408/429): the request is
-//   wrong and resending won't help — logged, not retried.
+// - 2xx: recorded.
+// - 401, 403 or 404: the app (or Vercel Deployment Protection in front of
+//   it) refused the Worker's credentials or URL — a configuration mistake
+//   the owner can fix (EMAIL_INBOUND_SECRET, VERCEL_BYPASS_SECRET,
+//   INBOUND_URL), not a bad reply. Nothing was recorded, so the reply is
+//   queued and resent like a 503, with an "ALERT: … configuration" log line
+//   on every failed attempt; replies and opt-outs that arrive meanwhile are
+//   recorded once the setting is fixed (within the 72-hour window).
+// - 400 (and other 4xx except 408/429): the payload itself is malformed
+//   and resending won't help — logged, not retried.
 // - 5xx, 408, 429 or no response: nothing was recorded. The payload goes on
 //   a Cloudflare Queue and is resent with exponential backoff (1 min,
 //   doubling, capped at 1 hour) for 72 hours, then logged as an alert.
@@ -135,7 +143,13 @@ export type DeliveryOutcome = {
   outcome: "delivered" | "rejected" | "retry";
   status: number | null;
   detail: string;
+  /** The app refused the Worker's credentials or URL (401/403/404): retried, and alerted on every attempt. */
+  misconfigured?: boolean;
 };
+
+// Answers that mean the Worker's own settings are wrong (secret, Vercel
+// protection bypass, URL). Fixable by the owner, so the reply is kept.
+const CONFIGURATION_STATUSES = new Set([401, 403, 404]);
 
 type Fetch = (input: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<Response>;
 
@@ -157,6 +171,9 @@ export async function deliver(payload: InboundPayload, env: Env, fetchImpl: Fetc
   if (response.status >= 500 || response.status === 408 || response.status === 429) {
     return { outcome: "retry", status: response.status, detail };
   }
+  if (CONFIGURATION_STATUSES.has(response.status)) {
+    return { outcome: "retry", status: response.status, detail, misconfigured: true };
+  }
   return { outcome: "rejected", status: response.status, detail };
 }
 
@@ -172,6 +189,14 @@ function describe(payload: InboundPayload): string {
   return `from=${JSON.stringify(payload.from)} messageId=${JSON.stringify(payload.messageId)}`;
 }
 
+/** The loud line for a configuration refusal, logged on every attempt until it is fixed. */
+function configurationAlert(result: DeliveryOutcome, payload: InboundPayload, what: string): string {
+  return (
+    `ALERT: the app refused the Worker's configuration (${result.status}) — check EMAIL_INBOUND_SECRET, ` +
+    `VERCEL_BYPASS_SECRET and INBOUND_URL. The reply is kept and ${what}: ${describe(payload)}`
+  );
+}
+
 /** Handles one inbound message: send it to the app now, or queue it for a resend. */
 export async function handleEmail(message: EmailMessage, env: Env, fetchImpl: Fetch = fetch, now: () => number = Date.now) {
   const raw = new Uint8Array(await new Response(message.raw).arrayBuffer());
@@ -181,7 +206,10 @@ export async function handleEmail(message: EmailMessage, env: Env, fetchImpl: Fe
     await message.forward(env.FORWARD_TO).catch((err: unknown) => console.error(`forward to FORWARD_TO failed: ${String(err)}`));
   }
   const result = await deliver(payload, env, fetchImpl);
-  if (result.outcome === "retry") {
+  if (result.misconfigured) {
+    console.error(configurationAlert(result, payload, "queued for resend"));
+    await env.RETRY_QUEUE.send({ payload: fitForQueue(payload), firstAttemptAt: now() }, { delaySeconds: retryDelaySeconds(1) });
+  } else if (result.outcome === "retry") {
     console.warn(`app didn't record the reply (${result.status ?? "no response"}); queued for resend: ${describe(payload)}`);
     await env.RETRY_QUEUE.send({ payload: fitForQueue(payload), firstAttemptAt: now() }, { delaySeconds: retryDelaySeconds(1) });
   } else if (result.outcome === "rejected") {
@@ -209,6 +237,7 @@ export async function handleQueue(
       console.error(`ALERT: reply not recorded after 72 hours of resending; mark it by hand. ${describe(payload)}`);
       message.ack();
     } else {
+      if (result.misconfigured) console.error(configurationAlert(result, payload, "will be resent"));
       message.retry({ delaySeconds: retryDelaySeconds(message.attempts + 1) });
     }
   }

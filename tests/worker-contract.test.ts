@@ -1,8 +1,9 @@
 // The reply-tracking Email Worker (workers/email-inbound) against the real
 // /api/email-inbound route: what it sends (headers, messageId, the
 // protection-bypass header), how it reads real MIME, and the retry
-// contract — resend on 503 or no response with backoff, never on 400/401,
-// and give up with an alert after 72 hours.
+// contract — resend on 503, no response or a configuration refusal
+// (401/403/404) with backoff, never on a malformed payload (400), and give
+// up with an alert after 72 hours.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
@@ -222,20 +223,53 @@ describe("the Worker against /api/email-inbound", () => {
     expect(await prisma.inboundReply.count()).toBe(1);
   });
 
-  it("never resends a 400 or a 401", async () => {
+  it("never resends a malformed payload (400)", async () => {
     const { fetchImpl } = appFetch();
     const bad = makeEnv();
     const badBody = await deliver({ from: "", subject: null, text: "", messageId: null, headers: {} }, bad.env, fetchImpl);
     expect(badBody).toMatchObject({ outcome: "rejected", status: 400 });
 
-    const wrongSecret = makeEnv({ EMAIL_INBOUND_SECRET: "wrong" });
-    const result = await handleEmail(emailMessage(REPLY).message, wrongSecret.env, fetchImpl);
-    expect(result).toMatchObject({ outcome: "rejected", status: 401 });
-    expect(wrongSecret.sent).toHaveLength(0);
-
-    const queued = queueMessage({ payload: buildPayload(REPLY, "x@y.test"), firstAttemptAt: 0 });
-    await handleQueue([queued.message], wrongSecret.env, fetchImpl, () => 1);
+    const refused = vi.spyOn(console, "error").mockImplementation(() => {});
+    const queued = queueMessage({ payload: { from: "", subject: null, text: "", messageId: null, headers: {} }, firstAttemptAt: 0 });
+    await handleQueue([queued.message], bad.env, fetchImpl, () => 1);
     expect(queued.calls).toEqual({ acked: true, retried: null });
+    expect(refused).toHaveBeenCalledWith(expect.stringMatching(/^app refused a queued reply \(400\)/));
+  });
+
+  it("keeps an opt-out answered 401 (wrong secret) and records it once the secret is fixed", async () => {
+    const lead = await makeColdLead({ email: "jose@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const { fetchImpl } = appFetch();
+    const alert = vi.spyOn(console, "error").mockImplementation(() => {});
+    const optOut = raw(["From: Jose <jose@shop.test>", "Subject: Re: hello", "Message-ID: <stop-1@shop.test>", "", "STOP"]);
+
+    const wrongSecret = makeEnv({ EMAIL_INBOUND_SECRET: "wrong" });
+    const first = await handleEmail(emailMessage(optOut).message, wrongSecret.env, fetchImpl, () => 1_000);
+    expect(first).toMatchObject({ outcome: "retry", status: 401, misconfigured: true });
+    expect(wrongSecret.sent).toHaveLength(1);
+    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/^ALERT: the app refused the Worker's configuration \(401\)/));
+    expect(await prisma.suppressedEmail.count()).toBe(0);
+
+    // Still wrong on the first resend: backs off and alerts again.
+    const stillWrong = queueMessage(wrongSecret.sent[0]!.body, 1);
+    await handleQueue([stillWrong.message], wrongSecret.env, fetchImpl, () => 61_000);
+    expect(stillWrong.calls).toEqual({ acked: false, retried: { delaySeconds: 120 } });
+    expect(alert).toHaveBeenCalledTimes(2);
+
+    // The owner fixes the secret: the next resend is recorded and acked.
+    const fixed = makeEnv();
+    const resend = queueMessage(wrongSecret.sent[0]!.body, 2);
+    await handleQueue([resend.message], fixed.env, fetchImpl, () => 3_600_000);
+    expect(resend.calls.acked).toBe(true);
+    expect(await prisma.suppressedEmail.findUnique({ where: { email: "jose@shop.test" } })).not.toBeNull();
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).not.toBe("contacted");
+  });
+
+  it.each([403, 404])("queues a reply answered %i (Vercel protection or a wrong URL) instead of dropping it", async (status) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const wall = vi.fn(async () => new Response("Authentication Required", { status }));
+    const { env, sent } = makeEnv();
+    expect(await handleEmail(emailMessage(REPLY).message, env, wall, () => 0)).toMatchObject({ outcome: "retry", status });
+    expect(sent).toHaveLength(1);
   });
 
   it("resends when there is no response at all, and gives up with an alert after 72 hours", async () => {
