@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { attachReplyAction, dismissReplyAction, optOutReplyAction, searchLeadsForReplyAction, type LeadMatch } from "@/lib/actions/replies";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type UnmatchedReplyView = {
@@ -34,7 +34,7 @@ export default function UnmatchedReplies({ replies }: { replies: UnmatchedReplyV
     return (
       <div className="flex flex-col gap-2">
         <ActionMessage feedback={feedback} />
-        <p className="text-sm muted">Nothing to match — every reply so far came from a lead&apos;s own address.</p>
+        <p className="text-sm muted">Nothing to match right now.</p>
       </div>
     );
   }
@@ -83,7 +83,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
         const result = await fn();
         onDone(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       } catch {
-        onDone({ ok: false, text: "Couldn't reach the server — nothing was changed. Try again." });
+        onDone({ ok: false, text: unconfirmedMessage("the change went through") });
       }
       router.refresh();
     });

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setAllowCrossPipelineRepeatsAction, setOutboundPausedAction } from "@/lib/actions/settings";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function SettingsControls({
@@ -32,7 +32,7 @@ export default function SettingsControls({
         const result = await fn();
         setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — the setting didn't change. Try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the setting changed") });
       }
       router.refresh();
     });

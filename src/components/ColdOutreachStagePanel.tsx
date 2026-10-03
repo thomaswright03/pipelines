@@ -6,7 +6,7 @@ import { markResponseAsNonDeliveryAction, scheduleAppointmentAction } from "@/li
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { APP_TIME_ZONE_LABEL } from "@/lib/time";
 import { APPOINTMENT_FROM } from "@/lib/lead-status";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 // Cold Outreach–only stage actions: appointments and the "that reply was
@@ -33,7 +33,7 @@ export default function ColdOutreachStagePanel({
         const result = await fn();
         setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — nothing was changed. Try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the change went through") });
       }
       router.refresh();
     });

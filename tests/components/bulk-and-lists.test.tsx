@@ -180,12 +180,12 @@ describe("Do-not-email list", () => {
     expect(items[1].querySelectorAll("wbr")).toHaveLength(8);
   });
 
-  it("says the list didn't change when the server can't be reached", async () => {
+  it("says the change couldn't be confirmed when the server can't be reached", async () => {
     settings.removeSuppressionByEmailAction.mockRejectedValue(new TypeError("Failed to fetch"));
     render(<DoNotEmailRows rows={rows} />);
     fireEvent.click(screen.getByRole("button", { name: "Remove stop@x.test from the list" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove from list" }));
-    expect(await screen.findByText(/Couldn't reach the server — the list didn't change/)).toBeTruthy();
+    expect(await screen.findByText(/couldn't confirm whether the list changed/)).toBeTruthy();
   });
 
   it("adding: asks for an address, shows the pending state, and clears the form on success", async () => {

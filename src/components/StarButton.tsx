@@ -4,6 +4,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setStarredAction } from "@/lib/actions/outreach";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { unconfirmedMessage } from "@/components/ActionMessage";
 
 export default function StarButton({
   pipeline,
@@ -34,7 +35,7 @@ export default function StarButton({
               const result = await setStarredAction(pipeline, leadId, !shown);
               if (!result.ok) setError(result.error);
             } catch {
-              setError("Couldn't reach the server — the star wasn't saved. Try again.");
+              setError(unconfirmedMessage("the star was saved"));
             }
             router.refresh();
           })

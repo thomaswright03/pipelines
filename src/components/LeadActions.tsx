@@ -16,11 +16,19 @@ import {
   setOurReplyAction,
   updateLeadStatusAction,
 } from "@/lib/actions/outreach";
-import { allowedTransitions, CALL_OUTCOME_LABEL, canMarkReplied, isBackwardMove, LOST_REASONS, statusLabel } from "@/lib/lead-status";
+import {
+  allowedTransitions,
+  BOUNCE_MOVES_TO_LOST,
+  CALL_OUTCOME_LABEL,
+  canMarkReplied,
+  isBackwardMove,
+  LOST_REASONS,
+  statusLabel,
+} from "@/lib/lead-status";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { LEAD_NOUN, PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type LeadActionsLead = {
@@ -42,9 +50,6 @@ type LeadActionsLead = {
 /** Long replies are shown up to this many characters; the full text is in the history below. */
 const REPLY_PREVIEW_CHARS = 600;
 const clipReply = (text: string) => (text.length > REPLY_PREVIEW_CHARS ? `${text.slice(0, REPLY_PREVIEW_CHARS)}…` : text);
-
-// Mirrors BOUNCE_MOVES_TO_LOST in src/lib/outreach/lead-actions.ts.
-const BOUNCE_ENDS_OUTREACH = ["contacted", "responded", "cold_call_list", "contactless_list"];
 
 const LOST_REASON_CHOICES = LOST_REASONS.map((value) => ({ value, label: CALL_OUTCOME_LABEL[value] ?? value }));
 
@@ -103,7 +108,7 @@ export default function LeadActions({
         const result = await fn();
         setFeedback(result.ok ? { ok: true, text: result.message } : { ok: false, text: result.error });
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — nothing was changed. Check your connection and try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the change went through") });
       }
       router.refresh();
     });
@@ -144,7 +149,7 @@ export default function LeadActions({
         }
         setFeedback({ ok: false, text: result.error });
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — nothing was deleted. Check your connection and try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the lead was deleted") });
       }
     });
   }
@@ -226,7 +231,7 @@ export default function LeadActions({
       body: (
         <p>
           Records the latest send as bounced
-          {BOUNCE_ENDS_OUTREACH.includes(lead.status) ? " and moves the lead to Lost." : `. The lead stays ${statusLabel(lead.status)}.`}
+          {BOUNCE_MOVES_TO_LOST.includes(lead.status) ? " and moves the lead to Lost." : `. The lead stays ${statusLabel(lead.status)}.`}
         </p>
       ),
       confirmLabel: "Mark bounced",

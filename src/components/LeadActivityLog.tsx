@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addLeadActivityAction } from "@/lib/actions/outreach";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
-import ActionMessage, { type Feedback } from "@/components/ActionMessage";
+import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import CharacterCount from "@/components/CharacterCount";
 import { formatCount } from "@/lib/format";
 
@@ -58,7 +58,7 @@ export default function LeadActivityLog({
           setFeedback({ ok: false, text: result.error });
         }
       } catch {
-        setFeedback({ ok: false, text: "Couldn't reach the server — the entry wasn't saved. Try again." });
+        setFeedback({ ok: false, text: unconfirmedMessage("the entry was saved") });
       }
       router.refresh();
     });

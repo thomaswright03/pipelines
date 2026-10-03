@@ -119,11 +119,14 @@ describe("LeadActions: sending", () => {
     expect(message.className).toContain("notice-error");
   });
 
-  it("says the server couldn't be reached when the request itself fails", async () => {
+  it("doesn't claim nothing was sent when the connection drops after Send (the email may have gone out)", async () => {
     actions.sendOutreachEmailAction.mockRejectedValue(new TypeError("Failed to fetch"));
     renderLead();
     await sendAndConfirm();
-    expect(await screen.findByText(/Couldn't reach the server — nothing was changed/)).toBeTruthy();
+    const message = await screen.findByText(
+      /Lost the connection to the server, so we couldn't confirm whether the change went through\. Reload the page/,
+    );
+    expect(message.textContent).not.toMatch(/nothing was (changed|sent)/);
   });
 });
 
