@@ -12,6 +12,7 @@ import {
   COLD_CALL_OUTCOMES,
   coldCallResult,
   CUSTOMER_STATUSES,
+  BOUNCE_MOVES_TO_LOST,
   declinedStatus,
   isLostReason,
   isStatusOf,
@@ -159,9 +160,6 @@ export async function markBounced(pipelineId: PipelineId, leadId: string): Promi
       : `Marked the email to ${lead.name} as bounced — they stay ${statusLabel(outcome.to)}.`,
   );
 }
-
-// Statuses a bounce ends outreach for: we were still trying to reach them.
-const BOUNCE_MOVES_TO_LOST: readonly string[] = ["contacted", "responded", "cold_call_list", "contactless_list"];
 
 /**
  * The bounce rules shared by "Mark bounced" and bounce notices arriving on

@@ -48,7 +48,7 @@ export type QueueMessage<Body> = {
   retry(options?: { delaySeconds?: number }): void;
 };
 
-export type Queue<Body> = { send(body: Body, options?: { delaySeconds?: number }): Promise<void> };
+type Queue<Body> = { send(body: Body, options?: { delaySeconds?: number }): Promise<void> };
 
 export type Env = {
   INBOUND_URL: string;
@@ -81,7 +81,7 @@ const MAX_FROM = 500;
 const MAX_MESSAGE_ID = 1_000;
 
 /** Headers the app reads; the only ones kept when a payload must be shrunk to fit a queue message. */
-export const APP_HEADERS = [
+const APP_HEADERS = [
   "auto-submitted",
   "x-autoreply",
   "x-autorespond",

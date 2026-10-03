@@ -1,11 +1,14 @@
-// Validation for the manual "Add lead" / "Add agent" forms. Shared by the
-// browser (checks as you type, before submitting) and the server actions
-// (the authority), so both give the same message for the same rule.
-// Client-safe: no server-only imports.
+// Validation for the manual "Add lead" / "Add agent" forms, and the Inbox
+// reply box's length limit. Shared by the browser (checks as you type,
+// before submitting) and the server (the authority), so both give the same
+// message for the same rule. Client-safe: no server-only imports.
 import { z } from "zod";
 import { isValidPhone } from "@/lib/phone";
 import { normalizeState } from "@/lib/us-states";
 import { SOLD_COUNTIES } from "@/lib/agent-cities";
+
+/** The longest reply the Inbox's reply box accepts (enforced again by reply-send.ts). */
+export const REPLY_MAX_LENGTH = 5_000;
 
 export const LIMITS = {
   name: 120,

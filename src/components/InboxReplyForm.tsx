@@ -4,9 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { sendInboxReplyAction } from "@/lib/actions/outreach";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
+import { REPLY_MAX_LENGTH } from "@/lib/lead-forms";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
-
-const MAX_LENGTH = 5_000; // REPLY_MAX_LENGTH in src/lib/outreach/reply-send.ts
 
 // "Reply" on a row of the Inbox's Replied folder: a box to write back to
 // that person, sent by the app from the pipeline's address in the same thread.
@@ -80,7 +79,7 @@ export default function InboxReplyForm({
             id={`reply-${replyId}`}
             className="input min-h-28"
             value={body}
-            maxLength={MAX_LENGTH}
+            maxLength={REPLY_MAX_LENGTH}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your reply…"
             autoFocus

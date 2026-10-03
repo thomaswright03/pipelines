@@ -28,11 +28,18 @@ import { formatDate, formatDateTime } from "@/lib/time";
 /** Who gets the report, and who it comes from (a sender verified in ZeptoMail). */
 export const DAILY_REPORT_TO = process.env.DAILY_REPORT_TO || "t@thomasewright.com";
 export const DAILY_REPORT_FROM = process.env.DAILY_REPORT_FROM || VAULT_PIPELINE_SENDER_EMAIL;
-/** The link at the bottom of the report. */
-const APP_URL = process.env.DAILY_REPORT_APP_URL || "https://pipelines-theta.vercel.app";
-
-/** The cron time in vercel.json ("0 17 * * *" UTC), as Arizona time. */
-export const DAILY_REPORT_TIME_LABEL = "10:00 AM Arizona time";
+/**
+ * The link to the app at the bottom of the report: DAILY_REPORT_APP_URL,
+ * else this Vercel project's production domain (VERCEL_PROJECT_PRODUCTION_URL,
+ * which Vercel sets itself), else none — so a second deployment never links
+ * to another one's app.
+ */
+export function reportAppUrl(env: Record<string, string | undefined> = process.env): string | null {
+  const configured = env.DAILY_REPORT_APP_URL?.trim();
+  if (configured) return configured;
+  const production = env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  return production ? `https://${production}` : null;
+}
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -74,7 +81,7 @@ const CALL_DECK_NOTE_PREFIX = "Moved to the call deck";
 
 type RunLine = { status: string; startedAt: Date; summary: string | null; errors: string[]; hitTimeLimit: boolean };
 
-export type PipelineSection = {
+type PipelineSection = {
   id: PipelineId;
   label: string;
   enabled: boolean;
@@ -296,8 +303,8 @@ export function renderDailyReport(report: DailyReport): { subject: string; text:
   lines.push(
     'Notes: bounces only count once a bounce notice arrives or you click "Mark bounced". ' +
       '"Held back" leads have an address but are blocked from sending (unverified address, or a reply waiting for a look).',
-    "",
-    APP_URL,
   );
+  const appUrl = reportAppUrl();
+  if (appUrl) lines.push("", appUrl);
   return { subject, text: lines.join("\n") };
 }

@@ -10,7 +10,7 @@ export type ParsedHeaders = Map<string, { name: string; values: string[] }>;
 export type ParsedMessage = { headers: ParsedHeaders; text: string };
 
 /** Bytes as a "binary string" (one char per byte), so encoded bodies survive until decoded. */
-export function bytesToBinary(bytes: Uint8Array): string {
+function bytesToBinary(bytes: Uint8Array): string {
   let out = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
     out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -48,7 +48,7 @@ function decodeQuotedPrintable(text: string, underscoreIsSpace = false): string 
 }
 
 /** Decodes RFC 2047 encoded words ("=?utf-8?B?…?=") in a header value. */
-export function decodeEncodedWords(value: string): string {
+function decodeEncodedWords(value: string): string {
   return value
     .replace(/\?=\s+=\?/g, "?==?") // whitespace between encoded words is dropped
     .replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_, charset: string, encoding: string, data: string) => {
@@ -64,7 +64,7 @@ function splitHeaderBody(raw: string): { head: string; body: string } {
   return { head: raw.slice(0, match.index), body: raw.slice(match.index + match[0].length) };
 }
 
-export function parseHeaders(head: string): ParsedHeaders {
+function parseHeaders(head: string): ParsedHeaders {
   const headers: ParsedHeaders = new Map();
   const unfolded = head.replace(/\r?\n[ \t]+/g, " ");
   for (const line of unfolded.split(/\r?\n/)) {
@@ -108,7 +108,7 @@ function decodeBody(body: string, headers: ParsedHeaders, charset: string | null
   return decodeBytes(binaryToBytes(binary), charset);
 }
 
-export function htmlToText(html: string): string {
+function htmlToText(html: string): string {
   return html
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
