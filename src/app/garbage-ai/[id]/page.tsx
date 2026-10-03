@@ -31,7 +31,7 @@ export default async function HaulerDetail({ params }: PageProps<"/garbage-ai/[i
   if (!lead) notFound();
 
   const pipeline = getPipeline("garbage-ai");
-  const [{ suppression, paused, ledgerNote, latestReply }, versionHistory] = await Promise.all([
+  const [{ suppression, paused, pausedByEnvironment, ledgerNote, latestReply }, versionHistory] = await Promise.all([
     loadLeadContext("garbage-ai", lead.id, lead.email),
     templateVersionHistory("garbage-ai"),
   ]);
@@ -72,6 +72,8 @@ export default async function HaulerDetail({ params }: PageProps<"/garbage-ai/[i
         <LeadActions
           pipeline="garbage-ai"
           paused={paused}
+          pausedByEnvironment={pausedByEnvironment}
+          neverPitch={lead.status === "new" ? pipeline.neverPitch(lead) : null}
           sendHold={pipeline.sendHold}
           suppression={suppression}
           latestReply={latestReply}

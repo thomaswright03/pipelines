@@ -24,7 +24,7 @@ export type Db = PrismaClient | Prisma.TransactionClient;
 export const ACTIVITY_TYPES = ["note", "call", "email", "meeting"] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
-/** The fields every send/discovery rule needs, in both pipelines. */
+/** The fields every send/discovery rule needs, in every pipeline. */
 export type OutreachLead = {
   id: string;
   name: string;
@@ -52,7 +52,10 @@ export type OutreachLead = {
   county: string | null; // dataleadsell only
 };
 
-/** Columns both lead tables share, for updates made by shared rules. */
+/** What a pipeline's never-email rule looks at (any lead row has these). */
+export type NeverPitchFacts = Pick<OutreachLead, "name" | "company" | "email" | "address" | "city" | "state">;
+
+/** Columns every lead table shares, for updates made by shared rules. */
 export type LeadUpdate = {
   status?: string;
   email?: string | null;
@@ -108,8 +111,11 @@ export type PipelineAdapter = {
   senderEmail: string;
   /** Set while this pipeline's sends are held in code: every send path refuses with this message (send.ts). */
   sendHold: string | null;
-  /** Why this lead must never be emailed by this pipeline, or null (checked by send.ts). */
-  neverPitch(lead: OutreachLead): string | null;
+  /**
+   * Why this lead must never be emailed by this pipeline, or null (checked
+   * by send.ts, and shown on the lead list and lead page).
+   */
+  neverPitch(lead: NeverPitchFacts): string | null;
   buildEmail(lead: Pick<OutreachLead, "name" | "company" | "county">): OutreachEmail;
   findLead(db: Db, id: string): Promise<OutreachLead | null>;
   findLeadsByEmail(db: Db, email: string, excludeId?: string): Promise<OutreachLead[]>;
@@ -216,11 +222,14 @@ function needsLookup(retryBefore?: Date): Prisma.LeadWhereInput & Prisma.AgentLe
   };
 }
 
-// The two lead tables (and the two send-log tables) differ only in their
+// The lead tables (and their send-log tables) differ only in their
 // pipeline-specific columns, so the factory talks to them through these
 // minimal structural views. Prisma's delegate types can't be unified across
-// two models (hence the casts where each view is made), but every argument is
-// typed as valid for both models at once — see LeadTable below.
+// models (hence the casts where each view is made), but every argument is
+// typed as valid for Lead and AgentLead at once — see LeadTable below.
+// HaulerLead has every Lead column (plus "services"), so Garbage AI goes
+// through the same views; rowColumnsExist checks what is read back against
+// all three models.
 type Row = Omit<OutreachLead, "company" | "brokerage" | "county"> & {
   company?: string | null;
   brokerage?: string | null;

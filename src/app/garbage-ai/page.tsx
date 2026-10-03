@@ -57,8 +57,8 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
     take: PAGE_SIZE,
   });
 
-  // While sending is held the run only searches, so the global pause doesn't stop it.
-  const runPaused = settings.outboundPaused && !pipeline.sendHold;
+  // A pause stops the daily run outright (no search either), as for every pipeline.
+  const runPaused = settings.outboundPaused;
   const staleWarning = staleRunWarning(schedule, runPaused, runs[0]);
 
   return (
@@ -109,6 +109,7 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
           flagged: lead.status === "new" && lead.sendBlockedReason !== null,
           lastSendFailure: lead.lastSendFailedAt ? lead.lastSendFailure : null,
           needsReview: lead.replyNeedsReview,
+          neverPitch: lead.status === "new" ? pipeline.neverPitch(lead) : null,
         }))}
         filteredTotal={filteredTotal}
         total={total}

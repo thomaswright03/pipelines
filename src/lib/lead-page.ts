@@ -73,5 +73,12 @@ export async function loadLeadContext(pipeline: PipelineId, leadId: string, emai
     };
   }
 
-  return { suppression: lead, paused: settings.outboundPaused, ledgerNote, latestReply };
+  return {
+    suppression: lead,
+    paused: settings.outboundPaused,
+    /** Switched off by OUTBOUND_EMAIL_DISABLED, which Settings can't undo. */
+    pausedByEnvironment: settings.pausedBy === "environment",
+    ledgerNote,
+    latestReply,
+  };
 }

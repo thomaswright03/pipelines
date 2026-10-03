@@ -26,7 +26,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
   });
   if (!lead) notFound();
 
-  const [{ suppression, paused, ledgerNote, latestReply }, versionHistory] = await Promise.all([
+  const [{ suppression, paused, pausedByEnvironment, ledgerNote, latestReply }, versionHistory] = await Promise.all([
     loadLeadContext("dataleadsell", lead.id, lead.email),
     templateVersionHistory("dataleadsell"),
   ]);
@@ -65,6 +65,7 @@ export default async function AgentLeadDetail({ params }: PageProps<"/dataleadse
         <LeadActions
           pipeline="dataleadsell"
           paused={paused}
+          pausedByEnvironment={pausedByEnvironment}
           suppression={suppression}
           latestReply={latestReply}
           lead={{

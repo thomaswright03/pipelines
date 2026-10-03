@@ -31,7 +31,7 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
   });
   if (!lead) notFound();
 
-  const [{ suppression, paused, ledgerNote, latestReply }, versionHistory] = await Promise.all([
+  const [{ suppression, paused, pausedByEnvironment, ledgerNote, latestReply }, versionHistory] = await Promise.all([
     loadLeadContext("cold-outreach", lead.id, lead.email),
     templateVersionHistory("cold-outreach"),
   ]);
@@ -73,6 +73,7 @@ export default async function LeadDetail({ params }: PageProps<"/vault-pipeline/
           <LeadActions
             pipeline="cold-outreach"
             paused={paused}
+            pausedByEnvironment={pausedByEnvironment}
             suppression={suppression}
             latestReply={latestReply}
             lead={{

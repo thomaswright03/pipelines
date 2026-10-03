@@ -1,4 +1,4 @@
-// The lead list shared by both pipelines: status tabs, search, sortable
+// The lead list shared by every pipeline: status tabs, search, sortable
 // columns and pagination, all driven by the URL (see src/lib/lead-list.ts).
 import Link from "next/link";
 import Form from "next/form";
@@ -26,10 +26,12 @@ type LeadRow = {
   lastSendFailure: string | null;
   /** A reply arrived while the lead was Lost / Not interested. */
   needsReview: boolean;
+  /** Why this pipeline never emails the lead (Garbage AI's exclusions), for a New lead; null otherwise. */
+  neverPitch?: string | null;
 };
 
 function RowFlags({ row }: { row: LeadRow }) {
-  if (!row.flagged && !row.needsReview && !row.lastSendFailure) return null;
+  if (!row.flagged && !row.needsReview && !row.lastSendFailure && !row.neverPitch) return null;
   return (
     <div className="flex flex-wrap gap-x-2 text-xs font-medium">
       {row.needsReview && <span className="text-amber-800 dark:text-amber-300">Reply needs a look</span>}
@@ -38,7 +40,8 @@ function RowFlags({ row }: { row: LeadRow }) {
           Last send failed
         </span>
       )}
-      {row.flagged && <span className="text-amber-800 dark:text-amber-300">Won&apos;t be auto-sent</span>}
+      {row.neverPitch && <span className="text-zinc-700 dark:text-zinc-300">Never emailed: {row.neverPitch}</span>}
+      {row.flagged && !row.neverPitch && <span className="text-amber-800 dark:text-amber-300">Won&apos;t be auto-sent</span>}
     </div>
   );
 }

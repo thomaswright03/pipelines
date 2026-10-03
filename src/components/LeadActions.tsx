@@ -18,7 +18,7 @@ import {
 } from "@/lib/actions/outreach";
 import { allowedTransitions, CALL_OUTCOME_LABEL, canMarkReplied, isBackwardMove, LOST_REASONS, statusLabel } from "@/lib/lead-status";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
-import { PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
+import { LEAD_NOUN, PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -64,7 +64,7 @@ export type LeadSuppression = {
 };
 
 /**
- * The status control and email actions on a lead page, for both pipelines.
+ * The status control and email actions on a lead page, for every pipeline.
  * Only moves and actions that make sense for the lead's current state are
  * offered (the server enforces the same rules); consequential ones ask for
  * confirmation first and every outcome is reported in plain words.
@@ -74,16 +74,22 @@ export default function LeadActions({
   lead,
   suppression,
   paused,
+  pausedByEnvironment = false,
   latestReply = null,
   sendHold = null,
+  neverPitch = null,
 }: {
   pipeline: PipelineId;
   lead: LeadActionsLead;
   suppression: LeadSuppression | null;
   paused: boolean;
+  /** Paused by the server's OUTBOUND_EMAIL_DISABLED setting, which Settings can't undo. */
+  pausedByEnvironment?: boolean;
   latestReply?: LatestReply | null;
   /** Set while this pipeline's sends are held in code: why, shown instead of a working Send button. */
   sendHold?: string | null;
+  /** Why this pipeline never emails this lead (Garbage AI's exclusions), shown instead of the Send button. */
+  neverPitch?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -142,7 +148,8 @@ export default function LeadActions({
       }
     });
   }
-  const canSend = lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason && !lead.replyNeedsReview;
+  const canSend =
+    lead.status === "new" && Boolean(lead.email) && !suppression && !lead.sendBlockedReason && !lead.replyNeedsReview && !neverPitch;
   const showMarkReplied = canMarkReplied(lead.status) && (lead.status === "contacted" || lead.emailed);
 
   async function keep() {
@@ -162,7 +169,7 @@ export default function LeadActions({
 
   async function moveTo(to: string) {
     if (to === "lost") {
-      // The one way to mark a lead Lost, in both pipelines: it always records why.
+      // The one way to mark a lead Lost, in every pipeline: it always records why.
       const reason = await choose({
         title: `Mark ${lead.name} as Lost?`,
         body: <p>From {statusLabel(lead.status)} to Lost. No further outreach goes to this lead.</p>,
@@ -206,7 +213,7 @@ export default function LeadActions({
   async function optOut() {
     const confirmed = await confirm({
       title: `Stop emailing ${lead.email}?`,
-      body: <p>Adds the address to the do-not-email list. Neither pipeline will email it again unless you remove it.</p>,
+      body: <p>Adds the address to the do-not-email list. No pipeline will email it again unless you remove it.</p>,
       confirmLabel: "Add to do-not-email list",
       danger: true,
     });
@@ -233,7 +240,7 @@ export default function LeadActions({
       title: `Remove ${lead.email} from the do-not-email list?`,
       body: (
         <p>
-          Only do this if they did <strong>not</strong> ask to stop — for example, an interested reply that was misread. Both pipelines may
+          Only do this if they did <strong>not</strong> ask to stop — for example, an interested reply that was misread. Every pipeline may
           email this address again.
         </p>
       ),
@@ -394,6 +401,11 @@ export default function LeadActions({
           </div>
         )}
         {!suppression && lead.sendBlockedReason && <p className="notice-warning">{lead.sendBlockedReason}</p>}
+        {neverPitch && (
+          <p className="notice-info">
+            <strong>Never emailed:</strong> {PIPELINE_LABEL[pipeline]} doesn&apos;t pitch this {LEAD_NOUN[pipeline].one} ({neverPitch}).
+          </p>
+        )}
         {!suppression && needsAddressCheck && (
           <button
             type="button"
@@ -424,7 +436,13 @@ export default function LeadActions({
             {sendHold ? (
               <p className="text-sm muted">{sendHold}</p>
             ) : (
-              paused && <p className="text-sm muted">Outbound email is paused — resume it in Settings to send.</p>
+              paused && (
+                <p className="text-sm muted">
+                  {pausedByEnvironment
+                    ? "Sending is switched off on the server (OUTBOUND_EMAIL_DISABLED). Settings can't turn it back on: whoever manages the hosting settings has to remove that setting and redeploy."
+                    : "Outbound email is paused — resume it in Settings to send."}
+                </p>
+              )
             )}
           </>
         )}
