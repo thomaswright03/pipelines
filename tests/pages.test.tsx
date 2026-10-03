@@ -157,6 +157,24 @@ describe("the lead lists", () => {
   });
 });
 
+describe("the ready-to-email count", () => {
+  it("matches what a bulk send will email, and says how many it will skip", async () => {
+    await makeAgentLead({ name: "Ann", email: "shared@team.test" });
+    await makeAgentLead({ name: "Bea", email: "shared@team.test" });
+    await makeAgentLead({ name: "Cal", email: "pitched@agent.test" });
+    await makeAgentLead({ name: "Dee", email: "dee@agent.test" });
+    await prisma.outreachRecipient.create({ data: { pipeline: "dataleadsell", email: "pitched@agent.test", state: "sent" } });
+
+    const { previewBulkSend } = await import("@/lib/outreach/send");
+    expect(await previewBulkSend("dataleadsell")).toMatchObject({ willSend: 2, totalEligible: 4 });
+    const page = await renderPage(AgentList(pageProps()));
+    expect(page.text).toContain("2 agents ready to email.");
+    expect(page.text).toContain("2 other New agents with an address will be skipped");
+    const dashboard = await renderPage(Dashboard());
+    expect(dashboard.getAllByText("Ready to email")[0]!.parentElement?.textContent).toMatch(/2/);
+  });
+});
+
 describe("a lead page", () => {
   it("offers the send for a New lead, with the pitch preview and its template version", async () => {
     const lead = await makeColdLead({ name: "Pat Owner", company: "Bob's Bakery" });
@@ -310,6 +328,51 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect((await renderPage(Help())).text).toMatch(/Operator guide/);
     expect((await renderPage(<NotFound />)).getByRole("link", { name: "Back to dashboard" })).toBeTruthy();
     expect(() => Missing()).toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("show interested replies from unknown addresses first, labelled and counted", async () => {
+    const reply = (fromEmail: string, text: string, verdict: string, extra = {}) =>
+      prisma.inboundReply.create({
+        data: { dedupeKey: `mid:${fromEmail}`, fromEmail, text, optedOut: false, matched: [], verdict, ...extra },
+      });
+    await reply("boss@fan.test", "Forwarded — my boss is interested, call 480-555-0000", "positive");
+    await reply("noise@else.test", "Pls rmv", "needs_look", { reviewReason: "It may be asking not to be emailed (“rmv”)." });
+
+    const page = await renderPage(Replies());
+    expect(page.text).toContain("Match each reply below to the lead it belongs to, or dismiss it.");
+    expect(page.text).toContain("1 interested, listed first; 1 other.");
+    const items = page.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(items[0]).toMatch(/^boss@fan\.test.*Interested\. Someone wrote back keen/);
+    expect(items[1]).toMatch(/^noise@else\.test.*Needs a look\./);
+
+    const layout = await renderPage(RootLayout({ children: <p>Inside</p>, params: Promise.resolve({}) } as never));
+    const repliesLink = layout.getAllByRole("link").find((link) => link.getAttribute("href") === "/replies");
+    expect(repliesLink?.textContent).toBe("Replies2 waiting to be matched, 1 interested");
+    const pipeline = await renderPage(AgentList(pageProps()));
+    expect(pipeline.text).toContain("2 replies came from an address that isn't on any lead — 1 read as interested.");
+  });
+
+  it("show the reply-loop check on Settings, with what came back", async () => {
+    const lead = await makeColdLead({
+      name: "Reply check",
+      email: "owner+c1@example.test",
+      source: "Reply check (Settings)",
+      status: "responded",
+      lastEmailedAt: new Date(),
+    });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "mid:check",
+        fromEmail: "owner+c1@example.test",
+        optedOut: false,
+        matched: [`cold-outreach:${lead.id}`],
+        verdict: "positive",
+      },
+    });
+    const settings = await renderPage(Settings(pageProps()));
+    expect(settings.getByRole("button", { name: "Send test pitch" })).toBeTruthy();
+    const check = settings.getByRole("list", { name: "Recent reply-loop checks" }).textContent ?? "";
+    expect(check).toMatch(/Passed\. Pitch sent .*; your reply was recorded .*, read as interested\. The lead is now Responded\./);
   });
 
   it("show Settings with outbound email paused", async () => {

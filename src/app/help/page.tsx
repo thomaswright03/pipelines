@@ -62,8 +62,11 @@ export default function HelpPage() {
         <p>
           <strong>If the app itself won&apos;t load</strong> (or you can&apos;t sign in), stop sending from the hosting dashboard instead:
           in Vercel, open the project → <em>Settings</em> → <em>Environment Variables</em>, add <code>OUTBOUND_EMAIL_DISABLED</code> with
-          the value <code>1</code> for Production, then redeploy the latest deployment. Every send path refuses while it is set, and the
-          header shows <em>Sending off (server)</em>. Delete the variable and redeploy to turn sending back on.
+          the value <code>1</code> for Production, then redeploy the latest deployment. It takes effect when the redeploy finishes — usually
+          1–3 minutes — and until then email can still go out: close any tab that is running a bulk send. Reload the app to check: the
+          header shows <em>Sending off (server)</em> (<em>Off</em> on a phone) once it is in force. Delete the variable and redeploy to turn
+          sending back on. The full steps, including stopping the daily runs at once from Vercel&apos;s Cron Jobs settings, are in the
+          deployment guide&apos;s &ldquo;Emergency stop&rdquo;.
         </p>
       </Section>
 
@@ -156,6 +159,11 @@ export default function HelpPage() {
             <strong>Not confirmed yet</strong> — it&apos;s set up but nothing has proved it works. For email and Yelp, press{" "}
             <strong>Test connection</strong>: the email test logs in without sending anything, and the Yelp test runs one tiny search. For
             replies, it turns green when the first reply arrives; mark replies by hand until then.
+          </li>
+          <li>
+            <strong>Check the reply loop</strong> (under the list) proves sending and replies together: enter an address you can read, press{" "}
+            <strong>Send test pitch</strong>, reply to the email, and reload Settings — it shows <em>Passed</em> once your reply is
+            recorded. Use a new address each time (you+check2@… works), and delete the &ldquo;Reply check&rdquo; lead afterwards.
           </li>
           <li>
             <strong>Check</strong> — something needs a look; the <em>Next step</em> line says what.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { cache } from "react";
 import { connection } from "next/server";
 import SiteNav from "@/components/SiteNav";
 import HeaderMenu from "@/components/HeaderMenu";
@@ -10,7 +11,7 @@ import { getAppSettings } from "@/lib/outreach/settings";
 import { outboundDisabledByEnvironment } from "@/lib/outbound-switch";
 import { describeMailDestination } from "@/lib/mail-transport-kind";
 import { logError } from "@/lib/log";
-import { countUnmatchedReplies } from "@/lib/outreach/inbound";
+import { countUnmatchedInterested, countUnmatchedReplies } from "@/lib/outreach/inbound";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import { databaseReachable } from "@/lib/db-health";
 import DatabaseUnavailable from "@/components/DatabaseUnavailable";
@@ -48,19 +49,25 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <header className="z-10 sm:sticky sm:top-0 border-b border-zinc-200/70 bg-white/80 backdrop-blur-md dark:border-zinc-800/70 dark:bg-zinc-950/80">
           {/* One row from lg up, across the full width: logo, nav, theme, then the status pills, which shrink (full text on hover) rather than wrap — the mail badge first. */}
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 px-4 py-2 sm:gap-x-4 sm:gap-y-2 sm:px-6 sm:py-3 lg:max-w-none lg:flex-nowrap lg:px-8">
-            <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2 text-lg font-semibold tracking-tight sm:min-h-8">
+            <Link
+              href="/"
+              aria-label="Outreach — dashboard"
+              className="flex min-h-11 shrink-0 items-center gap-2 text-lg font-semibold tracking-tight sm:min-h-8"
+            >
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-sm shadow-indigo-600/30">
                 O
               </span>
-              <span className="hidden sm:inline">Outreach</span>
+              {/* The wordmark gives way to the status pills where the one-row header is tightest (lg to xl). */}
+              <span className="hidden sm:inline lg:hidden xl:inline">Outreach</span>
             </Link>
-            {/* Always visible, on a phone too: paused, replies not arriving, and where "sent" mail goes. */}
-            <div className="ml-auto flex min-w-0 items-center gap-2 sm:order-last">
+            {/* Always visible, on a phone too (in one word each, so the header stays one row): paused, replies not arriving, and where "sent" mail goes. */}
+            <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:order-last sm:gap-2">
               <OutboundStatus />
             </div>
             <HeaderMenu>
               <NavWithCounts />
               <ThemeToggle />
+              <HeaderStatusList />
             </HeaderMenu>
           </div>
         </header>
@@ -94,23 +101,29 @@ async function UnlessDatabaseDown({ children }: { children: React.ReactNode }) {
 async function NavWithCounts() {
   await connection();
   let unmatched = 0;
+  let interested = 0;
   try {
-    unmatched = await countUnmatchedReplies();
+    [unmatched, interested] = await Promise.all([countUnmatchedReplies(), countUnmatchedInterested()]);
   } catch (err) {
     logError("layout.unmatchedReplies", err);
   }
-  return <SiteNav unmatchedReplies={unmatched} />;
+  return <SiteNav unmatchedReplies={unmatched} interestedReplies={interested} />;
 }
 
-/**
- * Header pills that are always visible: outbound email paused, and (when
- * not using the live mail service) where "sent" mail actually goes.
- */
-async function OutboundStatus() {
+type HeaderStatus = {
+  mail: ReturnType<typeof describeMailDestination>;
+  /** Stopped by OUTBOUND_EMAIL_DISABLED (needs no database, so it shows even when that is down). */
+  byEnvironment: boolean;
+  /** Null when the database couldn't be read. */
+  paused: boolean | null;
+  repliesMissing: boolean;
+};
+
+/** What the header's status pills say, read once per request (the header shows it twice: as pills, and in full in the phone menu). */
+const loadHeaderStatus = cache(async (): Promise<HeaderStatus> => {
   // Read per request, never baked into a prerendered page.
   await connection();
   const mail = describeMailDestination();
-  // The environment's stop needs no database, so it shows even when that is down.
   const byEnvironment = outboundDisabledByEnvironment();
   let paused: boolean | null = byEnvironment || null;
   let repliesMissing = false;
@@ -120,48 +133,148 @@ async function OutboundStatus() {
   } catch (err) {
     logError("layout.settings", err);
   }
-  const pill = "inline-flex min-h-11 min-w-0 shrink items-center gap-1.5 rounded-full px-2.5 py-1 text-xs sm:min-h-7";
+  return { mail, byEnvironment, paused, repliesMissing };
+});
+
+type Pill = {
+  key: string;
+  href: string | null;
+  /** The pill's text from `sm` up (truncated with a tooltip if it must be). */
+  full: string;
+  /** Its text on a phone, where the header must stay one row. */
+  short: string;
+  /** The link's accessible name. */
+  label: string;
+  /** What it means, in a sentence: the tooltip, and the line in the phone menu. */
+  detail: string;
+  tone: "red" | "amber" | "sky";
+  dot: boolean;
+};
+
+function headerPills({ mail, byEnvironment, paused, repliesMissing }: HeaderStatus): Pill[] {
+  const pills: Pill[] = [];
+  if (mail.badge) {
+    pills.push({
+      key: "mail",
+      href: "/settings#connections-heading",
+      full: mail.badge,
+      short: mail.shortBadge ?? mail.badge,
+      label: mail.badge,
+      detail: mail.description,
+      tone: mail.delivers ? "amber" : "sky",
+      dot: false,
+    });
+  }
+  if (repliesMissing) {
+    pills.push({
+      key: "replies",
+      href: "/replies",
+      full: "Replies not arriving",
+      short: "Replies",
+      label: "Replies not arriving — see the Replies page",
+      detail: "Replies (opt-outs among them) don't seem to be reaching the app — see the Replies page.",
+      tone: "amber",
+      dot: true,
+    });
+  }
+  if (paused) {
+    pills.push({
+      key: "paused",
+      href: "/settings",
+      full: byEnvironment ? "Sending off (server)" : "Sending paused",
+      short: byEnvironment ? "Off" : "Paused",
+      label: byEnvironment ? "Outbound email switched off on the server" : "Outbound email paused",
+      detail: byEnvironment
+        ? "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED); nothing is emailed."
+        : "Outbound email is paused in Settings; nothing is emailed until it is resumed.",
+      tone: "red",
+      dot: true,
+    });
+  }
+  if (paused === null) {
+    pills.push({
+      key: "database",
+      href: null,
+      full: "Can't reach the database",
+      short: "No database",
+      label: "Can't reach the database",
+      detail: "The database can't be reached, so pages can't load or save anything until it is back.",
+      tone: "amber",
+      dot: false,
+    });
+  }
+  return pills;
+}
+
+const PILL_TONE: Record<Pill["tone"], { pill: string; dot: string }> = {
+  red: { pill: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200", dot: "bg-red-600" },
+  amber: { pill: "bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200", dot: "bg-amber-600" },
+  sky: { pill: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200", dot: "bg-sky-600" },
+};
+
+/**
+ * Header pills that are always visible: outbound email paused, replies not
+ * arriving, and (when not using the live mail service) where "sent" mail
+ * actually goes. Where the header row is tight — a phone, and from lg (where
+ * the nav joins the row) up to 1400px — each shows a one-word form; the full
+ * text is in the phone menu (HeaderStatusList) and, everywhere, in a
+ * tooltip on hover and on keyboard focus. Elsewhere the full text shows.
+ */
+async function OutboundStatus() {
+  const pills = headerPills(await loadHeaderStatus());
   return (
     <>
-      {mail.badge && (
-        <span
-          title={mail.badge}
-          className={`max-w-[11rem] min-w-0 shrink-[4] truncate rounded-full px-2.5 py-1 text-xs font-medium lg:max-w-[13rem] ${
-            mail.delivers
-              ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
-              : "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200"
-          }`}
-        >
-          {mail.badge}
-        </span>
-      )}
-      {repliesMissing && (
-        <Link
-          href="/replies"
-          title="Replies (opt-outs among them) don't seem to be reaching the app — see the Replies page"
-          aria-label="Replies not arriving — see the Replies page"
-          className={`${pill} bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200`}
-        >
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" aria-hidden />
-          <span className="truncate">Replies not arriving</span>
-        </Link>
-      )}
-      {paused && (
-        <Link
-          href="/settings"
-          title={byEnvironment ? "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED)" : "Outbound email is paused"}
-          aria-label={byEnvironment ? "Outbound email switched off on the server" : "Outbound email paused"}
-          className={`${pill} bg-red-100 font-semibold text-red-800 dark:bg-red-900/50 dark:text-red-200`}
-        >
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />
-          <span className="truncate">{byEnvironment ? "Sending off (server)" : "Sending paused"}</span>
-        </Link>
-      )}
-      {paused === null && (
-        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-          Can&apos;t reach the database
-        </span>
-      )}
+      {pills.map((pill) => {
+        const tone = PILL_TONE[pill.tone];
+        const className = `group relative inline-flex min-h-11 min-w-0 shrink items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold sm:min-h-7 sm:px-2.5 ${
+          pill.key === "mail" ? "shrink-[4] font-medium" : ""
+        } ${tone.pill}`;
+        const content = (
+          <>
+            {pill.dot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} aria-hidden />}
+            {/* The one-word form where the row is tight: a phone, and from lg (one row with the nav) until 1400px. */}
+            <span className="whitespace-nowrap sm:hidden lg:inline wide:hidden">{pill.short}</span>
+            <span
+              className={`hidden truncate sm:inline lg:hidden wide:inline ${pill.key === "mail" ? "max-w-[15rem] wide:max-w-none" : ""}`}
+            >
+              {pill.full}
+            </span>
+            <span
+              role="tooltip"
+              className="pointer-events-none invisible absolute right-0 top-full z-20 mt-1 w-max max-w-xs rounded-md bg-zinc-900 px-2 py-1 text-xs font-normal text-white shadow-lg group-hover:visible group-focus-visible:visible dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {pill.detail}
+            </span>
+          </>
+        );
+        return pill.href ? (
+          <Link key={pill.key} href={pill.href} aria-label={pill.label} className={className}>
+            {content}
+          </Link>
+        ) : (
+          <span key={pill.key} role="status" className={className}>
+            {content}
+          </span>
+        );
+      })}
     </>
+  );
+}
+
+/** The header's statuses in full, inside the phone menu (the pills themselves are one word there). */
+async function HeaderStatusList() {
+  const pills = headerPills(await loadHeaderStatus());
+  if (pills.length === 0) return null;
+  return (
+    <ul aria-label="Status" className="flex flex-col gap-1 border-t border-zinc-200 pt-2 text-sm sm:hidden dark:border-zinc-800">
+      {pills.map((pill) => (
+        <li key={pill.key} className="flex items-start gap-2">
+          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PILL_TONE[pill.tone].dot}`} aria-hidden />
+          <span>
+            <strong className="font-medium">{pill.full}.</strong> {pill.detail}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

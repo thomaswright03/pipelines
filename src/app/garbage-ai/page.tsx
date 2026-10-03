@@ -20,6 +20,7 @@ import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { peekNextHaulerCity } from "@/lib/garbage-ai-city-picker";
 import { countUnsentDailyHaulers } from "@/lib/garbage-ai-daily-run";
+import { countReadyToEmail } from "@/lib/outreach/send";
 
 export const metadata: Metadata = { title: "Garbage AI — Haulers" };
 export const dynamic = "force-dynamic";
@@ -33,20 +34,21 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
   };
   const pipeline = getPipeline("garbage-ai");
 
-  const [filteredTotal, total, counts, schedule, settings, runs, unsent, dailyRunUnsent, blocked, replyHealth, nextCity] =
-    await Promise.all([
+  const [filteredTotal, total, counts, schedule, settings, runs, ready, dailyRunUnsent, blocked, replyHealth, nextCity] = await Promise.all(
+    [
       prisma.haulerLead.count({ where }),
       prisma.haulerLead.count(),
       prisma.haulerLead.groupBy({ by: ["status"], _count: true }),
       getPipelineSchedule(GARBAGE_AI_SCHEDULE_ID),
       getAppSettings(),
       recentRuns("garbage-ai", "daily", 5),
-      pipeline.countSendable(prisma),
+      countReadyToEmail("garbage-ai"),
       countUnsentDailyHaulers(),
       pipeline.countBlockedNew(prisma),
       getReplyHealth(),
       peekNextHaulerCity(prisma),
-    ]);
+    ],
+  );
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.haulerLead.findMany({
     where,
@@ -127,7 +129,8 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
         <OutreachControls
           pipeline="garbage-ai"
           paused={settings.outboundPaused}
-          unsent={unsent}
+          unsent={ready.readyToEmail}
+          willSkip={ready.newWithAddress - ready.readyToEmail}
           dailyRunUnsent={dailyRunUnsent}
           blocked={blocked}
           nextCity={`${nextCity.city}, ${nextCity.state}`}

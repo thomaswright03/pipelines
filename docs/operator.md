@@ -18,13 +18,18 @@ reading Connections.
 
 The **dashboard** (`/`, headed "Cold email outreach") says what the tool does and shows, for each
 pipeline, how many leads are ready to email, waiting on a reply, in Responded and on the call deck (each a
-link), plus how many replies need a look. Words like *call deck*, *held back*, *needs a look* and *ADRE* are
+link), plus how many replies need a look. "Ready to email" is what **Send outreach** would email right now:
+New leads whose address was already pitched, is shared with another lead in the batch, is on the
+do-not-email list or has a reply waiting aren't counted (the pipeline page says how many it will skip). Words like *call deck*, *held back*, *needs a look* and *ADRE* are
 explained in the Operator guide's **Glossary** (`/help#glossary`, linked from the dashboard), and each
 status badge explains itself on hover.
 
 The **header** shows up to three pills, on every page and at every width: **Sending paused** (the Settings
 switch) or **Sending off (server)** (the `OUTBOUND_EMAIL_DISABLED` environment variable), **Replies not
-arriving** (see "Is it working?" below), and, outside production, where "sent" mail really goes.
+arriving** (see "Is it working?" below), and, outside production, where "sent" mail really goes. Where the
+header is narrow (a phone, or a laptop-width window) each pill shows one word — **Paused**/**Off**,
+**Replies**, **Test mode**/**Local mail** — so the header stays one row; hover over or tab to a pill for
+what it means, and on a phone the Menu lists each in full.
 
 Each call-deck card shows the lead's company or brokerage, city/state with the local time, when the pitch
 was emailed (or "Never emailed"), the latest history entry, and a link that opens the lead page in a new
@@ -99,7 +104,10 @@ What a reply does, in both pipelines (`src/lib/outreach/inbound.ts`):
   5,000-character limit. Leads whose Notes already exceed it (from before this change) stay editable; their
   Notes just can't grow.
 - A reply from an address that is on no lead (an assistant, a personal inbox, a forward) is kept with its
-  text and listed on **Replies**, with a count next to "Replies" in the header. **Attach** records it on the
+  text and listed on **Replies**, with a count next to "Replies" in the header (green when some read as
+  interested). Replies read as interested are marked **Interested**, listed first and counted separately —
+  they are usually a prospect writing from another address, so attach them to the right lead so it moves to
+  Responded. **Attach** records it on the
   lead you pick exactly as if it had come from the lead's own address (for an opt-out, the lead's address
   also goes on the do-not-email list; a plain no closes the lead); **Dismiss** removes it from the list. An
   unmatched reply that needs a look, says no or only says thanks holds its address until it is attached,

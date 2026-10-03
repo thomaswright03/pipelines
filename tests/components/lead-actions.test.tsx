@@ -212,6 +212,19 @@ describe("LeadActions: what is offered", () => {
   });
 });
 
+describe("LeadActions: the Move to… menu", () => {
+  it("says in words which moves go back to an earlier stage", () => {
+    renderLead({ status: "contacted", emailed: true });
+    const menu = screen.getByRole("combobox", { name: "Move to…" });
+    const groups = [...menu.querySelectorAll("optgroup")].map((g) => g.label);
+    expect(groups).toEqual(["Move on", "Move back to an earlier stage"]);
+    const back = [...menu.querySelectorAll("optgroup")[1]!.querySelectorAll("option")].map((o) => o.textContent);
+    expect(back.length).toBeGreaterThan(0);
+    for (const label of back) expect(label).toMatch(/^[A-Z][\w ]+ \(move back\)$/);
+    for (const option of menu.querySelectorAll("option")) expect(option.textContent).not.toMatch(/[←→]/);
+  });
+});
+
 describe("LeadActions: marking a lead Lost", () => {
   function chooseLost() {
     fireEvent.change(screen.getByRole("combobox", { name: "Move to…" }), { target: { value: "lost" } });

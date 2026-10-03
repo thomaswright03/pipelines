@@ -25,6 +25,11 @@
   color-scheme: light;
 }
 
+/* "wide:" — from 1400px the header row has room for its status pills' full text (layout.tsx). */
+@theme {
+  --breakpoint-wide: 87.5rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

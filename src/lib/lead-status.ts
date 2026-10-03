@@ -116,7 +116,7 @@ const STATUSES: Record<PipelineId, readonly LeadStatus[]> = {
   "garbage-ai": GARBAGE_AI_STATUSES,
 };
 
-export function statusesFor(pipeline: PipelineId): readonly LeadStatus[] {
+function statusesFor(pipeline: PipelineId): readonly LeadStatus[] {
   return STATUSES[pipeline];
 }
 

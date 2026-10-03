@@ -105,6 +105,8 @@ export default function LeadActions({
 
   const basePath = PIPELINE_BASE_PATH[pipeline];
   const moves = allowedTransitions(pipeline, lead.status);
+  const backMoves = moves.filter((s) => isBackwardMove(lead.status, s));
+  const forwardMoves = moves.filter((s) => !backMoves.includes(s));
   const needsAddressCheck = Boolean(lead.email && lead.sendBlockedReason?.startsWith("Unverified address"));
 
   async function remove() {
@@ -327,11 +329,32 @@ export default function LeadActions({
               className="input"
             >
               <option value="">Choose a stage</option>
-              {moves.map((s) => (
-                <option key={s} value={s}>
-                  {isBackwardMove(lead.status, s) ? `← ${statusLabel(s)}` : statusLabel(s)}
-                </option>
-              ))}
+              {backMoves.length === 0 ? (
+                forwardMoves.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))
+              ) : (
+                <>
+                  {forwardMoves.length > 0 && (
+                    <optgroup label="Move on">
+                      {forwardMoves.map((s) => (
+                        <option key={s} value={s}>
+                          {statusLabel(s)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Move back to an earlier stage">
+                    {backMoves.map((s) => (
+                      <option key={s} value={s}>
+                        {statusLabel(s)} (move back)
+                      </option>
+                    ))}
+                  </optgroup>
+                </>
+              )}
             </select>
           </label>
         ) : (

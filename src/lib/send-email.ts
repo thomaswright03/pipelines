@@ -35,10 +35,10 @@ export type MailMessage = {
  * and the reply classifier reads a subject of just "unsubscribe" as an
  * opt-out (STOP_COMMANDS in reply-classifier.ts).
  */
-export const LIST_UNSUBSCRIBE_SUBJECT = "unsubscribe";
+const LIST_UNSUBSCRIBE_SUBJECT = "unsubscribe";
 
 /** The List-Unsubscribe header for mail sent from `from` (RFC 2369): a mailto back to the reply inbox. */
-export function listUnsubscribeHeader(from: string): string {
+function listUnsubscribeHeader(from: string): string {
   return `<mailto:${from}?subject=${LIST_UNSUBSCRIBE_SUBJECT}>`;
 }
 type MailTransport = {

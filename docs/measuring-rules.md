@@ -58,11 +58,14 @@ so a rule change that makes things worse fails even when every unit test passes.
 to the run summary.
 
 Every set is **synthetic**, written to resemble real mail, sites and staff directories, and the eval labels
-each score "synthetic". It also scores a **real replies** split (`tests/corpus/real-replies.ts`) on the five
-outcomes the app acts on (opt-out, positive, plain no, thank-you only, needs a look) and fails on any unsafe outcome; that split is
-empty until the owner supplies data, and the run says so ("Real replies [held-out]: none yet"). To measure
-production traffic, export recent inbound mail with its anonymised text and the app's decision as a
-*suggested* label:
+each score "synthetic". It also scores **real replies** (`tests/corpus/real-replies.ts`) in two splits,
+each printed on its own line ("Reply outcomes [real replies, held-out, real]: … unsafe …; needs a look …")
+on the five outcomes the app acts on (opt-out, positive, plain no, thank-you only, needs a look), with the
+same floor as the synthetic sets: the run fails on any unsafe outcome, any opt-out read as a plain no or
+thank-you, or any interested reply closed or filed. Both splits are empty until the owner supplies data,
+and the run says so ("Real replies: none yet"). The held-out real split is never used to change a rule. To
+measure production traffic, export recent inbound mail with its anonymised text and the app's decision as
+a *suggested* label:
 
 ```bash
 EVAL_EXPORT_DATABASE_URL="<read-only URL or a copy of production>" node scripts/export-eval-cases.mjs 200 > cases.json
@@ -71,8 +74,11 @@ EVAL_EXPORT_DATABASE_URL="<read-only URL or a copy of production>" node scripts/
 The script runs one `SELECT` in a read-only transaction and replaces email addresses, phone numbers, URLs
 and long digit runs. Each case comes out in the shape `real-replies.ts` takes (`text`, `subject`,
 `expected`), with `expected` set to what the app decided. It can't find people's or firms' names in free
-text: replace those by hand, read and correct each `expected`, drop the `suggested` details, and paste the
-cases into `REAL_REPLY_HELD_OUT` (aim for 50 or more). Never commit real addresses or names.
+text: replace those by hand, read and correct each `expected`, drop the `suggested` details, and paste each
+case into the split its `split` field names — `REAL_REPLY_DEV` or `REAL_REPLY_HELD_OUT` (about 40% / 60%,
+fixed by a hash of the text so nobody chooses what is held out; aim for 50 or more held-out). Replies to
+the reply-loop check (the owner's own test replies) are left out of the export. Never commit real
+addresses or names.
 
 **Rules version.** Every stored decision records which version of the rules made it:
 `InboundReply.rulesVersion` (the reply kind, opt-out and "needs a look" verdicts) and the leads'

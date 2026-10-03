@@ -100,9 +100,11 @@ function headersObject(headers: ParsedHeaders, only?: string[]): Record<string, 
 /** Builds the route's payload from a raw message; `envelopeFrom` is used when there is no From header. */
 export function buildPayload(raw: Uint8Array, envelopeFrom: string): InboundPayload {
   const { headers, text } = parseMessage(raw);
-  const from = (firstHeader(headers, "from") || envelopeFrom).slice(0, MAX_FROM);
+  // The app refuses a sender with no address in it, so a From header
+  // without one ("Mail Delivery System") gives way to the envelope sender.
+  const header = firstHeader(headers, "from")?.slice(0, MAX_FROM) ?? "";
   return {
-    from: from.trim().length >= 3 ? from : envelopeFrom,
+    from: header.includes("@") || !envelopeFrom.includes("@") ? header || envelopeFrom : envelopeFrom,
     subject: firstHeader(headers, "subject")?.slice(0, MAX_SUBJECT) ?? null,
     text: text.slice(0, MAX_TEXT),
     messageId: firstHeader(headers, "message-id")?.trim().slice(0, MAX_MESSAGE_ID) || null,

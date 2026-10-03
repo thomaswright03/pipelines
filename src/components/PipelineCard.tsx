@@ -6,6 +6,7 @@ import Link from "next/link";
 import { updatePipelineMetaAction } from "@/lib/actions/pipeline-meta";
 import type { PipelineMetaFields } from "@/lib/pipeline-meta-defaults";
 import type { DashboardNumbers } from "@/lib/dashboard";
+import HowThisWorks from "@/components/HowThisWorks";
 
 type InternalProps = {
   kind: "internal";
@@ -118,19 +119,24 @@ export default function PipelineCard({
             </div>
           </div>
 
-          {meta.productDescription && (
-            <div>
-              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Product</div>
-              <p className="break-words text-sm muted">{meta.productDescription}</p>
-            </div>
-          )}
-          {meta.pipelineDescription && (
-            <div>
-              <div className="text-xs font-medium uppercase text-zinc-600 dark:text-zinc-400">Pipeline</div>
-              <p className="break-words text-sm muted">{meta.pipelineDescription}</p>
-            </div>
-          )}
+          {/* What needs doing first; what the pipeline is, for whoever wants it, behind a disclosure. */}
           {rest.kind === "internal" && <KeyNumbers href={rest.href} numbers={rest.numbers} />}
+          {(meta.productDescription || meta.pipelineDescription) && (
+            <HowThisWorks summary="About this pipeline">
+              {meta.productDescription && (
+                <p className="break-words">
+                  <strong className="font-medium text-zinc-700 dark:text-zinc-300">Product: </strong>
+                  {meta.productDescription}
+                </p>
+              )}
+              {meta.pipelineDescription && (
+                <p className="break-words">
+                  <strong className="font-medium text-zinc-700 dark:text-zinc-300">Pipeline: </strong>
+                  {meta.pipelineDescription}
+                </p>
+              )}
+            </HowThisWorks>
+          )}
         </>
       )}
 
@@ -198,7 +204,8 @@ function KeyNumbers({ href, numbers }: { href: string; numbers: DashboardNumbers
     <div className="flex flex-col gap-2">
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {items.map((item) => (
-          <div key={item.label} className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
+          // Tiles in a row stretch to the tallest; the number sits at the bottom, so a label that wraps doesn't lift its number.
+          <div key={item.label} className="flex flex-col justify-between gap-0.5 rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-800/60">
             <dt className="text-xs muted">{item.label}</dt>
             <dd>
               <Link

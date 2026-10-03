@@ -58,7 +58,7 @@ export const UNSENT_DAILY = {
 
 type DailyRunTarget = { city: string; state: string; county?: string };
 
-export type DailyRunSpec<T extends DailyRunTarget> = {
+type DailyRunSpec<T extends DailyRunTarget> = {
   pipeline: PipelineId;
   /** The Yelp search term ("" searches every kind of business). */
   searchTerm: string;

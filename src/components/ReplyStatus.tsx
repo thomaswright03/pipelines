@@ -28,17 +28,36 @@ export default function ReplyStatus({
             : "No replies received yet, so reply tracking isn't confirmed — until the first one arrives, mark replies by hand from the lead's page."}
         </p>
       )}
-      {showUnmatched && health.unmatched > 0 && (
-        <p className="notice-info">
-          {plural(health.unmatched, "reply", "replies")} came from an address that isn&apos;t on any lead.{" "}
-          {showLink && (
-            <Link href="/replies" className="font-medium underline underline-offset-2">
-              Match {health.unmatched === 1 ? "it" : "them"} to a lead
-            </Link>
-          )}
-        </p>
-      )}
+      {showUnmatched && <UnmatchedRepliesNotice health={health} showLink={showLink} />}
     </div>
+  );
+}
+
+/**
+ * "3 replies came from an address that isn't on any lead — 1 reads as
+ * interested." Interested ones are a live prospect writing from another
+ * address, so they are called out (and styled) apart from the rest.
+ */
+export function UnmatchedRepliesNotice({ health, showLink = true }: { health: ReplyHealth; showLink?: boolean }) {
+  if (health.unmatched === 0) return null;
+  const interested = health.unmatchedInterested;
+  const which = interested < health.unmatched ? String(interested) : health.unmatched === 1 ? "it" : "all";
+  return (
+    <p className={interested > 0 ? "notice-success" : "notice-info"}>
+      {plural(health.unmatched, "reply", "replies")} came from an address that isn&apos;t on any lead
+      {interested > 0 && (
+        <>
+          {" "}
+          — <strong>{which === "it" ? "it reads" : `${which} read`} as interested</strong>
+        </>
+      )}
+      .{" "}
+      {showLink && (
+        <Link href="/replies" className="font-medium underline underline-offset-2">
+          Match {health.unmatched === 1 ? "it" : "them"} to a lead
+        </Link>
+      )}
+    </p>
   );
 }
 

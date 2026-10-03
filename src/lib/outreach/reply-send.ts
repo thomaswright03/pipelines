@@ -23,7 +23,7 @@ export function replySubject(subject: string | null): string {
 }
 
 /** The inbound message's Message-ID as a header value ("<id>"), when the Worker passed one on. */
-export function inboundMessageId(dedupeKey: string): string | null {
+function inboundMessageId(dedupeKey: string): string | null {
   if (!dedupeKey.startsWith("mid:")) return null;
   const id = dedupeKey.slice(4).trim();
   return id ? `<${id}>` : null;

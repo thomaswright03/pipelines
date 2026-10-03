@@ -7,13 +7,13 @@
 // soon as pitches that are more than 2 days old have had no inbound message
 // of any kind (reply, automatic reply or bounce, matched or not) after them.
 import { prisma } from "@/lib/db";
-import { countUnmatchedReplies, lastInboundReplyAt } from "@/lib/outreach/inbound";
+import { countUnmatchedInterested, countUnmatchedReplies, lastInboundReplyAt } from "@/lib/outreach/inbound";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** A week without any inbound message while emails are out is a warning. */
 export const REPLY_WATCH_WINDOW_DAYS = 7;
 /** Sends younger than this haven't had a fair chance of a reply yet. */
-export const REPLY_GRACE_DAYS = 2;
+const REPLY_GRACE_DAYS = 2;
 /**
  * This many pitches past the grace period without a single inbound message
  * after them — not even an out-of-office or a bounce — is a warning even
@@ -24,6 +24,8 @@ export const SILENT_SENDS_THRESHOLD = 20;
 export type ReplyHealth = {
   lastReplyAt: Date | null;
   unmatched: number;
+  /** Of those, the ones the rules read as interested. */
+  unmatchedInterested: number;
   /** Emails sent more than 2 days ago (any age beyond that). */
   sendsPastGrace: number;
   /** Of those, the ones sent after the last inbound message arrived. */
@@ -58,9 +60,10 @@ export function replyIsRecent(lastReplyAt: Date | null, now: Date): boolean {
 
 export async function getReplyHealth(now: Date = new Date()): Promise<ReplyHealth> {
   const graceCutoff = new Date(now.getTime() - REPLY_GRACE_DAYS * DAY_MS);
-  const [lastReplyAt, unmatched, sendsPastGrace] = await Promise.all([
+  const [lastReplyAt, unmatched, unmatchedInterested, sendsPastGrace] = await Promise.all([
     lastInboundReplyAt(),
     countUnmatchedReplies(),
+    countUnmatchedInterested(),
     prisma.outreachRecipient.count({ where: { state: "sent", sentAt: { lte: graceCutoff } } }),
   ]);
   const sendsSinceLastReply =
@@ -68,5 +71,5 @@ export async function getReplyHealth(now: Date = new Date()): Promise<ReplyHealt
       ? await prisma.outreachRecipient.count({ where: { state: "sent", sentAt: { lte: graceCutoff, gt: lastReplyAt } } })
       : sendsPastGrace;
   const reason = warningReason(sendsPastGrace, lastReplyAt, now, sendsSinceLastReply);
-  return { lastReplyAt, unmatched, sendsPastGrace, sendsSinceLastReply, warning: reason !== null, reason };
+  return { lastReplyAt, unmatched, unmatchedInterested, sendsPastGrace, sendsSinceLastReply, warning: reason !== null, reason };
 }

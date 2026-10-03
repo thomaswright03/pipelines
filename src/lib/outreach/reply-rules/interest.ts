@@ -4,7 +4,8 @@
 // Signs of interest. A reply needs one of these (or a question) to count as positive.
 export const INTEREST_SIGNALS: RegExp[] = [
   // A yes: "Yes", "Sure", "OK", "Absolutely", "Sí", "Oui" opening a line, or "yes"/"yeah" anywhere.
-  /^[\s"'(¡¿]*(?:y|ya|yes+|yeah|yep|yup|yea|sure|ok(?:ay)?|k|absolutely|definitely|certainly|of\s+course|please\s+do|go\s+ahead|deal|s[ií]|oui|ja|claro|d'accord)(?![\p{L}\p{N}])/imu,
+  // Not when a negation follows: "Please do not send…", "Sure, not now".
+  /^[\s"'(¡¿]*(?:y|ya|yes+|yeah|yep|yup|yea|sure|ok(?:ay)?|k|absolutely|definitely|certainly|of\s+course|please\s+do|go\s+ahead|deal|s[ií]|oui|ja|claro|d'accord)(?![\p{L}\p{N}])(?![\s,.!-]*(?:not|never)\b)/imu,
   /\b(?:yes|yeah|yep|yup|absolutely|definitely)\b/i,
   // Interest in any of the languages we get replies in ("interested", "me interesa", "intéressé", "interessiert").
   /\bint[eé]r[eé]s(?:ted|ting|a|ado|ada|s[eé]e?|s[eé]es?|siert|sato|sati)(?![\p{L}\p{N}])/iu,

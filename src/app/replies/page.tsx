@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import HowThisWorks from "@/components/HowThisWorks";
 import ReplyStatus from "@/components/ReplyStatus";
 import UnmatchedReplies from "@/components/UnmatchedReplies";
 import { listUnmatchedReplies } from "@/lib/outreach/inbound";
@@ -19,23 +20,70 @@ export default async function RepliesPage() {
     getQualitySignals(),
     getFinderQuality(),
   ]);
+  const others = health.unmatched - health.unmatchedInterested;
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex flex-col gap-2">
         <h1 className="accent-text text-2xl font-bold tracking-tight">Replies</h1>
-        <p className="mt-1 text-sm muted">
-          Replies to both pipelines&apos; emails are recorded on the lead with that address automatically. Replies from any other address —
-          an assistant, a personal inbox, a forward — wait here until you match them to a lead. Out-of-office and other automatic replies
-          are noted on the lead without counting as a reply, and bounce notices mark the email bounced; a bounce notice that doesn&apos;t
-          say which address failed waits here too.
+        <p className="text-sm">
+          {health.unmatched === 0
+            ? "Nothing to do here: every reply so far came from a lead's own address and was recorded on that lead."
+            : "Match each reply below to the lead it belongs to, or dismiss it."}
         </p>
+        <HowThisWorks>
+          <p>
+            Replies to every pipeline&apos;s emails are recorded on the lead with that address automatically. Replies from any other address
+            — an assistant, a personal inbox, a forward — wait here until you match them to a lead. Interested ones are listed first.
+          </p>
+          <p>
+            Out-of-office and other automatic replies are noted on the lead without counting as a reply, and bounce notices mark the email
+            bounced; a bounce notice that doesn&apos;t say which address failed waits here too.
+          </p>
+        </HowThisWorks>
       </div>
+
+      <section aria-labelledby="unmatched-heading" className="flex flex-col gap-3">
+        <div>
+          <h2 id="unmatched-heading" className="text-base font-semibold">
+            Replies from unknown addresses ({health.unmatched})
+          </h2>
+          {health.unmatched > 0 && (
+            <p className="mt-1 text-sm muted">
+              {health.unmatchedInterested > 0 ? (
+                <>
+                  <strong className="text-emerald-800 dark:text-emerald-300">{health.unmatchedInterested} interested</strong>
+                  {others > 0 ? `, listed first; ${others} other${others === 1 ? "" : "s"}.` : "."}
+                </>
+              ) : (
+                "None reads as interested."
+              )}
+            </p>
+          )}
+        </div>
+        <UnmatchedReplies
+          replies={replies.map((r) => ({
+            id: r.id,
+            fromEmail: r.fromEmail,
+            subject: r.subject,
+            text: r.text,
+            optedOut: r.optedOut,
+            reviewReason: r.reviewReason,
+            verdict: r.verdict,
+            bounce: r.kind === "bounce",
+            kindReason: r.kindReason,
+            receivedAt: formatDateTime(r.receivedAt),
+          }))}
+        />
+        {health.unmatched > replies.length && (
+          <p className="text-sm muted">Showing the latest {replies.length}. Deal with these to see older ones.</p>
+        )}
+      </section>
 
       <section aria-labelledby="tracking-heading" className="card flex flex-col gap-2 p-4">
         <h2 id="tracking-heading" className="text-base font-semibold">
           Reply tracking
         </h2>
-        <ReplyStatus health={health} showLink={false} />
+        <ReplyStatus health={health} showLink={false} showUnmatched={false} />
       </section>
 
       <section aria-labelledby="quality-heading" className="card flex flex-col gap-3 p-4">
@@ -86,29 +134,6 @@ export default async function RepliesPage() {
           </p>
         </div>
         <FinderQuality data={finder} />
-      </section>
-
-      <section aria-labelledby="unmatched-heading" className="flex flex-col gap-3">
-        <h2 id="unmatched-heading" className="text-base font-semibold">
-          Replies from unknown addresses ({health.unmatched})
-        </h2>
-        <UnmatchedReplies
-          replies={replies.map((r) => ({
-            id: r.id,
-            fromEmail: r.fromEmail,
-            subject: r.subject,
-            text: r.text,
-            optedOut: r.optedOut,
-            reviewReason: r.reviewReason,
-            verdict: r.verdict,
-            bounce: r.kind === "bounce",
-            kindReason: r.kindReason,
-            receivedAt: formatDateTime(r.receivedAt),
-          }))}
-        />
-        {health.unmatched > replies.length && (
-          <p className="text-sm muted">Showing the latest {replies.length}. Deal with these to see older ones.</p>
-        )}
       </section>
     </div>
   );

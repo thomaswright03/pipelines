@@ -496,15 +496,67 @@ for (const width of [1024, 1280, 1440]) {
       .locator("nav a")
       .evaluateAll((links) => new Set(links.map((a) => Math.round(a.getBoundingClientRect().top))).size);
     expect(rowTops).toBe(1);
+    // Each pill's visible text (one word each below 1400px) is shown whole, not squeezed.
+    const squeezed = await header
+      .locator("a[href='/settings'] span, a[href='/replies'] span, a[href^='/settings#'] span")
+      .evaluateAll((spans) =>
+        spans
+          .filter((s) => (s as HTMLElement).offsetParent !== null && s.getAttribute("role") !== "tooltip" && s.textContent)
+          .filter((s) => s.scrollWidth > s.clientWidth + 1 || s.getBoundingClientRect().width < 8)
+          .map((s) => s.textContent),
+      );
+    expect(squeezed).toEqual([]);
     if (width >= 1440) {
-      // Wide enough that the paused and replies pills show their whole text.
+      // Wide enough that the mail, paused and replies pills show their whole text.
       const cut = await header
-        .locator("a[href='/settings'] .truncate, a[href='/replies'] .truncate")
+        .locator("a[href='/settings'] .truncate, a[href='/replies'] .truncate, a[href^='/settings#'] .truncate")
         .evaluateAll((spans) => spans.filter((s) => s.scrollWidth > s.clientWidth).map((s) => s.textContent));
       expect(cut).toEqual([]);
     }
   });
 }
+
+test("at 375px the header stays one row with every status pill showing, and the menu gives each in full", async ({ page }) => {
+  await withDb(async (db) => {
+    await db.query(`INSERT INTO "AppSettings" (id, "outboundPaused", "pausedAt", "updatedAt") VALUES ('global', true, now(), now())`);
+    await db.query(
+      `INSERT INTO "OutreachRecipient" (id, pipeline, email, state, "claimedAt", "sentAt")
+       VALUES ('r1', 'cold-outreach', 'old@x.test', 'sent', now() - interval '3 days', now() - interval '3 days')`,
+    );
+  });
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto("/");
+  const header = page.locator("body > header");
+  for (const name of ["Outbound email paused", /Replies not arriving/, /Test mode/]) {
+    await expect(header.getByRole("link", { name })).toBeVisible();
+  }
+  expect((await header.boundingBox())!.height).toBeLessThanOrEqual(64);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+
+  await header.getByRole("button", { name: "Menu" }).click();
+  const status = header.getByRole("list", { name: "Status" });
+  await expect(status).toContainText("Sending paused.");
+  await expect(status).toContainText("Replies not arriving.");
+  await expect(status).toContainText("Test mode: mail saved, not sent.");
+});
+
+test("the dashboard's numbers line up in every row of tiles, at phone, tablet and desktop widths", async ({ page }) => {
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    // Each tile's number, with the top of the tile it sits in.
+    const numbers = await page.locator("dl dd a[aria-label]").evaluateAll((links) =>
+      links.map((a) => ({
+        tileTop: Math.round(a.closest("div")!.getBoundingClientRect().top),
+        bottom: Math.round(a.getBoundingClientRect().bottom),
+      })),
+    );
+    expect(numbers.length, `${width}px`).toBeGreaterThanOrEqual(8);
+    const rows = new Map<number, Set<number>>();
+    for (const { tileTop, bottom } of numbers) rows.set(tileTop, (rows.get(tileTop) ?? new Set()).add(bottom));
+    for (const [top, bottoms] of rows) expect([...bottoms], `${width}px, tiles at y=${top}`).toHaveLength(1);
+  }
+});
 
 test("at 375px the do-not-email list shows each address whole, with its date, reason and a 44px Remove", async ({ page }) => {
   const long = "accounts.receivable.department@very-long-business-name-example.test";

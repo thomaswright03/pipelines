@@ -8,11 +8,25 @@
 // Each case carries what the app decided (optOut, review, kind) as a
 // *suggested* label. Read every case, correct the label where the app was
 // wrong, check the anonymisation, and only then paste it into the corpus —
-// into a held-out split if the rules haven't been changed with it in view.
+// into the split named by its `split` field (a fixed hash of its text).
 // Anonymisation replaces email addresses, phone numbers, URLs and long
 // digit runs; it can't find people's or firms' names in free text, so
 // replace those by hand. Never commit real addresses or names.
+import { createHash } from "node:crypto";
 import pg from "pg";
+
+/** Share of cases assigned to the development split; the rest are held out. */
+const DEV_SHARE = 0.4;
+
+/**
+ * "dev" or "held-out", fixed by a hash of the anonymised text, so the same
+ * reply always lands in the same split and nobody chooses which cases are
+ * held out.
+ */
+function splitFor(text) {
+  const first = createHash("sha256").update(text).digest()[0];
+  return first < DEV_SHARE * 256 ? "dev" : "held-out";
+}
 
 const url = process.env.EVAL_EXPORT_DATABASE_URL;
 if (!url) {
@@ -42,11 +56,16 @@ try {
     // the script also works on a database without it.
     `SELECT subject, text, "optedOut", "reviewReason", kind, "failedRecipient" IS NOT NULL AS "hasRecipient", "rulesVersion",
             to_jsonb(r) ->> 'verdict' AS verdict
-       FROM "InboundReply" r ORDER BY "receivedAt" DESC LIMIT $1`,
+       FROM "InboundReply" r
+      -- Leave out the owner's own replies to the reply-loop check (src/lib/outreach/reply-check.ts).
+      WHERE NOT EXISTS (SELECT 1 FROM "Lead" l WHERE l.source = 'Reply check (Settings)' AND l.email = r."fromEmail")
+      ORDER BY "receivedAt" DESC LIMIT $1`,
     [limit],
   );
   await client.query("ROLLBACK");
   const cases = rows.map((r) => ({
+    // Paste the case into REAL_REPLY_DEV or REAL_REPLY_HELD_OUT as this says.
+    split: splitFor(anonymise(r.text)),
     subject: anonymise(r.subject),
     text: anonymise(r.text),
     // The outcome the app chose, in the shape tests/corpus/real-replies.ts

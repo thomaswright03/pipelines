@@ -95,7 +95,7 @@ same reply.
 | Status | Meaning | Worker must |
 |---|---|---|
 | `200` | Recorded, or already recorded (`"duplicate": true`) | Stop. |
-| `400` | The body isn't `{ from, subject, text, messageId, headers }`. The `error` names each failing field ("subject is too long (at most 2000 characters)"), and the app logs an `api.email-inbound` warning with the field names (never the content) | Not retry; log it. |
+| `400` | The body isn't `{ from, subject, text, messageId, headers }`, or `from` holds no email address (`"abc"`, `"Mail Delivery System"`). The `error` names each failing field ("subject is too long (at most 2000 characters)", "from is invalid (no email address in it…)"), and the app logs an `api.email-inbound` warning with the field names (never the content) | Not retry; log it. |
 | `401` | Wrong or missing token | Not retry; fix the secret. |
 | `503` (or any other 5xx, or no response) | Nothing was recorded. The body is `{ "error", "code", "retry": true }` with `code` `db_unavailable` (the database couldn't be reached) or `internal`; the cause is only in the server log | Resend the **same payload** with exponential backoff (for example 1 min, 2, 4, 8 … capped at 1 hour) for **at least 72 hours**, then alert the owner. |
 
@@ -113,13 +113,31 @@ to ZeptoMail while it is set (`src/lib/outbound-switch.ts`, tested in `tests/kil
 To stop sending:
 
 1. Vercel → the project → **Settings → Environment Variables** → **Add**: key `OUTBOUND_EMAIL_DISABLED`,
-   value `1`, environment **Production** → Save.
-2. **Deployments** → the current production deployment → **⋯ → Redeploy** (environment variables take
-   effect only in a new deployment; this takes a minute or two).
-3. Open the app: the header shows **Sending off (server)** and Settings says "Outbound email: off (server
-   setting)". A send in progress when the redeploy finishes is the last one.
+   value `1`, environment **Production** → Save. This alone changes nothing yet: a running deployment keeps
+   the environment it started with.
+2. **Deployments** → the current production deployment → **⋯ → Redeploy** (keep "Use existing Build Cache"
+   ticked; that makes it quicker). The redeploy usually finishes in **1–3 minutes**; the deployment's page
+   shows **Ready** when it has. Until then the old deployment keeps serving — and sending.
+3. Confirm it took effect: reload any page of the app. The header shows **Sending off (server)** (**Off** on
+   a phone) and Settings says "Outbound email: off (server setting)". If the header still shows no such pill,
+   the new deployment isn't live yet (check that the redeploy targeted Production and is **Ready**).
+4. Afterwards, the next daily run of each pipeline is recorded as **Skipped** ("Outbound email is switched
+   off on the server…") in the pipeline page's run history, and any send attempt answers "Outbound email is
+   switched off on the server (OUTBOUND_EMAIL_DISABLED is set) — nothing was sent."
 
-To send again, delete the variable (or set it to `0`) and redeploy. The Settings switch can't override it.
+**What can still go out during those minutes.** A bulk send runs from the operator's browser one email at
+a time: closing that tab stops it at once. The daily runs fire at the times in `vercel.json` (15:00, 15:33
+and 16:03 UTC); if one is due within the next few minutes, also do step 5.
+
+5. **Optional, immediate, no redeploy:** Vercel → the project → **Settings → Cron Jobs** → **Disable Cron
+   Jobs**. This takes effect at once and stops the daily runs (and the stale-contacts move) until they are
+   re-enabled; it doesn't stop single or bulk sends. For a stop that needs neither the app nor a redeploy,
+   delete (or regenerate) the SMTP password of the sending Mail Agent in ZeptoMail — every send then fails
+   with a login error and nothing is delivered, and a bulk send stops by itself after three failures in a
+   row. Undo both afterwards (a new SMTP password also has to go into `ZEPTOMAIL_SMTP_PASSWORD`).
+
+To send again, delete the variable (or set it to `0`) and redeploy the same way; the header pill disappears
+once the new deployment is live. The Settings switch can't override the variable.
 
 ## Settings → Connections
 
@@ -132,6 +150,30 @@ the operator and names no settings; this table is for the developer they're told
 | Receiving replies | An inbound message of any kind arrived in the last 7 days | "Reply forwarding isn't switched on" → `EMAIL_INBOUND_SECRET`; "Not confirmed yet" / "replies seem to have stopped" → the Cloudflare Email Worker and Vercel's Protection Bypass for Automation (see "Reply tracking: the email Worker" above) |
 | Daily run, stale contacts | The last run succeeded and was less than 26 hours ago | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab |
 | Yelp search | The latest Yelp request (a search, a daily run or **Test connection**, which asks for one business) answered | "Yelp isn't set up" → `YELP_API_KEY` missing; "rejected our access key" → the key is wrong or revoked |
+
+## Post-deploy smoke check: the reply loop
+
+Run this after every production deploy that touches sending or replies, and once after the reply Worker is
+set up. It proves, with real traffic, that a pitch leaves, that a reply to it comes back through the Worker,
+and that the reply is recorded on the right lead. Anyone with access to the app can run it; it takes about
+five minutes.
+
+1. **Settings → Connections → Check the reply loop.** Enter an address you can read. Each address gets one
+   pitch ever, so use a fresh plus-address each time (`you+check7@gmail.com` reaches `you@gmail.com`).
+   Press **Send test pitch** and confirm. This creates a Cold Outreach lead called "Reply check" and sends
+   it the real Cold Outreach pitch through the live mail service. It is refused while sending is paused.
+2. **Reply** to that email from your inbox: "Yes, interested" to check the positive path, or "STOP" to
+   check the opt-out path.
+3. **Reload Settings** after a minute or two. The check shows **Passed** with when the reply was recorded,
+   how it was read and where the lead is now: **Responded** for "Yes, interested"; **Lost** for "STOP",
+   with the address on the do-not-email list. The lead page's History shows the reply, and the
+   **Sending email** and **Receiving replies** rows above show **Working** with the times of this traffic.
+4. If it still says "no reply has been recorded" 15 minutes after you replied, replies aren't reaching the
+   app: work through "Reply tracking: the email Worker" above (the usual cause is Vercel Deployment
+   Protection answering the Worker with 401 — the Worker's log shows it).
+5. **Clean up:** delete the "Reply check" lead from its page (a STOP check also leaves its plus-address on
+   the do-not-email list, which is harmless). While it exists it counts in Cold Outreach's numbers like any
+   lead, and after a week without a reply it moves to the call deck.
 
 ## Owner-only setup
 
@@ -179,7 +221,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
    make the `CI / build-lint-test` check required, so a pull request with a failing test, lint, format or
    build can't be merged. The repository can't show whether this is on; confirm it here once done.
 5. **Press Test connection** for email and Yelp in **Settings → Connections** after deploying, so each shows
-   "Working" from a real login/search rather than "Not confirmed yet".
+   "Working" from a real login/search rather than "Not confirmed yet", then run the reply-loop check
+   ("Post-deploy smoke check" above) once reply tracking is reachable (item 2).
 6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get the
    other pipeline's pitch. Leave it off (the default) or turn it on in Settings.
 7. **Lawful basis for the outreach.** This is a legal review, not a code change. See README → "Known limitations".

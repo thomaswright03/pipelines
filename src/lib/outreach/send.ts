@@ -109,7 +109,7 @@ export async function findExistingPitch(
 }
 
 /** Why a reply from an address holds every send to it. */
-export type ReplyHold =
+type ReplyHold =
   /** A reply waiting for the operator: on a lead ("on Jane's page in Cold Outreach") or on the Replies page. */
   | { kind: "needs_look"; where: string }
   /** A plain no or a courtesy note: nothing more is sent, and nobody needs to look. */
@@ -121,7 +121,7 @@ export type ReplyHold =
  * page that matched no lead and needs a look, or a reply that said no or
  * only thanks (not dismissed from the Replies page).
  */
-export async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHold>> {
+async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHold>> {
   const holds = new Map<string, ReplyHold>();
   if (emails.length === 0) return holds;
   for (const pipeline of ALL_PIPELINES) {
@@ -458,23 +458,49 @@ export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPrevi
     pipeline.countSendable(prisma),
     pipeline.listSendable(prisma, BULK_BATCH_LIMIT),
   ]);
+  const seen = new Set<string>();
+  const { sendable, skipped } = await sortForSend(pipelineId, batch, settings.allowCrossPipelineRepeats, seen);
 
-  const emails = [...new Set(batch.map((l) => l.email!.toLowerCase()))];
+  return {
+    paused: settings.outboundPaused,
+    pausedByEnvironment: settings.pausedBy === "environment",
+    totalEligible,
+    leadIds: batch.map((l) => l.id),
+    willSend: sendable.length,
+    distinctAddresses: seen.size,
+    sample: sendable.slice(0, 5).map((l) => ({ name: l.name, email: l.email! })),
+    skipped,
+    batchLimit: BULK_BATCH_LIMIT,
+  };
+}
+
+/**
+ * Splits `leads` (New, with an address, not held back) into the ones a send
+ * would email right now and the ones it would skip, counted under the
+ * reason sendFirstTouch would give — checked in the order it checks them.
+ * `seen` carries the addresses already taken by earlier leads of the same
+ * batch, so a batch can be sorted in chunks.
+ */
+async function sortForSend(
+  pipelineId: PipelineId,
+  leads: OutreachLead[],
+  allowCrossPipelineRepeats: boolean,
+  seen: Set<string>,
+): Promise<{ sendable: OutreachLead[]; skipped: BulkPreview["skipped"] }> {
+  const pipeline = getPipeline(pipelineId);
+  const emails = [...new Set(leads.map((l) => l.email!.toLowerCase()))];
   const [pitched, suppressed, holds] = await Promise.all([
     prisma.outreachRecipient.findMany({
-      where: { email: { in: emails }, ...(settings.allowCrossPipelineRepeats ? { pipeline: pipelineId } : {}) },
+      where: { email: { in: emails }, ...(allowCrossPipelineRepeats ? { pipeline: pipelineId } : {}) },
       select: { email: true, state: true },
     }),
     prisma.suppressedEmail.findMany({ where: { email: { in: emails } }, select: { email: true } }),
     replyHolds(prisma, emails),
   ]);
-  // Checked in the order sendFirstTouch checks them, so each skip is
-  // counted under the reason the send will give.
   const refusedSet = new Set(pitched.filter((r) => r.state === "refused").map((r) => r.email));
   const pitchedSet = new Set(pitched.map((r) => r.email));
   const suppressedSet = new Set(suppressed.map((r) => r.email));
 
-  const seen = new Set<string>();
   const skipped = {
     neverPitch: 0,
     duplicateInBatch: 0,
@@ -485,7 +511,7 @@ export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPrevi
     alreadyAnswered: 0,
   };
   const sendable: OutreachLead[] = [];
-  for (const lead of batch) {
+  for (const lead of leads) {
     const email = lead.email!.toLowerCase();
     const hold = holds.get(email);
     if (pipeline.neverPitch(lead)) skipped.neverPitch++;
@@ -500,18 +526,28 @@ export async function previewBulkSend(pipelineId: PipelineId): Promise<BulkPrevi
       sendable.push(lead);
     }
   }
+  return { sendable, skipped };
+}
 
-  return {
-    paused: settings.outboundPaused,
-    pausedByEnvironment: settings.pausedBy === "environment",
-    totalEligible,
-    leadIds: batch.map((l) => l.id),
-    willSend: sendable.length,
-    distinctAddresses: seen.size,
-    sample: sendable.slice(0, 5).map((l) => ({ name: l.name, email: l.email! })),
-    skipped,
-    batchLimit: BULK_BATCH_LIMIT,
-  };
+/** Leads sorted per query, so the address lists stay well inside Postgres's parameter limit. */
+const READY_CHUNK = 1_000;
+
+/**
+ * "Ready to email" as a send would see it right now: of the New leads with
+ * an address that aren't held back (`newWithAddress`), how many a send
+ * would actually email (`readyToEmail`) — the rest are skipped as already
+ * pitched, on the do-not-email list, held by a reply, refused earlier,
+ * never pitched by this pipeline, or a second lead with the same address.
+ */
+export async function countReadyToEmail(pipelineId: PipelineId): Promise<{ readyToEmail: number; newWithAddress: number }> {
+  const [settings, leads] = await Promise.all([getAppSettings(), getPipeline(pipelineId).listSendable(prisma)]);
+  const seen = new Set<string>();
+  let readyToEmail = 0;
+  for (let i = 0; i < leads.length; i += READY_CHUNK) {
+    const { sendable } = await sortForSend(pipelineId, leads.slice(i, i + READY_CHUNK), settings.allowCrossPipelineRepeats, seen);
+    readyToEmail += sendable.length;
+  }
+  return { readyToEmail, newWithAddress: leads.length };
 }
 
 export type BulkChunkResult = {

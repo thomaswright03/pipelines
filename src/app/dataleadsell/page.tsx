@@ -23,6 +23,7 @@ import { getAdreStatus } from "@/lib/adre-import";
 import { DATALEADSELL_STATUSES } from "@/lib/lead-status";
 import { orderByFor, pageCount, PAGE_SIZE, parseListParams, searchWhere } from "@/lib/lead-list";
 import { formatDate } from "@/lib/time";
+import { countReadyToEmail } from "@/lib/outreach/send";
 
 export const metadata: Metadata = { title: "dataleadsell — Agents" };
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
     ...searchWhere(params.q, ["name", "brokerage", "email", "city", "county"]),
   };
 
-  const [filteredTotal, total, withEmail, counts, schedule, settings, runs, adre, unsent, dailyRunUnsent, blocked, replyHealth, nextCity] =
+  const [filteredTotal, total, withEmail, counts, schedule, settings, runs, adre, ready, dailyRunUnsent, blocked, replyHealth, nextCity] =
     await Promise.all([
       prisma.agentLead.count({ where }),
       prisma.agentLead.count(),
@@ -48,7 +49,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
       getAppSettings(),
       recentRuns("dataleadsell", "daily", 5),
       getAdreStatus(),
-      getPipeline("dataleadsell").countSendable(prisma),
+      countReadyToEmail("dataleadsell"),
       countUnsentDailyAgentLeads(),
       getPipeline("dataleadsell").countBlockedNew(prisma),
       getReplyHealth(),
@@ -133,7 +134,8 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <OutreachControls
           pipeline="dataleadsell"
           paused={settings.outboundPaused}
-          unsent={unsent}
+          unsent={ready.readyToEmail}
+          willSkip={ready.newWithAddress - ready.readyToEmail}
           // While the daily run is off, nothing is emailed without Send outreach.
           dailyRunUnsent={schedule.enabled ? dailyRunUnsent : null}
           blocked={blocked}

@@ -198,12 +198,16 @@ describe("classifyReply — a plain no is a decline, never an opt-out", () => {
     },
   );
 
-  it.each(["Not interested. No further contact.", "No thanks, and I never signed up for this."])(
+  it.each(["No thanks, and I never signed up for this.", "Not interested. Kindly refrain from any further outreach."])(
     "a no with a stop word (%j) needs a look, since it may be asking not to be emailed",
     (text) => {
       expect(classifyReply({ text })).toMatchObject({ verdict: "needs_look", mayBeOptOut: true });
     },
   );
+
+  it("a no with an explicit stop request is an opt-out", () => {
+    expect(classifyReply({ text: "Not interested. No further contact." })).toMatchObject({ verdict: "opt_out", optOut: true });
+  });
 });
 
 describe("classifyReply — a courtesy note on its own is acknowledged", () => {

@@ -64,6 +64,18 @@ describe("unmatched replies", () => {
     expect(await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } })).toMatchObject({ status: "not_interested" });
   });
 
+  it("lists interested replies first, and counts them", async () => {
+    await inbound({ from: "old@fan.test", text: "Yes, send me pricing", messageId: "<a@x>" });
+    await inbound({ from: "noise@else.test", text: "Pls rmv", messageId: "<b@x>" });
+    await inbound({ from: "stop@else.test", text: "STOP", messageId: "<c@x>" });
+    await inbound({ from: "Boss <boss@fan.test>", text: "Forwarded — my boss is interested, call 480-555-0000", messageId: "<d@x>" });
+
+    const listed = await listUnmatchedReplies();
+    expect(listed.map((r) => r.fromEmail)).toEqual(["boss@fan.test", "old@fan.test", "stop@else.test", "noise@else.test"]);
+    expect((await listUnmatchedReplies(3)).map((r) => r.fromEmail)).toEqual(["boss@fan.test", "old@fan.test", "stop@else.test"]);
+    expect(await getReplyHealth()).toMatchObject({ unmatched: 4, unmatchedInterested: 2 });
+  });
+
   it("can be dismissed without touching any lead", async () => {
     await inbound({ from: "someone@else.test", subject: "Hello", text: "Wrong person" });
     const [reply] = await listUnmatchedReplies();

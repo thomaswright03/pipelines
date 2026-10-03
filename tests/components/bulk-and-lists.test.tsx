@@ -9,10 +9,21 @@ import type { BulkChunkResult, BulkPreview } from "@/lib/outreach/send";
 
 const router = { refresh: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 const outreach = vi.hoisted(() => ({ previewBulkSendAction: vi.fn(), sendBulkChunkAction: vi.fn() }));
 vi.mock("@/lib/actions/outreach", () => outreach);
-const settings = vi.hoisted(() => ({ addSuppressionAction: vi.fn(), removeSuppressionByEmailAction: vi.fn() }));
+const settings = vi.hoisted(() => ({
+  addSuppressionAction: vi.fn(),
+  removeSuppressionByEmailAction: vi.fn(),
+  startReplyCheckAction: vi.fn(),
+}));
 vi.mock("@/lib/actions/settings", () => settings);
 const replies = vi.hoisted(() => ({
   attachReplyAction: vi.fn(),
@@ -25,6 +36,7 @@ vi.mock("@/lib/actions/replies", () => replies);
 const { default: BulkSendButton } = await import("@/components/BulkSendButton");
 const { DoNotEmailRows, AddSuppressionForm } = await import("@/components/DoNotEmailList");
 const { default: UnmatchedReplies } = await import("@/components/UnmatchedReplies");
+const { default: ReplyCheck } = await import("@/components/ReplyCheck");
 
 const PREVIEW: BulkPreview = {
   paused: false,
@@ -248,10 +260,19 @@ describe("Unmatched replies", () => {
     // Role queries over the whole list are slow in jsdom under coverage on
     // CI, where the default 1 s wait once ran out before the dialog showed.
     const slow = { timeout: 5_000 };
-    fireEvent.click(await screen.findByRole("button", { name: "Attach" }, slow));
-    fireEvent.click(await screen.findByRole("button", { name: "Add reply" }, slow));
+    // Text queries scoped to buttons: role queries walk the accessibility tree and are the slow part.
+    fireEvent.click(await screen.findByText("Attach", { selector: "button" }, slow));
+    fireEvent.click(await screen.findByText("Add reply", { selector: "button" }, slow));
     expect(await screen.findByText("Added the reply to Acme Plumbing.", undefined, slow)).toBeTruthy();
     expect(replies.attachReplyAction).toHaveBeenCalledWith("r1", "cold-outreach", "lead-1");
+  });
+
+  it("marks an interested reply, and warns before it is dismissed", async () => {
+    replies.dismissReplyAction.mockResolvedValue({ ok: true, message: "Dismissed the reply." });
+    render(<UnmatchedReplies replies={[{ ...reply, text: "Yes, send me pricing" }]} />);
+    expect(screen.getByText(/Someone wrote back keen/).textContent).toMatch(/^Interested\..*moves to Responded\.$/);
+    fireEvent.click(screen.getByText("Dismiss", { selector: "button" }));
+    expect((await screen.findByText(/It reads as interested/)).textContent).toMatch(/no lead is marked as replied unless you attach it/);
   });
 
   it("says why a reply needs a look, and can put its address on the do-not-email list", async () => {
@@ -286,5 +307,50 @@ describe("Unmatched replies", () => {
     expect(dialogConfirm).toHaveLength(2);
     fireEvent.click(dialogConfirm[0]!); // the dialog comes first in the item
     await waitFor(() => expect(screen.getByText("That reply was already dismissed.")).toBeTruthy());
+  });
+});
+
+describe("The reply-loop check", () => {
+  const row = { leadId: "l1", email: "me+c1@x.test", sentAt: "Sep 29, 10:02 AM", status: "Contacted", reply: null };
+
+  it("asks for an address, confirms, and reports the result", async () => {
+    settings.startReplyCheckAction.mockResolvedValue({ ok: true, message: "Sent the Cold Outreach pitch to me+c2@x.test." });
+    render(<ReplyCheck checks={[]} />);
+    fireEvent.click(screen.getByText("Send test pitch", { selector: "button" }));
+    expect(await screen.findByText(/Enter an address you can read/)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("you+check1@example.com"), { target: { value: "me+c2@x.test" } });
+    fireEvent.click(screen.getByText("Send test pitch", { selector: "button" }));
+    expect((await screen.findByRole("dialog")).textContent).toMatch(/creates a Cold Outreach lead called “Reply check”/);
+    fireEvent.click(screen.getAllByText("Send test pitch", { selector: "button" })[0]!);
+    expect(await screen.findByText("Sent the Cold Outreach pitch to me+c2@x.test.")).toBeTruthy();
+    expect(settings.startReplyCheckAction).toHaveBeenCalledWith("me+c2@x.test");
+  });
+
+  it("says when the server can't be reached", async () => {
+    settings.startReplyCheckAction.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<ReplyCheck checks={[]} />);
+    fireEvent.change(screen.getByPlaceholderText("you+check1@example.com"), { target: { value: "me@x.test" } });
+    fireEvent.click(screen.getByText("Send test pitch", { selector: "button" }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getAllByText("Send test pitch", { selector: "button" })[0]!);
+    expect(await screen.findByText(/Couldn't reach the server/)).toBeTruthy();
+  });
+
+  it("describes each state of a check", () => {
+    render(
+      <ReplyCheck
+        checks={[
+          { ...row, state: "waiting" },
+          { ...row, leadId: "l2", state: "late" },
+          { ...row, leadId: "l3", state: "not_sent", sentAt: null },
+          { ...row, leadId: "l4", state: "recorded", status: "Lost", reply: { receivedAt: "Sep 29, 10:05 AM", readAs: "an opt-out" } },
+        ]}
+      />,
+    );
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items[0]).toMatch(/Waiting for your reply/);
+    expect(items[1]).toMatch(/no reply has been recorded/);
+    expect(items[2]).toMatch(/wasn't sent/);
+    expect(items[3]).toMatch(/Passed\. .*read as an opt-out\. The lead is now Lost\./);
   });
 });

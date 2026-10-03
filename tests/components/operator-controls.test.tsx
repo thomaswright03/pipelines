@@ -275,6 +275,9 @@ describe("ColdOutreachStagePanel", () => {
     render(<ColdOutreachStagePanel lead={{ ...lead, status: "appointment_set" }} appointmentInputValue="2020-01-01T09:00" />);
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     expect(await screen.findByText("Pick a time in the future.")).toBeTruthy();
+    // The message can show before the transition settles; a click on the
+    // still-disabled button would be lost.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Update" })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     expect(await screen.findByText("Couldn't reach the server — nothing was changed. Try again.")).toBeTruthy();
   });

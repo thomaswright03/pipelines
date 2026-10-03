@@ -30,6 +30,32 @@ describe("/api/email-inbound", () => {
     expect((await inbound({ subject: "no from" })).status).toBe(400);
   });
 
+  it("refuses a sender with no email address in it, naming the field, and records nothing", async () => {
+    for (const from of ["abc", "Mail Delivery System", "Jane <>", "jane@localhost"]) {
+      const res = await inbound({ from, text: "hi" });
+      expect(res.status, from).toBe(400);
+      const json = await res.json();
+      expect(json.retry).toBe(false);
+      expect(json.error).toMatch(/^Rejected: from is invalid \(no email address in it/);
+    }
+    expect(await prisma.inboundReply.count()).toBe(0);
+  });
+
+  it("reads the address out of every common From form", async () => {
+    const res = await inbound({ from: "MAILER-DAEMON@MX.Shop.test (Mail Delivery System)", text: "Thanks!" });
+    expect(res.status).toBe(200);
+    expect((await prisma.inboundReply.findFirstOrThrow()).fromEmail).toBe("mailer-daemon@mx.shop.test");
+  });
+
+  it("honours a formal stop request at once: 'Please do not send any further correspondence.'", async () => {
+    const res = await inbound({ from: "x@example.invalid", text: "Please do not send any further correspondence." });
+    expect(await res.json()).toMatchObject({ verdict: "opt_out", optedOut: true, review: null });
+    expect(await prisma.suppressedEmail.findUnique({ where: { email: "x@example.invalid" } })).toMatchObject({
+      source: "inbound_reply",
+      evidence: "Please do not send any further correspondence.",
+    });
+  });
+
   it("records an interested reply as a reply — even with the quoted 'Reply STOP' footer", async () => {
     const cold = await makeColdLead({ email: "x@example.test", status: "contacted" });
     const agent = await makeAgentLead({ email: "x@example.test", status: "contacted" });

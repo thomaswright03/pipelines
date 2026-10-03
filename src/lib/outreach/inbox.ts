@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import type { PipelineId } from "./pipeline-id";
 
-export const INBOX_TABS = ["sent", "failed", "replied"] as const;
+const INBOX_TABS = ["sent", "failed", "replied"] as const;
 export type InboxTab = (typeof INBOX_TABS)[number];
 
 /** How many rows a tab shows; the counts above the tabs are always complete. */
@@ -17,9 +17,9 @@ export function parseInboxTab(value: unknown): InboxTab {
 
 type LeadRef = { leadId: string | null; leadName: string | null };
 
-export type SentItem = LeadRef & { id: string; email: string; subject: string | null; sentAt: Date };
+type SentItem = LeadRef & { id: string; email: string; subject: string | null; sentAt: Date };
 
-export type FailedItem = LeadRef & {
+type FailedItem = LeadRef & {
   id: string;
   email: string;
   /** "bounced" | "refused" (the mail server refused the address) | "unknown" (delivery unconfirmed) | "failed" (the send errored) */
@@ -28,7 +28,7 @@ export type FailedItem = LeadRef & {
   at: Date;
 };
 
-export type RepliedItem = LeadRef & {
+type RepliedItem = LeadRef & {
   id: string;
   email: string;
   subject: string | null;

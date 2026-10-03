@@ -32,6 +32,7 @@ export default function OutreachControls({
   pipeline,
   paused,
   unsent,
+  willSkip = 0,
   dailyRunUnsent = null,
   blocked,
   nextCity,
@@ -39,8 +40,10 @@ export default function OutreachControls({
 }: {
   pipeline: PipelineId;
   paused: boolean;
-  /** New leads with an address that haven't been emailed yet. */
+  /** New leads with an address that a send would email right now. */
   unsent: number;
+  /** New leads with an address that a send would skip (already pitched, a shared address, held by a reply…). */
+  willSkip?: number;
   /** Of those, the ones the daily run will email (it only sends leads daily runs found); null when there is no daily run. */
   dailyRunUnsent?: number | null;
   /** Where "Find … in the next city" will search. */
@@ -133,6 +136,14 @@ export default function OutreachControls({
             </>
           ) : (
             <span className="muted">No New {noun.many} are ready to email.</span>
+          )}
+          {willSkip > 0 && (
+            <span className="muted">
+              {" "}
+              {plural(willSkip, `${unsent > 0 ? "other " : ""}New ${noun.one}`, `${unsent > 0 ? "other " : ""}New ${noun.many}`)} with an
+              address will be skipped: the address was already pitched or is shared with another {noun.one}, is on the do-not-email list, or
+              has a reply waiting.
+            </span>
           )}
           {blocked > 0 && (
             <>
