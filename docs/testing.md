@@ -25,8 +25,9 @@ What's covered, by file:
 
 | File | Covers |
 | --- | --- |
-| `tests/send.test.ts` | One pitch per address, overlapping sends (including the same lead from two tabs), crash-after-claim, pause, SMTP failure handling |
+| `tests/send.test.ts` | One pitch per address, overlapping sends (including the same lead from two tabs), crash-after-claim, pause, SMTP failure handling; the "ready to email" count equals the bulk-send preview for every skip reason in all three pipelines and takes one query however many leads there are |
 | `tests/inbound.test.ts`, `tests/reply-classifier.test.ts` | Reply and opt-out classification |
+| `tests/garbage-ai.test.ts`, `tests/garbage-ai-pages.test.tsx` | Garbage AI: the pitch, who it never pitches (clients, national haulers, agencies, Mountain High Disposal's area) and where it never searches; its daily run through the shared runner (finds, screens and emails haulers; refused/failed send outcomes; skipped with no Yelp call under the Settings pause and `OUTBOUND_EMAIL_DISABLED`); the send hold; its pages, including "Never emailed" in place of Send and on the list row |
 | `tests/auto-mail.test.ts` | Automatic replies (headers, subjects, wording) change nothing but the history and still reach the call deck; bounce notices in Postfix/Gmail/Exchange/DSN form mark the send bounced; unmatched bounces; the Stats reply/opt-out/automatic figures in both pipelines |
 | `tests/call-deck.test.ts` | Call-deck cards (company, place, emailed date, latest history) and an order a saved call doesn't reshuffle |
 | `tests/connections.test.ts` | Settings → Connections: "Not confirmed yet" on a fresh install, "Working" only after a reply/send/search/test, the no-replies warning for old sends, Test connection passing and failing (no email sent), failed and overdue runs, missing secrets, no setting names in the copy |
@@ -45,7 +46,7 @@ What's covered, by file:
 | `tests/dataleadsell-daily-run.test.ts` | The dataleadsell daily run: what "agents to check per run" yields, leftovers emailed by the next run (never hand-added agents or Cold Outreach leads), Yelp failures, its schedule (off with 10 per run until saved) and its cron route (skipped when off or paused, runs and records when on, database outage) |
 | `tests/dataleadsell-page-daily.test.tsx`, `tests/components/daily-run-settings.test.tsx` | The dataleadsell page's Daily automation panel: off by default, worded in agents, its own runs and stale-run warning, saved through its own action |
 | `tests/replies.test.ts` | Replies after the stale-contacts move, Lost-lead review flag, Mark replied, duplicate delivery, database outage and retry, stale-contacts race |
-| `tests/worker-contract.test.ts` | The reference Email Worker (`workers/email-inbound`) against the real route: MIME parsing, headers and `messageId` forwarded, bypass header, resend on 503/no response, none on 400/401, 72-hour give-up |
+| `tests/worker-contract.test.ts` | The reference Email Worker (`workers/email-inbound`) against the real route: MIME parsing, headers and `messageId` forwarded, bypass header, resend on 503/no response and on 401/403/404 (kept until the configuration is fixed, alerting each time), none on 400, 72-hour give-up |
 | `tests/send-refusals.test.ts` | Addresses the recipient's server refuses (5xx, and repeated 4xx): the lead is flagged and leaves the queues, bulk sends and daily runs carry on, Connections stays "Working"; every failed attempt shows in History and on the list; a fresh send claim shows as "in progress" |
 | `tests/stats.test.ts` | Stats, including reply rate and Arizona days; pitch versions named in plain words ("Email version 2 (in use since …)"), never by fingerprint |
 | `tests/components/lead-form.test.tsx` | Lead forms never cut text: over-long input is kept, counted and refused with the field's error |
@@ -66,7 +67,7 @@ What's covered, by file:
 | `tests/production-signals.test.ts` | The "replies not arriving" warning (48-hour grace, never / a silent week / 20 silent sends, cleared by any inbound message) and "How found addresses are doing" (sends, bounces, wrong-person replies and hand corrections per source and rules version) |
 | `tests/contact-card.test.ts` | The call deck's "Add to Contacts" vCard: escaping, file name, no phone, unknown pipeline or lead |
 | `tests/components/operator-controls.test.tsx` | The email lookup sweep, the ADRE import, the city searches, the Cold Outreach stage panel and both error pages: progress, Stop, success, refusal, lost connection, database outage |
-| `tests/pages.test.tsx` | Every page rendered with representative data: the dashboard's numbers, lists, lead pages (send offered, needs-a-look warning, do-not-email, 404), forms, Stats, call decks, Replies, Settings (paused, and switched off on the server), Help, the root layout (its paused, server-off and replies-not-arriving pills), the dashboard's replies warning and the database-outage page |
+| `tests/pages.test.tsx` | Every page rendered with representative data: the dashboard's numbers, lists, lead pages (send offered, needs-a-look warning, do-not-email, which stop is on, 404), forms, Stats, call decks, Replies, Settings (paused, and switched off on the server), Help (all three pipelines), no "both/neither pipeline" wording anywhere in `src`, the root layout (its paused, server-off and replies-not-arriving pills), the dashboard's replies warning and the database-outage page |
 
 **Coverage floors.** `npm run test:coverage` fails if `src/lib/outreach` drops below 90% of lines,
 `src/lib/actions` below 85%, `src/components` below 85% or `src/app` (the pages) below 75%

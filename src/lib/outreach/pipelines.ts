@@ -108,6 +108,12 @@ export type PipelineAdapter = {
   id: PipelineId;
   label: string;
   basePath: string;
+  /** The lead table's SQL name, for set-based queries Prisma can't express (send.ts countReadyToEmail). */
+  leadTable: string;
+  /** Whether neverPitch can ever refuse a lead (false: it always returns null). */
+  hasNeverPitchRule: boolean;
+  /** Whether the lead table has a "company" column (dataleadsell's agents have a brokerage instead). */
+  hasCompanyColumn: boolean;
   senderEmail: string;
   /** Set while this pipeline's sends are held in code: every send path refuses with this message (send.ts). */
   sendHold: string | null;
@@ -270,6 +276,7 @@ type PipelineSpec = {
   id: PipelineId;
   /** The SQL table names, for the set-based statements Prisma can't express. */
   tables: { leads: string; activities: string };
+  hasCompanyColumn: boolean;
   senderEmail: string;
   sendHold?: string | null;
   neverPitch?: PipelineAdapter["neverPitch"];
@@ -314,6 +321,9 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     id: spec.id,
     label: PIPELINE_LABEL[spec.id],
     basePath: PIPELINE_BASE_PATH[spec.id],
+    leadTable: spec.tables.leads,
+    hasNeverPitchRule: spec.neverPitch !== undefined,
+    hasCompanyColumn: spec.hasCompanyColumn,
     senderEmail: spec.senderEmail,
     sendHold: spec.sendHold ?? null,
     neverPitch: spec.neverPitch ?? (() => null),
@@ -481,6 +491,7 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
 const dataleadsell = makeAdapter({
   id: "dataleadsell",
   tables: { leads: "AgentLead", activities: "AgentLeadActivity" },
+  hasCompanyColumn: false,
   senderEmail: DATALEADSELL_SENDER_EMAIL,
   buildEmail: (lead) => ({ ...buildAgentOutreachEmail(lead.name, lead.county), templateVersion: DATALEADSELL_TEMPLATE_VERSION }),
   leads: (db) => db.agentLead as unknown as LeadTable,
@@ -493,6 +504,7 @@ const dataleadsell = makeAdapter({
 const coldOutreach = makeAdapter({
   id: "cold-outreach",
   tables: { leads: "Lead", activities: "LeadActivity" },
+  hasCompanyColumn: true,
   senderEmail: VAULT_PIPELINE_SENDER_EMAIL,
   buildEmail: (lead) => ({ ...buildOutreachEmail(lead.company || lead.name), templateVersion: COLD_OUTREACH_TEMPLATE_VERSION }),
   leads: (db) => db.lead as unknown as LeadTable,
@@ -507,6 +519,7 @@ const coldOutreach = makeAdapter({
 const garbageAi = makeAdapter({
   id: "garbage-ai",
   tables: { leads: "HaulerLead", activities: "HaulerLeadActivity" },
+  hasCompanyColumn: true,
   senderEmail: GARBAGE_AI_SENDER_EMAIL,
   sendHold: GARBAGE_AI_SENDING_HELD ? GARBAGE_AI_HOLD_MESSAGE : null,
   neverPitch: pitchExclusion,
