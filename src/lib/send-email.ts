@@ -194,6 +194,18 @@ export async function sendReplyEmail(
   return { providerMessageId: info.messageId };
 }
 
+/**
+ * The owner's own daily report (daily-report.ts): an internal message, not
+ * outreach, so it carries no unsubscribe header. The environment's
+ * emergency stop still applies, as it does to everything that reaches the
+ * transport.
+ */
+export async function sendReportEmail(from: string, to: string, subject: string, body: string): Promise<{ providerMessageId: string }> {
+  if (outboundDisabledByEnvironment()) throw new OutboundDisabledError();
+  const info = await getTransport().sendMail({ from, to, subject, text: body });
+  return { providerMessageId: info.messageId };
+}
+
 /** A configuration problem: nothing was sent. */
 export class MailConfigError extends Error {
   constructor(message: string) {

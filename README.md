@@ -45,7 +45,7 @@ Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach
   `discovery.ts` + `site-evidence.ts` + `email-policy.ts` (finding addresses), `lead-actions.ts` and
   `lead-edit.ts` (status moves, edits), `stale-contacts.ts` (the 7-day move), `pipelines.ts` (the two
   pipelines' tables behind one interface).
-- **Routes that aren't pages.** `/api/cron/vault-daily`, `/api/cron/garbage-ai-daily` and `/api/cron/stale-contacts` (Vercel Cron,
+- **Routes that aren't pages.** `/api/cron/vault-daily`, `/api/cron/garbage-ai-daily`, `/api/cron/stale-contacts` and `/api/cron/daily-report` (Vercel Cron,
   `vercel.json`, Bearer `CRON_SECRET`); `/api/email-inbound` (the Cloudflare Email Worker in
   `workers/email-inbound/`, Bearer `EMAIL_INBOUND_SECRET`); `/api/health`; `/api/contact-card/…` (vCard).
   `src/proxy.ts` answers page requests with 503 while the database is down; `src/instrumentation.ts`
