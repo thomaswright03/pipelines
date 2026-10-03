@@ -5,17 +5,21 @@
 //   first-touch pitch.
 // - Nothing is sent while outbound email is paused (Settings, or the
 //   OUTBOUND_EMAIL_DISABLED environment variable).
-// - Nothing is sent for a pipeline whose sends are held in code (Garbage
-//   AI, until its open decisions are settled; see garbage-ai-config.ts).
+// - Nothing is sent for a pipeline whose sends are held in code (its
+//   adapter's sendHold; Garbage AI's GARBAGE_AI_SENDING_HELD switch in
+//   garbage-ai-config.ts, off since 2026-09-28, so it sends today).
+// - Nothing is sent to a lead the pipeline never pitches (its adapter's
+//   neverPitch; Garbage AI's current clients, national haulers, agencies
+//   and Mountain High Disposal's area — see garbage-ai-targeting.ts).
 // - Nothing is sent to a suppressed (opted-out) address.
 // - Nothing is sent to an address whose reply is waiting for the operator
-//   ("Reply needs a look", on any lead in either pipeline, or unmatched on
+//   ("Reply needs a look", on any lead in any pipeline, or unmatched on
 //   the Replies page): the reply may be asking not to be emailed.
 // - Nothing is sent to an address that already answered with a plain no or
 //   only a courtesy note ("declined" / "acknowledged" replies): no look is
 //   needed, and no more cold email goes to it either.
 // - Each address gets at most one pitch per pipeline — and, unless the
-//   owner allows it in Settings, at most one pitch across both pipelines.
+//   owner allows it in Settings, at most one pitch across all pipelines.
 // - The lead and the address are claimed atomically *before* the SMTP call
 //   (a per-address advisory lock serialises concurrent claims), so
 //   overlapping bulk runs, a cron run and a manual click can't double-send,
@@ -117,7 +121,7 @@ type ReplyHold =
 
 /**
  * What holds sends to each of `emails` (lower-case), if anything: a lead
- * flagged "Reply needs a look" in either pipeline, a reply on the Replies
+ * flagged "Reply needs a look" in any pipeline, a reply on the Replies
  * page that matched no lead and needs a look, or a reply that said no or
  * only thanks (not dismissed from the Replies page).
  */

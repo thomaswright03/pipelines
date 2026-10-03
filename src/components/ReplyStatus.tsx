@@ -1,4 +1,4 @@
-// Reply tracking at a glance, on both pipeline pages and the Replies page:
+// Reply tracking at a glance, on every pipeline page and the Replies page:
 // when the last reply arrived, a warning if replies seem not to be
 // arriving (also on the dashboard), and how many replies are waiting to be
 // matched to a lead.

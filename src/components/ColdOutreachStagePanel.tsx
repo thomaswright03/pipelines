@@ -11,7 +11,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 
 // Cold Outreach–only stage actions: appointments and the "that reply was
 // really a bounce" correction. Marking a lead Lost (with a reason) is done
-// from the status panel's "Move to…", the same in both pipelines.
+// from the status panel's "Move to…", the same in every pipeline.
 export default function ColdOutreachStagePanel({
   lead,
   appointmentInputValue,

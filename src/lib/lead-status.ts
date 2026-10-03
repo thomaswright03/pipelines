@@ -256,7 +256,7 @@ export function coldCallResult(pipeline: PipelineId, outcome: ColdCallOutcome): 
 
 // Why a lead was marked Lost by hand (stored in callOutcome, like a call's
 // outcome). The one Lost control on a lead page — "Move to… → Lost" — asks
-// for one of these before it confirms, in both pipelines.
+// for one of these before it confirms, in every pipeline.
 export const LOST_REASONS = ["not_interested", "too_busy", "no_answer", "no_need", "unable_to_contact"] as const;
 type LostReason = (typeof LOST_REASONS)[number];
 

@@ -1,6 +1,6 @@
 // A recipient's opt-out (see SuppressedEmail in schema.prisma) blocks every
-// future send from both pipelines, not just the one they replied to — both
-// send from the same business identity.
+// future send from every pipeline, not just the one they replied to — every
+// pitch comes from the same business, Wright AI Solutions.
 import { prisma } from "@/lib/db";
 import type { Db } from "@/lib/outreach/pipelines";
 

@@ -37,8 +37,8 @@ export async function setAllowCrossPipelineRepeatsAction(allow: boolean): Promis
     return {
       ok: true,
       message: allow
-        ? "An address pitched by one pipeline can now also be pitched by the other (still once per pipeline)."
-        : "Each address now gets at most one pitch across both pipelines.",
+        ? "An address pitched by one pipeline can now also be pitched by each of the others (still once per pipeline)."
+        : "Each address now gets at most one pitch across all pipelines.",
     };
   } catch (err) {
     logError("action.setAllowCrossPipelineRepeats", err, { allow });

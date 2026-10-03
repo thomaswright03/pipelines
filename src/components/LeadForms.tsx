@@ -1,6 +1,6 @@
 "use client";
 
-// The add/edit forms for both pipelines. Adding and editing share one form
+// The add/edit forms for every pipeline. Adding and editing share one form
 // per pipeline, so both apply exactly the same rules and messages.
 import { useRouter } from "next/navigation";
 import { createLeadAction, updateLeadAction } from "@/lib/actions/vault-pipeline";

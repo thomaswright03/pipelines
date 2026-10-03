@@ -1,4 +1,4 @@
-// Both pipelines' Stats pages: one layout, so a change is made once.
+// Every pipeline's Stats pages: one layout, so a change is made once.
 import type { ReactNode } from "react";
 import type { BaseStats } from "@/lib/pipeline-stats";
 import {

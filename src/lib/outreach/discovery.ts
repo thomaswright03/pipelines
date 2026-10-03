@@ -1,4 +1,4 @@
-// Shared lead discovery and email lookup for both pipelines: guess a
+// Shared lead discovery and email lookup for every pipeline: guess a
 // website, find an address on it, apply the address rules, and save — the
 // same way whether the candidates came from Yelp, the ADRE roster, the
 // daily cron or a manual search.

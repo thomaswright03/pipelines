@@ -84,7 +84,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       <div>
         <h1 className="accent-text text-2xl font-bold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm muted">
-          Switches that apply to both pipelines. New to running the pipelines? Read the{" "}
+          Switches that apply to every pipeline. New to running the pipelines? Read the{" "}
           <Link href="/help" className="text-indigo-700 underline underline-offset-2 dark:text-indigo-300">
             operator guide
           </Link>
@@ -118,8 +118,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           Do-not-email list ({suppressedCount.toLocaleString("en-US")})
         </h2>
         <p className="text-sm muted">
-          Addresses that opted out. Neither pipeline emails them. Replies asking to stop are added automatically; add anyone who asked
-          another way below.
+          Addresses that opted out. No pipeline emails them. Replies asking to stop are added automatically; add anyone who asked another
+          way below.
         </p>
         <AddSuppressionForm />
         <form method="get" action="/settings" className="flex flex-wrap items-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">

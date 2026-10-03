@@ -146,7 +146,7 @@ function ReplyItem({ reply, onDone }: { reply: UnmatchedReplyView; onDone: (f: F
   async function optOut() {
     const confirmed = await confirm({
       title: `Stop emailing ${reply.fromEmail}?`,
-      body: <p>Adds the address to the do-not-email list and removes the reply from this list. Neither pipeline will email it again.</p>,
+      body: <p>Adds the address to the do-not-email list and removes the reply from this list. No pipeline will email it again.</p>,
       confirmLabel: "Add to do-not-email list",
       danger: true,
     });

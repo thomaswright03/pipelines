@@ -54,11 +54,11 @@ export default function SettingsControls({
   async function toggleRepeats() {
     if (!allowCrossPipelineRepeats) {
       const ok = await confirm({
-        title: "Allow both pipelines to pitch the same address?",
+        title: "Let each pipeline pitch the same address?",
         body: (
           <p>
-            An address that already got the Cold Outreach pitch could also get the dataleadsell.com pitch (and the reverse). Each pipeline
-            still sends at most once per address, and opt-outs still block both.
+            An address that already got one pipeline&apos;s pitch (Cold Outreach, dataleadsell.com or Garbage AI) could also get each of the
+            others&apos;. Every pipeline still sends at most once per address, and the do-not-email list still blocks all of them.
           </p>
         ),
         confirmLabel: "Allow",
@@ -80,12 +80,12 @@ export default function SettingsControls({
         {offByEnvironment && (
           <p className="notice-warning">
             <strong>Switched off on the server.</strong> OUTBOUND_EMAIL_DISABLED is set in the hosting environment, so nothing is sent from
-            either pipeline whatever the switch below says. Sending comes back only when that variable is removed and the app redeployed.
+            any pipeline whatever the switch below says. Sending comes back only when that variable is removed and the app redeployed.
           </p>
         )}
         <p className="text-sm muted">
           {paused
-            ? `Paused${pausedSince ? ` since ${pausedSince}` : ""}. Nothing is sent from either pipeline — manual, bulk or the daily run — until you resume.`
+            ? `Paused${pausedSince ? ` since ${pausedSince}` : ""}. Nothing is sent from any pipeline — manual, bulk or a daily run — until you resume.`
             : "The emergency stop. Pausing takes effect on the very next send, including one in the middle of a bulk send. If this page can't be reached, set OUTBOUND_EMAIL_DISABLED=1 in the hosting dashboard instead (see the operator guide)."}
         </p>
         <button
@@ -100,12 +100,12 @@ export default function SettingsControls({
 
       <section aria-labelledby="repeat-heading" className="card flex flex-col gap-3 p-4">
         <h2 id="repeat-heading" className="text-base font-semibold">
-          Same address in both pipelines
+          Same address across pipelines
         </h2>
         <p className="text-sm muted">
           {allowCrossPipelineRepeats
-            ? "Allowed: an address pitched by one pipeline can also be pitched by the other (once each)."
-            : "Not allowed (default): each address gets at most one cold pitch, whichever pipeline sends it first."}
+            ? "Allowed: an address pitched by one pipeline can also be pitched by each of the others (once per pipeline)."
+            : "Not allowed (default): each address gets at most one cold pitch across all pipelines, whichever sends it first."}
         </p>
         <button type="button" disabled={isPending} onClick={toggleRepeats} className="btn-secondary self-start">
           {allowCrossPipelineRepeats ? "Go back to one pitch per address" : "Allow one pitch per pipeline"}

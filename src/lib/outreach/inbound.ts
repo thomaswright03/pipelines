@@ -24,7 +24,7 @@
 //   only — status and reply time stay as they were, so it doesn't count as
 //   a reply, and a Contacted lead still moves to phone outreach after a
 //   week. send.ts sends nothing more to the address.
-// - needs_look: every lead with the address, in either pipeline and whatever
+// - needs_look: every lead with the address, in any pipeline and whatever
 //   its status, is flagged "Reply needs a look" with the reason. Its status
 //   and reply time stay as they were, so it neither counts toward the reply
 //   rate nor leaves Contacted for the call deck, and send.ts sends nothing
@@ -581,7 +581,7 @@ export async function optOutUnmatchedReply(replyId: string): Promise<AttachResul
       tx,
     );
     await tx.inboundReply.update({ where: { id: reply.id }, data: { resolvedAt: new Date(), resolution: "opted_out" } });
-    return { ok: true as const, message: `Added ${reply.fromEmail} to the do-not-email list. Neither pipeline will email it.` };
+    return { ok: true as const, message: `Added ${reply.fromEmail} to the do-not-email list. No pipeline will email it.` };
   });
 }
 

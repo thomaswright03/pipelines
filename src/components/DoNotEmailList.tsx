@@ -38,7 +38,7 @@ export function DoNotEmailRows({ rows }: { rows: SuppressionRow[] }) {
             On the list since {row.since}. Why: <q className="font-medium">{row.why}</q>
           </p>
           <p className="mt-2">
-            Only do this if they did <strong>not</strong> ask to stop — for example, an entry added by mistake. Both pipelines may email
+            Only do this if they did <strong>not</strong> ask to stop — for example, an entry added by mistake. Every pipeline may email
             this address again.
           </p>
         </>

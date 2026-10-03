@@ -223,7 +223,7 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 5. **Press Test connection** for email and Yelp in **Settings → Connections** after deploying, so each shows
    "Working" from a real login/search rather than "Not confirmed yet", then run the reply-loop check
    ("Post-deploy smoke check" above) once reply tracking is reachable (item 2).
-6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get the
+6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get each
    other pipeline's pitch. Leave it off (the default) or turn it on in Settings.
 7. **Lawful basis for the outreach.** This is a legal review, not a code change. See README → "Known limitations".
 8. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each

@@ -1,6 +1,6 @@
 "use server";
 
-// Cold Outreach–only server actions. Everything both pipelines share
+// Cold Outreach–only server actions. Everything the pipelines share
 // (sending, email lookup, status changes, reply/bounce/opt-out) lives in
 // ./outreach.ts on top of src/lib/outreach/.
 import { failureMessage } from "@/lib/db-health";

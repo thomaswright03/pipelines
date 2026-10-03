@@ -3,13 +3,20 @@
 [![CI](https://github.com/thomaswright03/pipelines/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thomaswright03/pipelines/actions/workflows/ci.yml)
 
 Thomas Wright's internal dashboard for Wright AI Solutions' email outreach. One operator, no in-app login:
-access is gated by Vercel Deployment Protection (SSO). Two pipelines live here:
+access is gated by Vercel Deployment Protection (SSO). Three pipelines live here:
 
 - **dataleadsell.com** (`/dataleadsell`) finds real estate agents in Maricopa (AZ), Salt Lake and Utah (UT)
   counties via Yelp and Arizona's ADRE license roster, finds each agent's own email address and pitches a
   Probate Property Leads subscription.
 - **Cold Outreach** (`/vault-pipeline`) finds local businesses via Yelp and emails each one a single pitch,
   automatically once a day.
+- **Garbage AI** (`/garbage-ai`) finds trash, recycling and dumpster-rental haulers via Yelp, one new US city
+  a day, and pitches them a demo of an AI that texts back their online leads. It never emails current
+  clients, national haulers, city/county departments or any hauler in Mountain High Disposal's Colorado
+  service area (`src/lib/garbage-ai-targeting.ts`).
+
+All three share one set of send rules: one pitch per address across pipelines, the do-not-email list,
+reply holds and both kill switches apply to every pipeline.
 
 Each pipeline has a lead list, a call deck for phone follow-up and Stats. **Replies** (`/replies`) tracks
 inbound mail, **Settings** holds the kill switch, connections (with a reply-loop check to run after each deploy) and
@@ -43,16 +50,19 @@ Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach
   `src/lib/outreach/`). The rules live once in `src/lib/outreach/`: `send.ts` (every email goes through
   it), `inbound.ts` + `reply-classifier.ts` + `auto-mail.ts` (replies, opt-outs, bounces),
   `discovery.ts` + `site-evidence.ts` + `email-policy.ts` (finding addresses), `lead-actions.ts` and
-  `lead-edit.ts` (status moves, edits), `stale-contacts.ts` (the 7-day move), `pipelines.ts` (the two
+  `lead-edit.ts` (status moves, edits), `stale-contacts.ts` (the 7-day move), `daily-run.ts` (the one daily
+  run every pipeline uses, configured per pipeline in `src/lib/*-daily-run.ts`), `pipelines.ts` (the three
   pipelines' tables behind one interface).
-- **Routes that aren't pages.** `/api/cron/vault-daily`, `/api/cron/garbage-ai-daily`, `/api/cron/stale-contacts` and `/api/cron/daily-report` (Vercel Cron,
-  `vercel.json`, Bearer `CRON_SECRET`); `/api/email-inbound` (the Cloudflare Email Worker in
+- **Routes that aren't pages.** Five Vercel Cron jobs (`vercel.json`, Bearer `CRON_SECRET`): the three daily
+  runs `/api/cron/garbage-ai-daily`, `/api/cron/vault-daily` and `/api/cron/dataleadsell-daily`, plus
+  `/api/cron/stale-contacts` and `/api/cron/daily-report` (times in docs/operator.md → "Daily automation"); `/api/email-inbound` (the Cloudflare Email Worker in
   `workers/email-inbound/`, Bearer `EMAIL_INBOUND_SECRET`); `/api/health`; `/api/contact-card/…` (vCard).
   `src/proxy.ts` answers page requests with 503 while the database is down; `src/instrumentation.ts`
   checks the environment at startup.
 - **Data stores.** One Postgres database (Neon in production), schema in `prisma/schema.prisma`,
-  migrations in `prisma/migrations/` (additive; see docs/deployment.md). Main tables: `Lead` and
-  `AgentLead` (one per pipeline) with their `…Activity` history and `…EmailSendLog` sends;
+  migrations in `prisma/migrations/` (additive; see docs/deployment.md). Main tables: `Lead` (Cold
+  Outreach), `AgentLead` (dataleadsell) and `HaulerLead` (Garbage AI), each with its `…Activity` history and
+  send-log table (`LeadEmailSendLog`, `EmailSendLog`, `HaulerEmailSendLog`);
   `OutreachRecipient` (the one-pitch-per-address ledger); `SuppressedEmail` (do-not-email list);
   `InboundReply` (every inbound message and the rules' verdict); `OutreachCorrection` (operator
   corrections); `PipelineRun` (cron runs); `AppSettings`, `PipelineSchedule`, `PipelineMeta`; ADRE and
@@ -145,7 +155,7 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
 - **One-click unsubscribe (RFC 8058) is not offered.** Every pitch has a `mailto:` `List-Unsubscribe`
   header; the HTTPS one-click form needs a public endpoint outside Vercel Deployment Protection (an owner
   decision, docs/deployment.md).
-- **Where the outreach data comes from is a business/legal question, not a code one.** Both pipelines email
+- **Where the outreach data comes from is a business/legal question, not a code one.** All three pipelines email
   people found through Yelp's API and Arizona's public ADRE roster, without prior opt-in. What CAN-SPAM
   explicitly requires is handled (a mailing address and a working opt-out in every email, opt-outs enforced
   before every send); whether sourcing addresses this way has a sound lawful basis has not been reviewed.

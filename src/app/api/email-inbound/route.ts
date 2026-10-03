@@ -6,9 +6,10 @@ import { isDatabaseUnavailable } from "@/lib/db-health";
 import { extractEmailAddress, handleInboundReply } from "@/lib/outreach/inbound";
 
 // Receives a parsed inbound email from the Cloudflare Email Worker that
-// catches replies to the outreach sender address (the Worker lives outside
-// this repo). Cloudflare Email Routing has no webhook of its own — the
-// Worker turns "someone replied" into this authenticated POST.
+// catches replies to the outreach sender addresses (its source is in
+// workers/email-inbound/, deployed to Cloudflare separately). Cloudflare
+// Email Routing has no webhook of its own — the Worker turns "someone
+// replied" into this authenticated POST.
 //
 // Contract (docs/deployment.md → "Reply tracking"): every response carries `retry`.
 // 2xx: recorded (or already recorded — `duplicate: true`); don't resend.
