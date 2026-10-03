@@ -1,5 +1,5 @@
 // The body of each pipeline's daily cron route (/api/cron/vault-daily,
-// /api/cron/dataleadsell-daily). The fire time comes from vercel.json's
+// /api/cron/dataleadsell-daily, /api/cron/garbage-ai-daily). The fire time comes from vercel.json's
 // cron schedule (Vercel Hobby can't change it without a redeploy);
 // "enabled" and "businesses per run" are read live from PipelineSchedule on
 // every run. Every run — including a skipped or failed one — is recorded in
