@@ -38,7 +38,7 @@ export function buildOutreachEmail(businessName: string): { subject: string; bod
     ``,
     `You tell me the problem. I'll figure out the solution.`,
     ``,
-    `(Rather talk it through? Just reply to this email or give me a call.)`,
+    `(Rather talk it through? Just reply to this email or give me a call. Or fill out the form on my website)`,
     ``,
     `Thomas Wright`,
     `(801)580-8630`,
