@@ -134,14 +134,33 @@ describe("a dashboard card", () => {
     expect(screen.getByRole("link", { name: "Ready to email: 4" }).getAttribute("href")).toBe("/vault-pipeline?status=new");
     expect(screen.getByText(/2 replies need a look/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Cold Outreach description" }));
     fireEvent.change(screen.getByLabelText("Pipeline name"), { target: { value: "" } });
     fireEvent.submit(screen.getByRole("button", { name: "Save" }).closest("form")!);
     expect(await screen.findByText("Name can't be empty.")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Pipeline name"), { target: { value: "Outreach" } });
     fireEvent.submit(screen.getByRole("button", { name: "Save" }).closest("form")!);
     await vi.waitFor(() => expect(router.refresh).toHaveBeenCalled());
-    expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit Cold Outreach description" })).toBeTruthy();
+  });
+
+  it("names each card's buttons after its pipeline, so a screen reader can tell the cards apart", () => {
+    render(
+      <>
+        <PipelineCard pipelineId="cold-outreach" meta={fields} kind="internal" href="/vault-pipeline" numbers={numbers} />
+        <PipelineCard
+          pipelineId="garbage-ai"
+          meta={{ ...fields, name: "Garbage AI" }}
+          kind="internal"
+          href="/garbage-ai"
+          numbers={numbers}
+        />
+      </>,
+    );
+    const edits = screen.getAllByRole("button", { name: /^Edit / }).map((b) => b.getAttribute("aria-label"));
+    expect(edits).toEqual(["Edit Cold Outreach description", "Edit Garbage AI description"]);
+    expect(screen.getByRole("link", { name: "Open pipeline: Garbage AI" }).getAttribute("href")).toBe("/garbage-ai");
+    expect(screen.getByRole("link", { name: "Sent & replies: Cold Outreach" }).getAttribute("href")).toBe("/vault-pipeline/inbox");
   });
 
   it("keeps a separately hosted system secondary, without developer wording", () => {
@@ -153,7 +172,7 @@ describe("a dashboard card", () => {
 
   it("cancels an edit without saving", () => {
     render(<PipelineCard pipelineId="cold-outreach" meta={fields} kind="internal" href="/vault-pipeline" numbers={numbers} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Cold Outreach description" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(meta.updatePipelineMetaAction).not.toHaveBeenCalled();
   });

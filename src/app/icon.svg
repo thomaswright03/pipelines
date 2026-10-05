@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The header's "O" mark (layout.tsx): indigo-500 to violet-600, white O. A filled tile, so it reads on light and dark tab bars alike. -->
+  <defs>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#mark)"/>
+  <ellipse cx="16" cy="16" rx="6.6" ry="7.8" fill="none" stroke="#fff" stroke-width="3.4"/>
+</svg>
