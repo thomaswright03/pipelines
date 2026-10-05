@@ -57,8 +57,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-sm shadow-indigo-600/30">
                 O
               </span>
-              {/* The wordmark gives way to the status pills where the one-row header is tightest (lg to xl). */}
-              <span className="hidden sm:inline lg:hidden xl:inline">Outreach</span>
+              {/* The wordmark gives way to the nav and status pills where the one-row header is tight (lg up to 2xl). */}
+              <span className="hidden sm:inline lg:hidden 2xl:inline">Outreach</span>
             </Link>
             {/* Always visible, on a phone too (in one word each, so the header stays one row): paused, replies not arriving, and where "sent" mail goes. */}
             <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:order-last sm:gap-2">
