@@ -28,7 +28,8 @@ describe("DailyRunSettings for dataleadsell", () => {
     expect((screen.getByLabelText("Agents to check per run (1–50)") as HTMLInputElement).value).toBe("10");
     expect(screen.getByRole("checkbox", { name: "Run daily" })).toHaveProperty("checked", false);
     expect(screen.getByText(/Not every agent has a findable email address/)).toBeTruthy();
-    expect(screen.getByText("9:03 AM Arizona time")).toBeTruthy();
+    // Off, the run time is still said, in words.
+    expect(screen.getByText(/runs at 9:03 AM Arizona time every day/)).toBeTruthy();
   });
 
   it("describes a run in agents when on, and shows the last run's numbers in agents", () => {
@@ -65,6 +66,9 @@ describe("DailyRunSettings for dataleadsell", () => {
       <DailyRunSettings {...base} pipeline="dataleadsell" action={action} schedule={{ enabled: false, businessesPerRun: 10 }} runs={[]} />,
     );
     const count = screen.getByLabelText("Agents to check per run (1–50)");
+    // The fixed run time is a sentence, not something that looks like a form field.
+    expect(screen.getByText(/^When it's on, it runs at 9:03 AM Arizona time every day\. That time is fixed/)).toBeTruthy();
+    expect(count.closest("form")!.textContent).not.toMatch(/Arizona time|Time/);
 
     fireEvent.change(count, { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

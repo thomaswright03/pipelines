@@ -169,10 +169,6 @@ export default function DailyRunSettings({
             className="input w-32"
           />
         </label>
-        <div className="field-label">
-          Time
-          <p className="flex min-h-11 items-center text-sm font-normal sm:min-h-9">{runTimeLabel}</p>
-        </div>
         <button type="submit" disabled={isPending} className="btn-primary">
           {isPending ? "Saving…" : "Save"}
         </button>
@@ -207,7 +203,10 @@ export default function DailyRunSettings({
           <p className="muted">No daily run has happened yet, so there are no results to show.</p>
         )}
       </div>
-      <p className="text-sm muted">The daily run time is fixed; ask your developer to change it.</p>
+      <p className="text-sm muted">
+        When it&apos;s on, it runs at {runTimeLabel} every day. That time is fixed in the app&apos;s schedule; ask your developer if it
+        should change.
+      </p>
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Recent runs</h3>
