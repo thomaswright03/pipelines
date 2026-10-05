@@ -10,8 +10,8 @@ Each pipeline has a lead list, a **call deck** for phone follow-up, and **Stats*
 **Edit details** and **Delete lead…**. **Replies** (`/replies`) shows whether replies are arriving and lists
 replies from addresses that match no lead (and bounce notices that name no lead), so they can be attached
 to the right one. **Settings** (`/settings`) holds the switches that apply to every pipeline,
-**Connections** (whether sending, reply delivery, the Cold Outreach and Garbage AI daily runs, the
-call-deck move and Yelp are working, with the next step
+**Connections** (whether sending, reply delivery, every scheduled job — the three daily runs, the
+call-deck move and the daily report email — and Yelp are working, with the next step
 when one isn't, and a **Test connection** button for email and Yelp) and the searchable do-not-email list.
 **Operator guide** (`/help`, linked from Settings and every page's footer) is the one-page runbook for
 day-to-day operation: the emergency stop, the daily checks, marking replies by hand, held-back leads and
@@ -172,7 +172,7 @@ Vercel sends automatically when `CRON_SECRET` is set.
 
 - **Settings.** Each pipeline page has its own **Daily automation** panel (stored in `PipelineSchedule` under `vault-pipeline`, `dataleadsell` and `garbage-ai`). With no saved row, Cold Outreach and Garbage AI run daily with 30 businesses per run and dataleadsell is off with 10 agents per run. The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
-- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach`, `dataleadsell` or `garbage-ai`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections watches the Cold Outreach and Garbage AI runs.
+- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach`, `dataleadsell` or `garbage-ai`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections watches all three daily runs (a run switched off on its page shows as Off), the call-deck move and the daily report.
   - While outbound email is paused (Settings) or switched off on the server (`OUTBOUND_EMAIL_DISABLED`), every daily run is recorded as **skipped** without searching Yelp, looking up addresses or sending.
   - The page warns when the last run is more than 26 hours old.
   - Every daily route returns JSON: `{ status, summary, errors }`. A failed run returns HTTP 500. If the run can't

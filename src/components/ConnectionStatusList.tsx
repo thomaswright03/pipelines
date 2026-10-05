@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ConnectionStatus, StatusTone } from "@/lib/integration-status";
 import TestConnectionButton from "@/components/TestConnectionButton";
 
@@ -17,6 +18,11 @@ const TONE: Record<StatusTone, { label: string; dot: string; badge: string }> = 
     dot: "bg-red-600",
     badge: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200",
   },
+  off: {
+    label: "Off",
+    dot: "bg-zinc-400",
+    badge: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  },
 };
 
 /** One row per outside service: a state badge, what's true now, and what to do if anything. */
@@ -26,7 +32,13 @@ export default function ConnectionStatusList({ items }: { items: ConnectionStatu
       {items.map((item) => {
         const tone = TONE[item.tone];
         return (
-          <li key={item.key} data-connection={item.key} data-tone={item.tone} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
+          <li
+            key={item.key}
+            id={`connection-${item.key}`}
+            data-connection={item.key}
+            data-tone={item.tone}
+            className="flex scroll-mt-20 flex-col gap-1 py-3 first:pt-0 last:pb-0"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold">{item.label}</span>
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${tone.badge}`}>
@@ -35,7 +47,19 @@ export default function ConnectionStatusList({ items }: { items: ConnectionStatu
               </span>
             </div>
             <p className="break-words text-sm">{item.summary}</p>
-            {item.next && <p className="text-sm muted">Next step: {item.next}</p>}
+            {item.next && (
+              <p className="text-sm muted">
+                Next step: {item.next}
+                {item.link && (
+                  <>
+                    {" "}
+                    <Link href={item.link.href} className="font-medium text-indigo-700 underline underline-offset-2 dark:text-indigo-300">
+                      {item.link.label}
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
             {item.testable && (item.key === "mail" || item.key === "yelp") && (
               <TestConnectionButton service={item.key} label={item.label} />
             )}

@@ -8,6 +8,11 @@ import { getConnectionStatus } from "@/lib/integration-status";
 import { sendFirstTouch } from "@/lib/outreach/send";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { testConnectionAction } from "@/lib/actions/settings";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { CRON_JOBS } from "@/lib/integration-status";
+import { savePipelineSchedule } from "@/lib/pipeline-schedule";
+import { DATALEADSELL_SCHEDULE_ID } from "@/lib/pipeline-schedule-rules";
 import { captureMail, makeColdLead, smtpError, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
 
 const DAY_MS = 86_400_000;
@@ -180,5 +185,80 @@ describe("Settings → Connections", () => {
       },
     });
     expect((await statusOf())["stale-contacts"]).toMatchObject({ tone: "warn", summary: expect.stringMatching(/over a day ago/) });
+  });
+
+  it("has a row for every job scheduled in vercel.json, at its real time", () => {
+    const vercel = JSON.parse(readFileSync(path.resolve(__dirname, "../vercel.json"), "utf8")) as {
+      crons: { path: string; schedule: string }[];
+    };
+    const arizona = (cron: string) => {
+      const [minute, hourUtc] = cron.split(" ").map(Number) as [number, number];
+      const hour = (hourUtc - 7 + 24) % 24; // Arizona is UTC-7 all year (no daylight saving).
+      return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"} Arizona time`;
+    };
+    for (const cron of vercel.crons) {
+      const job = CRON_JOBS.find((j) => j.path === cron.path);
+      expect(job, `Settings → Connections has no row for ${cron.path}`).toBeDefined();
+      expect(job!.schedule, cron.path).toBe(arizona(cron.schedule));
+    }
+    expect(CRON_JOBS.map((j) => j.path).sort()).toEqual(vercel.crons.map((c) => c.path).sort());
+  });
+
+  it("shows the dataleadsell run and the daily report on a fresh install, the dataleadsell run as switched off", async () => {
+    const s = await statusOf();
+    expect(s["dataleadsell-daily"]).toMatchObject({
+      label: "Daily dataleadsell run",
+      tone: "off",
+      badge: "Off",
+      summary: expect.stringMatching(/Switched off.*9:03 AM Arizona time/),
+      link: { href: "/dataleadsell" },
+    });
+    expect(s["daily-report"]).toMatchObject({ tone: "warn", summary: expect.stringMatching(/Has never run.*10:00 AM Arizona time/) });
+
+    // A run the operator switched off still records a skipped run each day: still Off, not a problem.
+    await prisma.pipelineRun.create({
+      data: {
+        pipeline: "dataleadsell",
+        kind: "daily",
+        status: "skipped",
+        summary: "Daily automation is turned off.",
+        finishedAt: new Date(),
+      },
+    });
+    expect((await statusOf())["dataleadsell-daily"]).toMatchObject({ tone: "off", summary: expect.stringMatching(/skipped/) });
+
+    // Switched on: monitored like the other daily runs.
+    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, businessesPerRun: 10 });
+    await prisma.pipelineRun.create({
+      data: { pipeline: "dataleadsell", kind: "daily", status: "failed", summary: "Yelp failed.", finishedAt: new Date() },
+    });
+    expect((await statusOf())["dataleadsell-daily"]).toMatchObject({
+      tone: "error",
+      next: expect.stringMatching(/^Open the dataleadsell\.com page/),
+      link: { href: "/dataleadsell", label: "Open the dataleadsell.com page" },
+    });
+  });
+
+  it("points each failed job at its own page, never another pipeline's", async () => {
+    for (const [pipeline, kind] of [
+      ["garbage-ai", "daily"],
+      ["all", "stale-contacts"],
+      ["all", "daily-report"],
+    ]) {
+      await prisma.pipelineRun.create({ data: { pipeline, kind, status: "failed", summary: "It broke.", finishedAt: new Date() } });
+    }
+    const s = await statusOf();
+    expect(s["garbage-ai-daily"]).toMatchObject({
+      tone: "error",
+      next: expect.stringMatching(/Garbage AI page/),
+      link: { href: "/garbage-ai" },
+    });
+    expect(s["stale-contacts"]).toMatchObject({ tone: "error", next: expect.stringMatching(/call decks/), link: { href: "/" } });
+    expect(s["daily-report"]).toMatchObject({
+      tone: "error",
+      next: expect.stringMatching(/Test connection/),
+      link: { href: "#connection-mail" },
+    });
+    for (const key of ["garbage-ai-daily", "stale-contacts", "daily-report"]) expect(s[key]!.next, key).not.toMatch(/Cold Outreach/);
   });
 });

@@ -99,7 +99,8 @@ export default function HelpPage() {
             <Link href="/settings#connections-heading" className={link}>
               Settings
             </Link>
-            , every row should say <em>Working</em>. See &ldquo;Reading Connections&rdquo; below for anything else.
+            , every row should say <em>Working</em> (or <em>Off</em> for a daily run you switched off). See &ldquo;Reading
+            Connections&rdquo; below for anything else.
           </li>
           <li>
             <strong>Match stray replies.</strong> A number next to{" "}
@@ -227,8 +228,12 @@ export default function HelpPage() {
             <strong>Check</strong> — something needs a look; the <em>Next step</em> line says what.
           </li>
           <li>
-            <strong>Not working</strong> — follow the <em>Next step</em>. When it says to tell your developer, send them the whole row as it
-            appears on screen.
+            <strong>Not working</strong> — follow the <em>Next step</em>; a failed scheduled job links the page that shows why. When it says
+            to tell your developer, send them the whole row as it appears on screen.
+          </li>
+          <li>
+            <strong>Off</strong> — a pipeline&apos;s daily run that is switched off on its page. Nothing is wrong; it neither searches nor
+            sends until you turn it on.
           </li>
         </ul>
       </Section>
