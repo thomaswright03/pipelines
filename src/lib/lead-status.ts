@@ -72,10 +72,10 @@ export const STATUS_HELP: Record<LeadStatus, string> = {
   subscribed: "Subscribed to dataleadsell.com.",
   demo_booked: "A demo with Max is booked.",
   signed_up: "Filled out the hauler signup form after the demo.",
-  not_interested: "Said no, by reply or on a call.",
+  not_interested: "Said no, by reply or on a call (dataleadsell and Garbage AI).",
   cold_call_list: "Didn't reply within a week and has a phone number: on the call deck.",
   contactless_list: "Didn't reply within a week and has no phone number to call.",
-  lost: "Closed: said no, opted out, the email bounced, or you marked it lost.",
+  lost: "Closed: opted out, the email bounced, couldn't be reached, or you marked it lost. In Cold Outreach a plain no lands here too.",
 };
 
 export const STATUS_COLOR: Record<LeadStatus, string> = {
@@ -269,6 +269,24 @@ type LostReason = (typeof LOST_REASONS)[number];
 
 export function isLostReason(value: unknown): value is LostReason {
   return typeof value === "string" && (LOST_REASONS as readonly string[]).includes(value);
+}
+
+/**
+ * The Lost reasons a pipeline offers. Where a pipeline has its own "Not
+ * interested" stage, a no goes there, so Lost doesn't offer it too — the
+ * two can't split the same leads.
+ */
+export function lostReasonsFor(pipeline: PipelineId): readonly LostReason[] {
+  return declinedStatus(pipeline) === "not_interested" ? LOST_REASONS.filter((r) => r !== "not_interested") : LOST_REASONS;
+}
+
+/**
+ * One line under the "Move to…" picker saying when to use Not interested
+ * and when Lost, for a lead that can move to both; null otherwise.
+ */
+export function closeGuidance(moves: readonly string[]): string | null {
+  if (!moves.includes("not_interested") || !moves.includes("lost")) return null;
+  return "Said no, by reply or on a call? Choose Not interested. Choose Lost when it ended any other way: no answer, no need, too busy, or no way to reach them.";
 }
 
 export const CALL_OUTCOME_LABEL: Record<string, string> = {

@@ -11,15 +11,30 @@
 // each message are listed in docs/deployment.md → "Settings → Connections".)
 import { prisma } from "@/lib/db";
 import { describeMailDestination, type Env } from "@/lib/mail-transport-kind";
+import { ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
 import { formatDateTime } from "@/lib/time";
 import { getAppSettings, lastSendFailure, lastServiceChecks } from "@/lib/outreach/settings";
 import { getReplyHealth, REPLY_WATCH_WINDOW_DAYS, replyIsRecent } from "@/lib/outreach/reply-health";
 import { displayRunStatus, isRunOverdue } from "@/lib/outreach/runs";
+import { getPipelineSchedule } from "@/lib/pipeline-schedule";
+import {
+  DATALEADSELL_DAILY_RUN_TIME_LABEL,
+  DATALEADSELL_SCHEDULE_ID,
+  GARBAGE_AI_DAILY_RUN_TIME_LABEL,
+  GARBAGE_AI_SCHEDULE_ID,
+  VAULT_DAILY_RUN_TIME_LABEL,
+  VAULT_SCHEDULE_ID,
+} from "@/lib/pipeline-schedule-rules";
+import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 
-export type StatusTone = "ok" | "warn" | "error";
+/** "off" is a job someone switched off on purpose: neither working nor broken. */
+export type StatusTone = "ok" | "warn" | "error" | "off";
+
+/** Where the operator goes to act on a row ("Open the Garbage AI page"). */
+export type StatusLink = { href: string; label: string };
 
 export type ConnectionStatus = {
-  key: "mail" | "replies" | "daily-run" | "garbage-ai-daily" | "stale-contacts" | "yelp";
+  key: "mail" | "replies" | CronJob["key"] | "yelp";
   label: string;
   tone: StatusTone;
   /** The badge's words when they differ from the tone's usual label ("Not confirmed yet"). */
@@ -28,33 +43,93 @@ export type ConnectionStatus = {
   summary: string;
   /** What to do about it, when something needs doing. */
   next: string | null;
+  /** The page the next step happens on, when it has one. */
+  link?: StatusLink;
+  /** A secondary line in smaller type: specifics for whoever manages the hosting. */
+  detail?: string;
   /** Whether Settings offers a "Test connection" button for this service. */
   testable?: boolean;
 };
 
 const NOT_CONFIRMED = "Not confirmed yet";
 
-const CRON_JOBS = [
+type CronJob = {
+  key: "daily-run" | "dataleadsell-daily" | "garbage-ai-daily" | "stale-contacts" | "daily-report";
+  label: string;
+  /** The route Vercel calls (vercel.json "crons"); a test checks every one there has a row here. */
+  path: string;
+  /** How its runs are recorded in PipelineRun. */
+  pipeline: PipelineId | "all";
+  kind: "daily" | "stale-contacts" | "daily-report";
+  /** vercel.json's UTC schedule as Arizona time (MST all year); a test checks the two agree. */
+  schedule: string;
+  /** For a pipeline's daily run: its on/off switch (PipelineSchedule). */
+  scheduleId?: string;
+  /** Where the operator sees the job's runs or acts on a failure. */
+  page: StatusLink;
+  /** What a failed or partly failed run means and what to do, in this job's own words. */
+  failedNext: string;
+};
+
+const pipelinePage = (id: PipelineId): StatusLink => ({ href: PIPELINE_BASE_PATH[id], label: `Open the ${PIPELINE_LABEL[id]} page` });
+const dailyRunFailedNext = (id: PipelineId) =>
+  `Open the ${PIPELINE_LABEL[id]} page: its Daily automation panel lists the run and why it failed. The next run tries again automatically.`;
+
+export const CRON_JOBS: readonly CronJob[] = [
   {
-    key: "daily-run" as const,
+    key: "daily-run",
     label: "Daily Cold Outreach run",
+    path: "/api/cron/vault-daily",
     pipeline: "cold-outreach",
     kind: "daily",
-    schedule: "8:33 AM Arizona time",
+    schedule: VAULT_DAILY_RUN_TIME_LABEL,
+    scheduleId: VAULT_SCHEDULE_ID,
+    page: pipelinePage("cold-outreach"),
+    failedNext: dailyRunFailedNext("cold-outreach"),
   },
   {
-    key: "garbage-ai-daily" as const,
+    key: "dataleadsell-daily",
+    label: "Daily dataleadsell run",
+    path: "/api/cron/dataleadsell-daily",
+    pipeline: "dataleadsell",
+    kind: "daily",
+    schedule: DATALEADSELL_DAILY_RUN_TIME_LABEL,
+    scheduleId: DATALEADSELL_SCHEDULE_ID,
+    page: pipelinePage("dataleadsell"),
+    failedNext: dailyRunFailedNext("dataleadsell"),
+  },
+  {
+    key: "garbage-ai-daily",
     label: "Daily Garbage AI search",
+    path: "/api/cron/garbage-ai-daily",
     pipeline: "garbage-ai",
     kind: "daily",
-    schedule: "8:00 AM Arizona time",
+    schedule: GARBAGE_AI_DAILY_RUN_TIME_LABEL,
+    scheduleId: GARBAGE_AI_SCHEDULE_ID,
+    page: pipelinePage("garbage-ai"),
+    failedNext: dailyRunFailedNext("garbage-ai"),
   },
   {
-    key: "stale-contacts" as const,
+    key: "stale-contacts",
     label: "Move silent leads to the call deck",
+    path: "/api/cron/stale-contacts",
     pipeline: "all",
     kind: "stale-contacts",
     schedule: "6:00 AM Arizona time",
+    page: { href: "/", label: "Open the dashboard" },
+    failedNext:
+      "Leads that went a week without a reply may be missing from the call decks until the next run, which tries again automatically. Each pipeline's call deck is linked from the dashboard.",
+  },
+  {
+    key: "daily-report",
+    label: "Daily report email",
+    path: "/api/cron/daily-report",
+    pipeline: "all",
+    kind: "daily-report",
+    schedule: "10:00 AM Arizona time",
+    page: { href: "#connection-mail", label: "Go to Sending email" },
+    failedNext:
+      "The report goes out through the same email service as the pitches: check Sending email above and press Test connection. Tomorrow's report tries again automatically.",
   },
 ];
 
@@ -115,8 +190,11 @@ async function mailStatus(env: Env): Promise<ConnectionStatus> {
     );
   }
   if (settings.pausedBy === "environment") {
-    parts.push("Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so nothing is being sent.");
-    return status("warn", "Remove OUTBOUND_EMAIL_DISABLED in the hosting dashboard and redeploy when sending should resume.");
+    parts.push(ENV_OFF_SUMMARY);
+    return {
+      ...status("warn", `Ask whoever manages the app's hosting to turn sending back on when it should resume.`),
+      detail: ENV_OFF_DETAIL,
+    };
   }
   if (settings.outboundPaused) {
     parts.push("Outbound email is paused, so nothing is being sent.");
@@ -180,8 +258,11 @@ async function repliesStatus(env: Env, now: Date): Promise<ConnectionStatus> {
   return { ...base, tone: "ok", summary: received, next: null };
 }
 
-async function cronStatus(job: (typeof CRON_JOBS)[number], env: Env, now: Date): Promise<ConnectionStatus> {
-  const run = await prisma.pipelineRun.findFirst({ where: { pipeline: job.pipeline, kind: job.kind }, orderBy: { startedAt: "desc" } });
+async function cronStatus(job: CronJob, env: Env, now: Date): Promise<ConnectionStatus> {
+  const [run, schedule] = await Promise.all([
+    prisma.pipelineRun.findFirst({ where: { pipeline: job.pipeline, kind: job.kind }, orderBy: { startedAt: "desc" } }),
+    job.scheduleId ? getPipelineSchedule(job.scheduleId) : null,
+  ]);
   const base = { key: job.key, label: job.label };
   if (env.VERCEL && !env.CRON_SECRET) {
     return {
@@ -189,6 +270,18 @@ async function cronStatus(job: (typeof CRON_JOBS)[number], env: Env, now: Date):
       tone: "error",
       summary: "The scheduled job is turned away because its password isn't set on the server.",
       next: "Tell your developer the cron secret isn't set in Vercel.",
+    };
+  }
+  const lastRun = run ? ` Last run ${formatDateTime(run.startedAt)}: ${displayRunStatus(run, now)}.` : "";
+  if (schedule && !schedule.enabled) {
+    // Switched off on purpose: not a failure, and its daily "skipped" runs are expected.
+    return {
+      ...base,
+      tone: "off",
+      badge: "Off",
+      summary: `Switched off, so it neither searches nor sends. It would run daily at ${job.schedule}.${lastRun}`,
+      next: `Turn it on under Daily automation on the ${PIPELINE_LABEL[job.pipeline as PipelineId]} page when it should run.`,
+      link: job.page,
     };
   }
   if (!run) {
@@ -205,18 +298,17 @@ async function cronStatus(job: (typeof CRON_JOBS)[number], env: Env, now: Date):
   const when = `Last run ${formatDateTime(run.startedAt)}`;
   const summary = `${when}: ${status}${run.summary ? ` — ${run.summary}` : ""}`;
   if (status === "failed" || status === "interrupted") {
-    return { ...base, tone: "error", summary, next: "Open the Cold Outreach page to see why; the next run tries again automatically." };
+    return { ...base, tone: "error", summary, next: job.failedNext, link: job.page };
   }
   if (isRunOverdue(run.startedAt, now)) {
     return {
       ...base,
       tone: "warn",
-      summary: `${summary}. That was over a day ago.`,
+      summary: `${summary}. That was over a day ago; it runs daily at ${job.schedule}.`,
       next: "Tell your developer the scheduled job has stopped running.",
     };
   }
-  if (status === "partial")
-    return { ...base, tone: "warn", summary, next: "Part of the run failed; see the run on the Cold Outreach page for why." };
+  if (status === "partial") return { ...base, tone: "warn", summary, next: `Part of the run failed. ${job.failedNext}`, link: job.page };
   return { ...base, tone: "ok", summary, next: null };
 }
 

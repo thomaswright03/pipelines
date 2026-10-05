@@ -6,12 +6,16 @@ shows and what the app does on its own, for the operator and for whoever support
 
 ## What each screen shows
 
-Each pipeline has a lead list, a **call deck** for phone follow-up, and **Stats**. Every lead page has
-**Edit details** and **Delete lead…**. **Replies** (`/replies`) shows whether replies are arriving and lists
-replies from addresses that match no lead (and bounce notices that name no lead), so they can be attached
-to the right one. **Settings** (`/settings`) holds the switches that apply to every pipeline,
-**Connections** (whether sending, reply delivery, the Cold Outreach and Garbage AI daily runs, the
-call-deck move and Yelp are working, with the next step
+Each pipeline has a lead list, a **call deck** for phone follow-up, **Sent & replies** (every email that
+pipeline sent, every one that failed, and every reply from a lead's own address, which can be answered from
+there) and **Stats**. Every lead page has **Edit details** and **Delete lead…**; its **Move to…** picker
+says when to choose **Not interested** (they said no) and when **Lost** (it ended any other way) in the two
+pipelines that have both, and Lost there doesn't offer "Not interested" as a reason.
+**Unmatched replies** (`/replies`) shows whether replies are arriving and lists only replies from addresses
+that match no lead (and bounce notices that name no lead), so they can be attached to the right one. Each
+of the two pages links to the other. **Settings** (`/settings`) holds the switches that apply to every pipeline,
+**Connections** (whether sending, reply delivery, every scheduled job — the three daily runs, the
+call-deck move and the daily report email — and Yelp are working, with the next step
 when one isn't, and a **Test connection** button for email and Yelp) and the searchable do-not-email list.
 **Operator guide** (`/help`, linked from Settings and every page's footer) is the one-page runbook for
 day-to-day operation: the emergency stop, the daily checks, marking replies by hand, held-back leads and
@@ -49,8 +53,8 @@ every pipeline: **Move to… → Lost**, which asks why (Not interested, Too bus
 to contact) before it confirms, and keeps the reason on the lead. **Mark bounced** is only offered while a
 bounce is still possible (not after a reply opted the lead out).
 
-The interface is English-only; whether that is final is the owner's decision (README → "Known
-limitations"). A reply in another language is honoured when it is a common opt-out and otherwise needs a
+The interface is English-only, by the client's request (the owner's decision of 2026-10-05; README →
+"Known limitations"). A reply in another language is honoured when it is a common opt-out and otherwise needs a
 look.
 
 A third dashboard card, **AI Lead Responder**, links out to a separate Vercel project. It is not code in
@@ -91,11 +95,11 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   automatic, and change nothing else. The lead keeps its status, gets no reply time, isn't counted as
   replied, and still moves to the call deck after 7 days. A real reply later counts as usual; if a person
   did write one that was read as automatic, **Mark replied** records it. Automatic replies from addresses
-  on no lead are filed away rather than listed on Replies.
+  on no lead are filed away rather than listed on Unmatched replies.
 - **Bounce notices** (from `mailer-daemon`/`postmaster`, with delivery-status fields, or a bounce subject
   plus 5.x.x codes) mark the failed recipient's latest send bounced, with the same rules as **Mark
   bounced**, and add the notice to the lead's History. One that doesn't name a recipient the app can match
-  is listed on Replies, labelled as a bounce, with **Mark bounced** on the lead you pick instead of
+  is listed on Unmatched replies, labelled as a bounce, with **Mark bounced** on the lead you pick instead of
   **Attach**.
 - A lead that was emailed and is **Contacted**, **Cold call list** or **No phone number** moves to
   **Responded** and its reply time is set. That takes it off the call deck and counts it in the Stats
@@ -111,13 +115,16 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   a customer) is flagged **Reply needs a look** instead. The address is not put on the do-not-email list,
   but it gets no more email: a later send to it from any pipeline is refused as "already answered", and
   a New lead with the address is marked **Already answered**. If the reply was really interest, move the
-  lead back to Responded — that is counted as a correction on Replies.
+  lead back to Responded — that is counted as a correction on Unmatched replies.
 - A **thank-you only** reply ("Thanks", "Got it", "Received", "Thanks for reaching out, Jane") is recorded
   in the lead's History and changes nothing else: no reply time, no status change, no flag. The address gets
   no more email, as for a plain no. **Mark replied** counts it as a reply if it was one (also counted as a
   correction).
 - A reply that may be asking to stop, a complaint ("wrong person", "who is this?", "spam"), a no mixed with
-  interest, a hedge ("Thanks, I guess?"), or one that shows no clear yes, no, question or request
+  interest, a hedge ("Thanks, I guess?"), one that puts it off ("Sounds great but not right now, maybe next
+  quarter", "our budget is frozen till 2027", "check back in March"), one that only says it will be passed
+  on or thought over ("Thank you, I will pass this on to the owner"), or one that shows no clear yes, no,
+  question or request
   ([outreach-safety.md](outreach-safety.md) → "Replies") is flagged **Reply needs a look**, with the reason,
   instead of moving the lead to Responded. It gets no reply time, so it isn't counted in the reply rate, a
   Contacted lead stays off the call deck, and **nothing is emailed to the address** until the operator
@@ -130,7 +137,7 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   5,000-character limit. Leads whose Notes already exceed it (from before this change) stay editable; their
   Notes just can't grow.
 - A reply from an address that is on no lead (an assistant, a personal inbox, a forward) is kept with its
-  text and listed on **Replies**, with a count next to "Replies" in the header (green when some read as
+  text and listed on **Unmatched replies**, with a count next to it in the header (green when some read as
   interested). Replies read as interested are marked **Interested**, listed first and counted separately —
   they are usually a prospect writing from another address, so attach them to the right lead so it moves to
   Responded. **Attach** records it on the
@@ -138,7 +145,7 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   also goes on the do-not-email list; a plain no closes the lead); **Dismiss** removes it from the list. An
   unmatched reply that needs a look, says no or only says thanks holds its address until it is attached,
   dismissed or marked opted out.
-- **Is it working?** Every pipeline page and Replies show when the last reply arrived. Once a pitch is more
+- **Is it working?** Every pipeline page and Unmatched replies show when the last reply arrived. Once a pitch is more
   than 48 hours old, the dashboard shows a red **Replies don't seem to be reaching the app** warning, and the
   header a **Replies not arriving** pill on every page, when no inbound message of any kind (reply,
   out-of-office or bounce) has ever been recorded, none in the last 7 days, or none since the last 20
@@ -169,7 +176,7 @@ Vercel sends automatically when `CRON_SECRET` is set.
 
 - **Settings.** Each pipeline page has its own **Daily automation** panel (stored in `PipelineSchedule` under `vault-pipeline`, `dataleadsell` and `garbage-ai`). With no saved row, Cold Outreach and Garbage AI run daily with 30 businesses per run and dataleadsell is off with 10 agents per run. The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
-- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach`, `dataleadsell` or `garbage-ai`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections watches the Cold Outreach and Garbage AI runs.
+- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach`, `dataleadsell` or `garbage-ai`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections watches all three daily runs (a run switched off on its page shows as Off), the call-deck move and the daily report.
   - While outbound email is paused (Settings) or switched off on the server (`OUTBOUND_EMAIL_DISABLED`), every daily run is recorded as **skipped** without searching Yelp, looking up addresses or sending.
   - The page warns when the last run is more than 26 hours old.
   - Every daily route returns JSON: `{ status, summary, errors }`. A failed run returns HTTP 500. If the run can't
@@ -197,4 +204,10 @@ case (20 s of SMTP timeouts) still ends by 55 s. Leads a daily run found but did
 time, or the email service was unreachable and nothing was sent) stay New and are emailed by the next daily
 run, oldest first, under all the usual send rules. Every pipeline page shows "N leads found but not yet
 emailed" next to the bulk-send button.
+
+**Send outreach to new leads…** (the bulk send) covers at most 50 leads per confirmation
+(`BULK_BATCH_LIMIT` in `src/lib/outreach/send.ts`). Its preview says how many New leads have an email and
+how many batches of up to 50 that is; when a batch runs to the end, the result offers **Send the next N**,
+which shows a fresh preview of that batch to confirm. A batch that was stopped, paused or cut short by the
+email service offers only Close.
 

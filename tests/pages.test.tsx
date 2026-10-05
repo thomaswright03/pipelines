@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { suppressEmail } from "@/lib/email-suppression";
 import { COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-email-template";
-import { makeAgentLead, makeColdLead } from "./helpers";
+import { makeAgentLead, makeColdLead, makeHaulerLead } from "./helpers";
 import { pageProps, renderPage } from "./render-page";
 
 vi.mock("next/navigation", () => ({
@@ -35,6 +35,7 @@ const { default: Dashboard } = await import("@/app/page");
 const { default: RootLayout } = await import("@/app/layout");
 const { default: VaultList } = await import("@/app/vault-pipeline/page");
 const { default: AgentList } = await import("@/app/dataleadsell/page");
+const { default: HaulerList } = await import("@/app/garbage-ai/page");
 const { default: VaultLead } = await import("@/app/vault-pipeline/[id]/page");
 const { default: AgentLead } = await import("@/app/dataleadsell/[id]/page");
 const { default: VaultEdit } = await import("@/app/vault-pipeline/[id]/edit/page");
@@ -109,10 +110,11 @@ describe("the root layout", () => {
     expect(page.queryByText("Replies not arriving")).toBeNull();
   });
 
-  it("says when sending is switched off on the server, even with the Settings switch on", async () => {
+  it("says when sending is switched off by the hosting, even with the Settings switch on", async () => {
     vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
     const page = await renderPage(RootLayout({ children: <p>Page body</p>, params: Promise.resolve({}) } as never));
-    expect(page.getByRole("link", { name: /switched off on the server/ })).toBeTruthy();
+    expect(page.getByRole("link", { name: "Outbound email switched off by your hosting" })).toBeTruthy();
+    expect(page.text).not.toContain("OUTBOUND_EMAIL_DISABLED");
     expect(page.getByText("Sending off (server)")).toBeTruthy();
   });
 
@@ -306,6 +308,36 @@ describe("the Stats pages", () => {
   });
 });
 
+describe("the three pipeline pages", () => {
+  it("share one layout: the same summary tiles, then the same sections in the same order", async () => {
+    await makeColdLead({ email: null });
+    await makeColdLead();
+    await makeAgentLead();
+    await makeHaulerLead({ email: null });
+    const shapes = [];
+    for (const [List, noun, total, withEmail] of [
+      [VaultList, "leads", "2", "1"],
+      [AgentList, "agents", "1", "1"],
+      [HaulerList, "haulers", "1", "0"],
+    ] as const) {
+      const page = await renderPage(List(pageProps()));
+      const tools = page.body.querySelector("section#tools")!;
+      expect(tools.querySelector("h2")!.textContent).toBe(`Find and email ${noun === "leads" ? "businesses" : noun}`);
+      const tiles = [...tools.querySelectorAll(".grid > .card")].map((c) => c.textContent);
+      expect(tiles).toEqual([`${total}Total ${noun}`, `${withEmail}With email`]);
+      // The order of the tools' headings, with each pipeline's own words taken out.
+      shapes.push(
+        [...tools.querySelectorAll("h2, h3")]
+          .map((h) => h.textContent!.replace(/agents|haulers|businesses|leads/g, "…"))
+          .filter((h) => !/ADRE/.test(h)),
+      );
+    }
+    expect(shapes[0]).toEqual(["Find and email …", "Send outreach to new …", "Daily automation", "Recent runs"]);
+    expect(shapes[1]).toEqual(shapes[0]);
+    expect(shapes[2]).toEqual(shapes[0]);
+  });
+});
+
 describe("the call decks", () => {
   it("say when nobody is on the list", async () => {
     for (const page of [await renderPage(VaultDeck(pageProps())), await renderPage(AgentDeck(pageProps()))]) {
@@ -336,7 +368,11 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
       expect(page.getByRole("link", { name: "Call deck" })).toBeTruthy();
     }
     const replies = await renderPage(Replies());
-    expect(replies.getByRole("heading", { name: "Replies" })).toBeTruthy();
+    expect(replies.getByRole("heading", { level: 1, name: "Unmatched replies" })).toBeTruthy();
+    // It says what lives where, and links to each pipeline's own replies.
+    expect(replies.text).toContain("Only replies from an address that isn't on any lead wait here.");
+    expect(replies.getByRole("link", { name: "Cold Outreach" }).getAttribute("href")).toBe("/vault-pipeline/inbox?tab=replied");
+    expect(replies.getByRole("link", { name: "Garbage AI" }).getAttribute("href")).toBe("/garbage-ai/inbox?tab=replied");
     // Nothing has arrived: no claim about replies "so far".
     expect(replies.text).toContain("No replies have arrived yet.");
     expect(replies.text).not.toContain("every reply so far");
@@ -387,7 +423,7 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
 
     const layout = await renderPage(RootLayout({ children: <p>Inside</p>, params: Promise.resolve({}) } as never));
     const repliesLink = layout.getAllByRole("link").find((link) => link.getAttribute("href") === "/replies");
-    expect(repliesLink?.textContent).toBe("Replies2 waiting to be matched, 1 interested");
+    expect(repliesLink?.textContent).toBe("Unmatched replies2 waiting to be matched, 1 interested");
     const pipeline = await renderPage(AgentList(pageProps()));
     expect(pipeline.text).toContain("2 replies came from an address that isn't on any lead — 1 read as interested.");
   });
@@ -421,11 +457,23 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect(settings.getByRole("heading", { name: "Outbound email: paused" })).toBeTruthy();
   });
 
-  it("show Settings with outbound email switched off on the server", async () => {
+  it("show Settings with outbound email switched off by the hosting: plain words first, the setting in a developer line", async () => {
     vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
     const settings = await renderPage(Settings(pageProps()));
-    expect(settings.getByRole("heading", { name: "Outbound email: off (server setting)" })).toBeTruthy();
-    expect(settings.text).toMatch(/OUTBOUND_EMAIL_DISABLED is set in the hosting environment/);
+    expect(settings.getByRole("heading", { name: "Outbound email: switched off by your hosting" })).toBeTruthy();
+    const notice = settings.getByText(/^Switched off outside this app\./).closest("div")!;
+    const [lead, detail] = [...notice.querySelectorAll("p")].map((p) => p.textContent ?? "");
+    expect(lead).toMatch(
+      /^Switched off outside this app\. Sending is switched off by whoever manages the app's hosting \(usually your developer\)/,
+    );
+    expect(lead).toContain("Ask them to turn it back on");
+    expect(lead).not.toMatch(/OUTBOUND_EMAIL_DISABLED|redeploy|hosting environment/);
+    expect(detail).toMatch(/^For your developer: the OUTBOUND_EMAIL_DISABLED environment variable is set\./);
+    // Not paused here, so the emergency-stop line shows too: no variable name in it either.
+    vi.unstubAllEnvs();
+    const on = await renderPage(Settings(pageProps()));
+    expect(on.text).toContain("sending can also be stopped from the hosting dashboard — the operator guide's Emergency stop says how.");
+    expect(on.text).not.toContain("OUTBOUND_EMAIL_DISABLED");
   });
 
   it("tell the operator on a lead page which stop is on, and where it can be undone", async () => {
@@ -436,7 +484,10 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
 
     vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
     const off = await renderPage(VaultLead(pageProps({ id: lead.id })));
-    expect(off.text).toContain("Sending is switched off on the server (OUTBOUND_EMAIL_DISABLED). Settings can't turn it back on");
+    expect(off.text).toContain(
+      "Sending is switched off by whoever manages the app's hosting (usually your developer), so nothing is emailed from any pipeline. Ask them to turn it back on",
+    );
+    expect(off.getByText(/^For your developer: the OUTBOUND_EMAIL_DISABLED/).className).toContain("text-xs");
     expect(off.text).not.toContain("resume it in Settings");
   });
 });
@@ -449,6 +500,8 @@ describe("the inbox pages", () => {
       data: { pipeline: "cold-outreach", email: "gone@x.test", state: "refused", lastError: "550 no such user" },
     });
     const page = await renderPage(VaultInbox(pageProps()));
+    expect(page.getByRole("heading", { level: 1, name: "Cold Outreach — Sent & replies" })).toBeTruthy();
+    expect(page.getByRole("link", { name: "Unmatched replies" }).getAttribute("href")).toBe("/replies");
     expect(page.getByRole("link", { name: "Sent (1)" }).getAttribute("href")).toBe("/vault-pipeline/inbox?tab=sent");
     expect(page.getByRole("link", { name: "Failed (1)" })).toBeTruthy();
     expect(page.getByRole("link", { name: "Replied (0)" })).toBeTruthy();

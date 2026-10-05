@@ -99,15 +99,18 @@ export default function HelpPage() {
             <Link href="/settings#connections-heading" className={link}>
               Settings
             </Link>
-            , every row should say <em>Working</em>. See &ldquo;Reading Connections&rdquo; below for anything else.
+            , every row should say <em>Working</em> (or <em>Off</em> for a daily run you switched off). See &ldquo;Reading
+            Connections&rdquo; below for anything else.
           </li>
           <li>
             <strong>Match stray replies.</strong> A number next to{" "}
             <Link href="/replies" className={link}>
-              Replies
+              Unmatched replies
             </Link>{" "}
             in the menu means replies came from an address that isn&apos;t on any lead (an assistant, a personal inbox). For each one,
             search for the lead it belongs to and press <strong>Attach</strong> — or <strong>Dismiss</strong> if it belongs to nobody.
+            Replies from a lead&apos;s own address never wait there: they are recorded on the lead and listed on that pipeline&apos;s{" "}
+            <em>Sent &amp; replies</em> tab, with every email it sent and every one that failed.
           </li>
           <li>
             <strong>Look at flagged replies — every day.</strong> The app only acts on a reply by itself when it is sure:
@@ -115,8 +118,8 @@ export default function HelpPage() {
               <li>a plain &ldquo;STOP&rdquo; or &ldquo;remove me&rdquo; goes on the do-not-email list;</li>
               <li>a clear &ldquo;yes, call me&rdquo; or a question moves the lead to Responded;</li>
               <li>
-                a plain &ldquo;not interested&rdquo; or &ldquo;no thanks&rdquo; closes the lead (Lost / Not interested) — it isn&apos;t put
-                on the do-not-email list, but nothing more is emailed to that address;
+                a plain &ldquo;not interested&rdquo; or &ldquo;no thanks&rdquo; closes the lead (Lost in Cold Outreach, Not interested in
+                the other two) — it isn&apos;t put on the do-not-email list, but nothing more is emailed to that address;
               </li>
               <li>
                 a reply that only says &ldquo;Thanks&rdquo;, &ldquo;Got it&rdquo; or &ldquo;Received&rdquo; is noted in the lead&apos;s
@@ -125,11 +128,13 @@ export default function HelpPage() {
               </li>
             </ul>
             Everything else is marked <em>Reply needs a look</em> in the lead list (for example &ldquo;who is this?&rdquo;, &ldquo;please no
-            further contact&rdquo;, &ldquo;maybe&rdquo;, or a reply in Spanish). Nothing is emailed to that address until you decide, so a
-            reply asking to stop is never ignored — but it waits for you. Open the lead: the reply is shown with the reason, and{" "}
-            <strong>Mark opted out</strong>, <strong>Mark replied</strong> and <strong>Keep as …</strong> are right under it. If the app
-            closed a lead on a &ldquo;no&rdquo; that wasn&apos;t one, move it back to Responded; if a &ldquo;thanks&rdquo; meant more, press{" "}
-            <strong>Mark replied</strong>. The Replies page counts these corrections.
+            further contact&rdquo;, &ldquo;maybe&rdquo;, &ldquo;sounds great, but not until next quarter&rdquo;, &ldquo;I&apos;ll pass this
+            on to the owner&rdquo;, or a reply in Spanish). A reply that puts you off isn&apos;t counted as interest: decide whether to call
+            them later. Nothing is emailed to that address until you decide, so a reply asking to stop is never ignored — but it waits for
+            you. Open the lead: the reply is shown with the reason, and <strong>Mark opted out</strong>, <strong>Mark replied</strong> and{" "}
+            <strong>Keep as …</strong> are right under it. If the app closed a lead on a &ldquo;no&rdquo; that wasn&apos;t one, move it back
+            to Responded; if a &ldquo;thanks&rdquo; meant more, press <strong>Mark replied</strong>. The Unmatched replies page counts these
+            corrections.
           </li>
           <li>
             <strong>Work the call deck.</strong> Leads that didn&apos;t reply within a week move to the call deck (the <em>Call deck</em>{" "}
@@ -225,8 +230,12 @@ export default function HelpPage() {
             <strong>Check</strong> — something needs a look; the <em>Next step</em> line says what.
           </li>
           <li>
-            <strong>Not working</strong> — follow the <em>Next step</em>. When it says to tell your developer, send them the whole row as it
-            appears on screen.
+            <strong>Not working</strong> — follow the <em>Next step</em>; a failed scheduled job links the page that shows why. When it says
+            to tell your developer, send them the whole row as it appears on screen.
+          </li>
+          <li>
+            <strong>Off</strong> — a pipeline&apos;s daily run that is switched off on its page. Nothing is wrong; it neither searches nor
+            sends until you turn it on.
           </li>
         </ul>
       </Section>

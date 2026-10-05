@@ -1,4 +1,4 @@
-// Validation for the manual "Add lead" / "Add agent" forms, and the Inbox
+// Validation for the manual "Add lead" / "Add agent" forms, and the Sent & replies
 // reply box's length limit. Shared by the browser (checks as you type,
 // before submitting) and the server (the authority), so both give the same
 // message for the same rule. Client-safe: no server-only imports.
@@ -7,7 +7,7 @@ import { isValidPhone } from "@/lib/phone";
 import { normalizeState } from "@/lib/us-states";
 import { SOLD_COUNTIES } from "@/lib/agent-cities";
 
-/** The longest reply the Inbox's reply box accepts (enforced again by reply-send.ts). */
+/** The longest reply the Sent & replies reply box accepts (enforced again by reply-send.ts). */
 export const REPLY_MAX_LENGTH = 5_000;
 
 export const LIMITS = {

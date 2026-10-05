@@ -273,7 +273,7 @@ describe("classifyReply — other replies that need a human look", () => {
       "No worries — Thursday works.",
       "We're good to go, send the link.",
       "I'm good with that price.",
-      "I'll pass this along to my broker.",
+      "I'll pass this along to my broker — can you send the pricing so she has it?",
       "No need to call, just email the pricing.",
     ]) {
       expect(classifyReply({ text }), text).toMatchObject({ optOut: false, review: null });
@@ -329,7 +329,6 @@ describe("classifyReply — a reply counts as positive only with a positive sign
     "Call me at 480-555-0199.",
     "Sounds good, send me the details.",
     "Great, thanks!",
-    "Remind me in two weeks.",
     "Don't hesitate to email me the sample.",
     "👍",
   ])("counts %j as a positive reply", (text) => {
@@ -338,6 +337,77 @@ describe("classifyReply — a reply counts as positive only with a positive sign
 
   it("doesn't let a negated signal count ('not that interested')", () => {
     expect(classifyReply({ text: "I'm not that interested." }).review).not.toBeNull();
+  });
+});
+
+describe("classifyReply — putting it off, passing it on and thinking it over are not a yes", () => {
+  // Each of these used to be counted as an interested reply: the lead moved
+  // to Responded, counted toward the reply rate and left the route to the
+  // call deck. Now each needs a look, with a reason that says why.
+  it.each([
+    ["Sounds great but not right now, maybe next quarter", /puts it off.*isn't a yes yet.*call them later/],
+    ["Perfect timing actually but our budget is frozen till 2027", /no budget for it now.*isn't a yes yet/],
+    ["Thank you, I will pass this on to the owner.", /pass it on.*not a yes yet/],
+    ["I will think about it", /think it over.*not a yes yet/],
+    ["Love it, but we're swamped until after the holidays. Check back in January.", /puts it off|contacted later/],
+    ["Great idea. Reach out again next year?", /contacted later|puts it off/],
+    ["Looks useful, but there's no budget this year.", /no budget/],
+    ["Sounds good, maybe later.", /puts it off until later/],
+    ["Yes, but not at the moment.", /puts it off/],
+    ["Remind me in two weeks.", /contacted later/],
+    ["Try me again in January.", /contacted later/],
+    ["Check back in a few months.", /contacted later/],
+    ["Not right now.", /puts it off/],
+    ["Thanks! Forwarding to my business partner.", /pass it on/],
+    ["Sure, I'll forward it to the owner.", /pass it on/],
+    ["Interesting, I'll take a look.", /look at it/],
+    ["We'll review and get back to you.", /look at it/],
+    ["Yes, maybe.", /sounds unsure/],
+  ])("%j needs a look", (text, reason) => {
+    const result = classifyReply({ text });
+    expect(result.verdict).toBe("needs_look");
+    expect(result.optOut).toBe(false);
+    expect(result.mayBeOptOut).toBe(false);
+    expect(result.review).toMatch(reason);
+  });
+
+  it.each([
+    "Maybe — what's the minimum term?",
+    "I guess so. Send me the pricing for Mesa.",
+    "I'll pass this along to my broker. What's the price for Maricopa?",
+    "Forwarding to my partner — call me at 480-555-0101 to set it up.",
+    "I'm interested, I'll take a look at the sample when it comes.",
+    "Call me next week.",
+    "Yes! Let's talk next week.",
+  ])("%j is still an interested reply", (text) => {
+    expect(classifyReply({ text })).toMatchObject({ verdict: "positive", review: null });
+  });
+
+  it("a polite plain no stays a decline", () => {
+    expect(classifyReply({ text: "Not interested at this time." }).verdict).toBe("declined");
+  });
+
+  it("a no that is only put off needs a look rather than closing the lead", () => {
+    expect(classifyReply({ text: "Not interested right now, maybe next year." }).verdict).toBe("needs_look");
+  });
+});
+
+describe("classifyReply — a yes that only opens a stop request", () => {
+  it.each(["Yes, unsubscribe me", "Sure, remove me from your list", "OK, remove me.", "Yes. Remove me.", "Yes, stop emailing me."])(
+    "%j is an opt-out",
+    (text) => {
+      expect(classifyReply({ text })).toMatchObject({ verdict: "opt_out", optOut: true, review: null });
+    },
+  );
+
+  it.each([
+    "Please stop emailing me, but I'd like a call about pricing.",
+    "Yes, I'm interested, but remove this address and use my other one.",
+    "Stop! Yes, this is what we've been looking for. Call me.",
+    "Sure — but don't email me at this address, use jane@other.test instead.",
+    "Remove me, I'll forward this to the right person.",
+  ])("%j, which also shows interest, still needs a look", (text) => {
+    expect(classifyReply({ text })).toMatchObject({ verdict: "needs_look", optOut: false, mayBeOptOut: true });
   });
 });
 

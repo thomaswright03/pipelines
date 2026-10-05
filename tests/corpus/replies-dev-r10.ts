@@ -1,5 +1,11 @@
-// Round-10 held-out batch for the reply classifier, scored on the three
-// outcomes the app acts on (tests/heuristics-eval.test.ts).
+// Round-10 batch for the reply classifier, scored on the outcomes the app
+// acts on (tests/heuristics-eval.test.ts).
+//
+// Round 14 (2026-10-05): RE-FILED AS DEVELOPMENT DATA. Every case below has
+// been printed, miss by miss, on every CI run since it was written, and read
+// while later rules were changed, so it no longer measures anything unseen.
+// It is scored as a development batch ("synthetic dev, round 10 batch"); the only held-out set is
+// tests/corpus/held-out/replies.ts (real, exported replies, frozen).
 //
 // Provenance: SYNTHETIC. Written on 2026-09-26 as one batch, BEFORE the
 // round-10 redesign of src/lib/outreach/reply-classifier.ts, deliberately
@@ -52,7 +58,7 @@ const GMAIL_QUOTE = [
   "> Don't want to hear from us again? Reply STOP and we won't email you again.",
 ].join("\n");
 
-export const REPLY_HELD_OUT_R10: OutcomeCase[] = [
+export const REPLY_DEV_R10: OutcomeCase[] = [
   // --- Asking not to be emailed ------------------------------------------
   { text: "Please remove my email from your distribution.", expected: "opt_out" },
   { text: "Kindly cease all further correspondence.", expected: "opt_out" },
@@ -105,7 +111,8 @@ export const REPLY_HELD_OUT_R10: OutcomeCase[] = [
   { text: "Stop by Thursday if you're in Tempe, I'd love to see it.", expected: "positive" },
   { text: "Definitely interested, call me after 2pm.", expected: "positive" },
   { text: "What does a year cost if I prepay?", expected: "positive" },
-  { text: "Forwarding this to our managing broker, she'll reach out.", expected: "positive" },
+  // Relabelled in round 14: only says it is being passed on (see round-14 note in tests/corpus/replies.ts).
+  { text: "Forwarding this to our managing broker, she'll reach out.", expected: "needs_look" },
   {
     text: "Yes!\n\nTo unsubscribe from the Desert Realty newsletter, click here. Desert Realty, 100 Main St, Mesa AZ 85201.",
     expected: "positive",

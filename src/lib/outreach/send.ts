@@ -14,7 +14,7 @@
 // - Nothing is sent to a suppressed (opted-out) address.
 // - Nothing is sent to an address whose reply is waiting for the operator
 //   ("Reply needs a look", on any lead in any pipeline, or unmatched on
-//   the Replies page): the reply may be asking not to be emailed.
+//   the Unmatched replies page): the reply may be asking not to be emailed.
 // - Nothing is sent to an address that already answered with a plain no or
 //   only a courtesy note ("declined" / "acknowledged" replies): no look is
 //   needed, and no more cold email goes to it either.
@@ -35,9 +35,7 @@ import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { statusLabel } from "@/lib/lead-status";
 import { HOLDING_VERDICTS } from "@/lib/outreach/reply-classifier";
 import { formatDate } from "@/lib/time";
-
-// An arbitrary constant namespacing this app's advisory locks.
-const ADDRESS_LOCK_NAMESPACE = 4242;
+import { lockAddress } from "@/lib/outreach/address-lock";
 
 export const DUPLICATE_BLOCK_PREFIX = "Duplicate address";
 export const OPTED_OUT_BLOCK_PREFIX = "Opted out";
@@ -115,7 +113,7 @@ export async function findExistingPitch(
 
 /** Why a reply from an address holds every send to it. */
 type ReplyHold =
-  /** A reply waiting for the operator: on a lead ("on Jane's page in Cold Outreach") or on the Replies page. */
+  /** A reply waiting for the operator: on a lead ("on Jane's page in Cold Outreach") or on the Unmatched replies page. */
   | { kind: "needs_look"; where: string }
   /** A plain no or a courtesy note: nothing more is sent, and nobody needs to look. */
   | { kind: "answered"; verdict: string; text: string | null; receivedAt: Date };
@@ -124,7 +122,7 @@ type ReplyHold =
  * What holds sends to each of `emails` (lower-case), if anything: a lead
  * flagged "Reply needs a look" in any pipeline, a reply on the Replies
  * page that matched no lead and needs a look, or a reply that said no or
- * only thanks (not dismissed from the Replies page).
+ * only thanks (not dismissed from the Unmatched replies page).
  */
 async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHold>> {
   const holds = new Map<string, ReplyHold>();
@@ -151,7 +149,7 @@ async function replyHolds(db: Db, emails: string[]): Promise<Map<string, ReplyHo
     }),
   ]);
   for (const row of unmatched)
-    if (!holds.has(row.fromEmail)) holds.set(row.fromEmail, { kind: "needs_look", where: "on the Replies page" });
+    if (!holds.has(row.fromEmail)) holds.set(row.fromEmail, { kind: "needs_look", where: "on the Unmatched replies page" });
   for (const row of answered) {
     if (!holds.has(row.fromEmail)) {
       holds.set(row.fromEmail, { kind: "answered", verdict: row.verdict!, text: row.text, receivedAt: row.receivedAt });
@@ -170,10 +168,6 @@ function describeAnswer(hold: Extract<ReplyHold, { kind: "answered" }>): string 
 function describeExistingPitch(existing: { pipeline: PipelineId; leadName: string | null }, self: PipelineId): string {
   const via = existing.leadName ? `via ${existing.leadName}` : "earlier";
   return existing.pipeline === self ? via : `${via} in ${PIPELINE_LABEL[existing.pipeline]}`;
-}
-
-async function lockAddress(tx: Db, email: string): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ADDRESS_LOCK_NAMESPACE}::int, hashtext(${email}))`;
 }
 
 /**
@@ -540,7 +534,7 @@ async function sortForSend(
  * addresses a send would actually email (`readyToEmail`) — the rest are
  * skipped as already pitched or refused earlier (the send ledger), on the
  * do-not-email list, held by a reply (needs a look on any lead or on the
- * Replies page, or already answered), never pitched by this pipeline, or a
+ * Unmatched replies page, or already answered), never pitched by this pipeline, or a
  * second lead with the same address. The same rules sortForSend applies,
  * as anti-joins in Postgres, so the dashboard and list pages make a fixed
  * number of queries (one; two for Garbage AI) however many leads there

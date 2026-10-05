@@ -4,7 +4,7 @@
 // saying "wrong person", and found addresses the operator replaced before
 // they were pitched. The labelled sets in tests/corpus/ measure the rules
 // before a change ships; these numbers show whether a change helped or hurt
-// on real mail. Shown on the Replies page.
+// on real mail. Shown on the Unmatched replies page.
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { CHECKED_BY_HAND_PREFIX, ENTERED_BY_HAND_PREFIX } from "@/lib/outreach/evidence";

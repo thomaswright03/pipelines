@@ -149,7 +149,7 @@ the operator and names no settings; this table is for the developer they're told
 | --- | --- | --- |
 | Sending email | The latest send succeeded, or the latest **Test connection** (SMTP connect, STARTTLS and login; nothing is sent) passed | "turned down our login" → `ZEPTOMAIL_SMTP_PASSWORD`; "isn't set up on the server" → the password is missing; "still in test mode" → `EMAIL_TRANSPORT` isn't `zeptomail`; "no server address" → `SMTP_HOST` |
 | Receiving replies | An inbound message of any kind arrived in the last 7 days | "Reply forwarding isn't switched on" → `EMAIL_INBOUND_SECRET`; "Not confirmed yet" / "replies seem to have stopped" → the Cloudflare Email Worker and Vercel's Protection Bypass for Automation (see "Reply tracking: the email Worker" above) |
-| Daily run, stale contacts | The last run succeeded and was less than 26 hours ago | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab |
+| Each scheduled job in `vercel.json`: the Cold Outreach, dataleadsell and Garbage AI daily runs, the call-deck move, the daily report email | The last run succeeded and was less than 26 hours ago. A pipeline's daily run switched off on its page shows **Off** (grey), not as a problem | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab. A failed run's next step links the job's own page (the pipeline's Daily automation panel, the dashboard for the call-deck move, Sending email for the report). `tests/connections.test.ts` fails if a cron in `vercel.json` has no row or a different time |
 | Yelp search | The latest Yelp request (a search, a daily run or **Test connection**, which asks for one business) answered | "Yelp isn't set up" → `YELP_API_KEY` missing; "rejected our access key" → the key is wrong or revoked |
 
 ## Post-deploy smoke check: the reply loop
@@ -180,15 +180,19 @@ five minutes.
 
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
 
-1. **Apply the migrations** in this release to production before deploying it — including
-   `20261002090000_inbound_verdict` (additive: each reply's verdict, backfilled from the stored fields, and
-   the rules version on each correction), `20261001090000_send_log_template_version` (additive: the subject
-   and template version of each send),
+1. **Apply every pending migration** to production before deploying this release. To see which are
+   pending, run `PIPELINES_DIRECT_URL="<Neon unpooled URL>" npx prisma migrate status`; then apply them all
+   with `npx prisma migrate deploy` (see the top of this page). This release can include any of these, oldest
+   first (a test checks that every directory in `prisma/migrations` from the first one below on is listed):
    `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
    `20260928090000_inbound_kind`, `20260928100000_send_failure_status`, `20260929090000_rules_version`,
-   `20260929100000_connection_checks`, `20260930090000_send_attempts`, `20260930100000_send_log_lead_index`
-   (all additive) and `20260929110000_lead_status_check`. See the top of this page.
-   The status check is added `NOT VALID`, so it can't fail on existing rows. Afterwards, check for rows it
+   `20260929100000_connection_checks`, `20260929110000_lead_status_check`, `20260930090000_send_attempts`,
+   `20260930100000_send_log_lead_index`, `20261001090000_send_log_template_version` (the subject and
+   template version of each send), `20261002090000_inbound_verdict` (each reply's verdict, backfilled from
+   the stored fields, and the rules version on each correction) and `20261003090000_garbage_ai_pipeline`
+   (the Garbage AI tables: `HaulerLead` with its status check, its activity and send log, and
+   `ScrapedHaulerCity` — new and empty, so nothing existing changes). All are additive.
+   `20260929110000_lead_status_check` adds its status checks `NOT VALID`, so they can't fail on existing rows. Afterwards, check for rows it
    would reject and fix them (for example with the lead page's status control), then validate it:
 
    ```sql
@@ -231,11 +235,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 7. **Lawful basis for the outreach.** This is a legal review, not a code change. See README → "Known limitations".
 8. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each
    pipeline's list to New and check the flagged rows (see "Unverified addresses" above).
-9. **Decide the interface language.** Still open. The developer's recommendation (2026-09-26) is
-   English-only for this single-operator, US-only tool. Confirm it by replacing the first bullet of
-   README → "Known limitations" with your decision and its date, or commission Spanish/French (every
-   string into a translation layer with complete catalogues, a persistent switcher and localised dates
-   and numbers).
+9. **Interface language — decided.** English-only, by the client's request (the owner's decision,
+   2026-10-05; README → "Known limitations"). Nothing to do.
 10. **Grow the evaluation sets with real, anonymised replies and agent addresses** (see [measuring-rules.md](measuring-rules.md), "Measuring the
    reply and address rules"). Only the owner can read the production replies.
 11. **Approve the Cold Outreach subject line.** The subject (`src/lib/vault-email-template.ts`) is the
@@ -251,9 +252,10 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
     Cloudflare Worker that records the opt-out). That is a hosting and cost decision; the app's opt-out
     handling (`suppressEmail`) is ready to be called from it.
 14. **Look at flagged replies every day.** A reply the rules can't read with confidence holds every email to
-    its address until someone resolves it on the lead page (or on Replies for an unknown address). On the
-    synthetic evaluation sets that is about a quarter of replies (26%, down from 40% now that plain no's and
-    thank-you-only replies are handled on their own); the dashboard and Replies show the count.
+    its address until someone resolves it on the lead page (or on Unmatched replies for an unknown address). On the
+    synthetic evaluation sets that is over a quarter of replies (28.5%: replies that put it off or only say
+    they'll pass it on now wait for you instead of counting as interest); the dashboard and Unmatched replies show the
+    count.
 15. **Know the emergency stop.** Add `OUTBOUND_EMAIL_DISABLED` only when you need it (steps in "Emergency
     stop" above); it is not set in normal operation. Consider saving the steps somewhere you can reach
     without the app.

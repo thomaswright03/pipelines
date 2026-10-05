@@ -8,25 +8,22 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
-import { normalizePhone } from "@/lib/phone";
 import { normalizeState } from "@/lib/us-states";
 import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { parseZonedInputValue, formatDateTime } from "@/lib/time";
 import { APPOINTMENT_FROM, statusLabel } from "@/lib/lead-status";
-import {
-  coldOutreachLeadSchema,
-  coldOutreachLeadEditSchema,
-  fieldErrorsOf,
-  normalizeWebsite,
-  parseMoneyToCents,
-  type ColdOutreachLeadInput,
-  type FormState,
-} from "@/lib/lead-forms";
+import { coldOutreachLeadSchema, coldOutreachLeadEditSchema, type ColdOutreachLeadInput } from "@/lib/lead-forms";
+import type { Prisma } from "@/generated/prisma/client";
 import { createLeadsFromCandidates, describeDiscovery, routeToPhoneOutreach } from "@/lib/outreach/discovery";
-import { checkAddressForLead, editLead } from "@/lib/outreach/lead-edit";
-import { enteredByHandEvidence } from "@/lib/outreach/evidence";
+import {
+  businessLeadColumns,
+  createManualLead,
+  updateManualLead,
+  type LeadFormState,
+  type ManualLeadSpec,
+} from "@/lib/outreach/manual-lead";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
@@ -43,78 +40,24 @@ const UNEXPECTED = "Something went wrong saving that — nothing was changed. Tr
 const CHANGED_MEANWHILE = (name: string) =>
   `${name} changed status a moment ago (a reply or an automatic move) — reload the page to see it, then try again.`;
 
-// --- Manual entry and editing ---
+// --- Manual entry and editing (shared with every pipeline: outreach/manual-lead.ts) ---
 
-type LeadFormState = FormState<ColdOutreachLeadInput> & { leadId?: string };
+const manualLead: ManualLeadSpec<ColdOutreachLeadInput, ColdOutreachLeadInput & { name: string }> = {
+  pipeline: "cold-outreach",
+  createSchema: coldOutreachLeadSchema,
+  editSchema: coldOutreachLeadEditSchema,
+  columns: businessLeadColumns,
+  insert: (db, data) => db.lead.create({ data: data as Prisma.LeadUncheckedCreateInput }),
+  currentNotes: async (db, id) => (await db.lead.findUnique({ where: { id }, select: { notes: true } }))?.notes,
+  logScopes: { create: "action.createLead", update: "action.updateLead" },
+};
 
-function coldOutreachColumns(d: ColdOutreachLeadInput & { name: string }) {
-  return {
-    name: d.name,
-    company: d.company || null,
-    phone: normalizePhone(d.phone),
-    address: d.address || null,
-    city: d.city || null,
-    state: normalizeState(d.state ?? ""),
-    website: normalizeWebsite(d.website ?? ""),
-    source: d.source || "Manual entry",
-    estimatedValueCents: d.estimatedValue ? parseMoneyToCents(d.estimatedValue) : null,
-    notes: d.notes || null,
-  };
+export async function createLeadAction(input: ColdOutreachLeadInput): Promise<LeadFormState<ColdOutreachLeadInput>> {
+  return createManualLead(manualLead, input);
 }
 
-export async function createLeadAction(input: ColdOutreachLeadInput): Promise<LeadFormState> {
-  const parsed = coldOutreachLeadSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
-  }
-  const d = parsed.data;
-  const email = d.email ? d.email.toLowerCase() : null;
-
-  try {
-    if (email) {
-      const problem = await checkAddressForLead("cold-outreach", email);
-      if (problem) {
-        return {
-          error: "This email can't be used.",
-          fieldErrors: { email: problem.message },
-          ...(problem.link ? { fieldLinks: { email: problem.link } } : {}),
-        };
-      }
-    }
-    const lead = await prisma.lead.create({
-      data: { ...coldOutreachColumns(d), email, emailEvidence: email ? enteredByHandEvidence() : null },
-    });
-    revalidate();
-    return { ok: true, leadId: lead.id };
-  } catch (err) {
-    logError("action.createLead", err);
-    return { error: failureMessage(err, UNEXPECTED) };
-  }
-}
-
-export async function updateLeadAction(leadId: string, input: ColdOutreachLeadInput): Promise<LeadFormState> {
-  const existing = await prisma.lead.findUnique({ where: { id: leadId }, select: { notes: true } }).catch(() => null);
-  const parsed = coldOutreachLeadEditSchema(existing?.notes).safeParse(input);
-  if (!parsed.success) {
-    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
-  }
-  const d = parsed.data;
-  try {
-    const outcome = await editLead("cold-outreach", leadId, d.email || null, coldOutreachColumns(d));
-    if (!outcome.ok) {
-      if (outcome.field !== "email") return { error: outcome.error };
-      return {
-        error: "This email can't be used.",
-        fieldErrors: { email: outcome.error },
-        ...(outcome.link ? { fieldLinks: { email: outcome.link } } : {}),
-      };
-    }
-    revalidate(leadId);
-    return { ok: true, leadId };
-  } catch (err) {
-    logError("action.updateLead", err, { leadId });
-    return { error: failureMessage(err, UNEXPECTED) };
-  }
+export async function updateLeadAction(leadId: string, input: ColdOutreachLeadInput): Promise<LeadFormState<ColdOutreachLeadInput>> {
+  return updateManualLead(manualLead, leadId, input);
 }
 
 // --- Discovery ---

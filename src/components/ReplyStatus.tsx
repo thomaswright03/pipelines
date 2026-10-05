@@ -1,4 +1,4 @@
-// Reply tracking at a glance, on every pipeline page and the Replies page:
+// Reply tracking at a glance, on every pipeline page and the Unmatched replies page:
 // when the last reply arrived, a warning if replies seem not to be
 // arriving (also on the dashboard), and how many replies are waiting to be
 // matched to a lead.
@@ -64,7 +64,7 @@ export function UnmatchedRepliesNotice({ health, showLink = true }: { health: Re
 /**
  * The warning that replies — opt-outs among them — aren't reaching the
  * app, with what to do meanwhile. Shown on the dashboard, the pipeline pages
- * and the Replies page; every page's header links here.
+ * and the Unmatched replies page; every page's header links here.
  */
 export function ReplyIntakeWarning({ health }: { health: ReplyHealth }) {
   const since =

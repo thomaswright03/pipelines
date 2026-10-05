@@ -34,24 +34,40 @@
 //   1. STOP REQUEST (reply-rules/stop.ts): an explicit request not to be
 //      emailed ("STOP", "Remove me", "Please stop emailing me").
 //        - it names only calls or texts ("stop calling my cell") → needs_look
-//        - the reply also shows INTEREST anywhere                → needs_look
+//        - the reply also shows INTEREST (or a TENTATIVE "I'll pass it on")
+//          anywhere else                                         → needs_look
 //        - otherwise                                             → opt_out
+//      A yes that only opens the request ("Yes, unsubscribe me", "Sure,
+//      remove me from your list") agrees to stopping and isn't counted as
+//      interest.
 //   2. STOP WORDS (reply-rules/stop.ts): words that *can* be part of asking
 //      not to be emailed ("exclude", "no further", "off … list")  → needs_look
 //   3. COMPLAINT (reply-rules/decline.ts): "wrong person", "who is this",
 //      "how did you get my email", "spam"                         → needs_look
-//   4. HEDGE (reply-rules/decline.ts): "maybe", "I guess", "not sure"
-//                                                                 → needs_look
+//   4. DEFERRAL (reply-rules/decline.ts): "not right now", "maybe next
+//      quarter", "our budget is frozen", "check back in March"
+//        - it also shows interest ("Sounds great, but not now")  → needs_look
+//        - it is a plain no as well ("Not interested at this time") → step 6
+//        - otherwise                                             → needs_look
+//      HEDGE (reply-rules/decline.ts): "maybe", "I guess", "not sure", unless
+//      the reply also asks a real question or for something concrete
+//      ("Maybe — what's the minimum term?"); warm words ("sounds great")
+//      and a bare yes don't outweigh it                          → needs_look
 //   5. ANOTHER LANGUAGE (reply-rules/language.ts)                 → needs_look
 //   6. PLAIN DECLINE (reply-rules/decline.ts): "not interested", "no
 //      thanks", "all set", "already have one"
-//        - the reply also shows INTEREST                         → needs_look
+//        - the reply also shows INTEREST (or a TENTATIVE signal) → needs_look
 //        - otherwise                                             → declined
 //   7. COURTESY ONLY (reply-rules/courtesy.ts): the whole reply is thanks
 //      or an acknowledgement                                     → acknowledged
 //   8. INTEREST (reply-rules/interest.ts: a yes, a question, a phone number,
 //      an address to use instead)                                → positive
-//   9. Nothing recognised                                        → needs_look
+//      — but when the reply also only says it will be passed on or thought
+//      over ("Thanks, I'll pass this on to the owner"), it needs a concrete
+//      request, "interested", a real question or a number to be positive
+//   9. TENTATIVE only (reply-rules/interest.ts: "I'll think about it",
+//      "I'll forward this to the owner")                         → needs_look
+//  10. Nothing recognised                                        → needs_look
 //
 // Each group has example phrasings in reply-rules/examples.ts;
 // tests/reply-classifier.test.ts asserts every one of them.
@@ -62,6 +78,7 @@
 import { rulesVersion } from "@/lib/outreach/rules-version";
 import {
   ASKS_ABOUT_STOPPING_BEFORE_RE,
+  ASSENT_LEAD_RE,
   EMAIL_WORD_RE,
   FILLER_RE,
   LATER_RE,
@@ -71,9 +88,20 @@ import {
   STOP_CUES,
   STOP_REQUESTS,
 } from "@/lib/outreach/reply-rules/stop";
-import { COMPLAINTS, HEDGE_RE, PLAIN_DECLINES, REAL_QUESTION_RE } from "@/lib/outreach/reply-rules/decline";
+import { COMPLAINTS, DEFERRALS, HEDGE_RE, PLAIN_DECLINES, REAL_QUESTION_RE } from "@/lib/outreach/reply-rules/decline";
 import { ENGLISH_WORDS, FOREIGN_WORDS, isMainlyForeign, looksForeign, MIN_WORDS_FOR_LANGUAGE } from "@/lib/outreach/reply-rules/language";
-import { CONTACT_DETAIL_RE, INTEREST_SIGNALS, NEGATION_WORD_RE, NOT_A_NEGATION_RE, QUESTION_RE } from "@/lib/outreach/reply-rules/interest";
+import {
+  AFFIRMATIONS,
+  CONTACT_DETAIL_RE,
+  ENTHUSIASM,
+  INTEREST_SIGNALS,
+  INTERESTED_RE,
+  NEGATION_WORD_RE,
+  NOT_A_NEGATION_RE,
+  QUESTION_RE,
+  REQUESTS,
+  TENTATIVE_SIGNALS,
+} from "@/lib/outreach/reply-rules/interest";
 import { COURTESY_RE, GREETING_RES, isCourtesyOnly, NOT_A_NAME } from "@/lib/outreach/reply-rules/courtesy";
 import {
   extractNewReplyText,
@@ -87,6 +115,8 @@ import {
 import {
   clip,
   findInterest,
+  findPhrase,
+  findSignal,
   findStopCue,
   findStopRequest,
   sentenceAround,
@@ -124,7 +154,15 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   // Phones send curly apostrophes ("don’t"); the rules are written with
   // straight ones. Same length, so match positions still line up.
   const text = newText.replace(/[‘’ʼ]/g, "'");
+  // Interest (a yes, a request, warm words, a question, a number to use) and,
+  // for the checks where anything pulling the other way should stop an
+  // automatic verdict, interest or a tentative "I'll pass it on".
   const interest = findInterest(text, { countQuestions: true });
+  const anyInterest = (within: string) => findInterest(within, { countQuestions: true, signals: WITH_TENTATIVE });
+  const interestOrTentative = anyInterest(text);
+  // Something concrete enough to outweigh a hedge: a request, "interested",
+  // a number or address to use, or a real question.
+  const firm = findInterest(text, { countQuestions: false, signals: FIRM_SIGNALS }) ?? matchFound(REAL_QUESTION_RE, text);
   const interested = (found: Found) => (found.label ? `also ${found.label}` : `also sounds interested (“${clip(found.text)}”)`);
   const base = { optOut: false, trigger: null, review: null, declineReason: null, mayBeOptOut: false, newText };
   const needsLook = (review: string, mayBeOptOut = false): ReplyClassification => ({
@@ -139,7 +177,10 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   if (stop) {
     // Interest elsewhere in the reply — not the lead-in to the request
     // itself ("I'd like to be removed…" asks for nothing else).
-    const elsewhere = findInterest(withoutClause(text, stop), { countQuestions: true });
+    // A yes that only opens the request ("Yes, unsubscribe me") agrees to it.
+    let rest = withoutClause(text, stop);
+    if (stop.index > 0 && ASSENT_LEAD_RE.test(text.slice(0, stop.index))) rest = " ".repeat(stop.index) + rest.slice(stop.index);
+    const elsewhere = anyInterest(rest);
     const email = stop.index < 0 || EMAIL_WORD_RE.test(stop.text) || !OTHER_CHANNEL_RE.test(stop.text);
     if (!email) {
       return needsLook(`It asks us to stop calls or texts (“${clip(stop.text)}”) — check whether it also means email.`, true);
@@ -160,8 +201,8 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   const cue = findStopCue(text);
   if (cue) {
     return needsLook(
-      interest
-        ? `It may be asking not to be emailed (“${clip(cue.text)}”), though it ${interested(interest)}.`
+      interestOrTentative
+        ? `It may be asking not to be emailed (“${clip(cue.text)}”), though it ${interested(interestOrTentative)}.`
         : `It may be asking not to be emailed (“${clip(cue.text)}”).`,
       true,
     );
@@ -171,15 +212,32 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   const complaint = COMPLAINTS.find(({ re }) => re.test(text));
   if (complaint) return needsLook(`It ${complaint.reason}.`);
 
-  // 4. Unsure, and not asking anything either ("Thanks, I guess?"; but
-  // "Maybe — what's the minimum term?" asks a real question).
+  // 4. Putting it off ("Sounds great but not right now, maybe next quarter",
+  // "our budget is frozen till 2027"): not a yes, whatever warm words come
+  // with it. A plain no said politely ("Not interested at this time") is
+  // still a decline (step 6).
+  const deferral = findPhrase(text, DEFERRALS);
+  if (deferral) {
+    const words = clip(deferral.text);
+    if (interestOrTentative) {
+      return needsLook(
+        `It ${deferral.phrase.reason} (“${words}”), so it isn't a yes yet, though it ${interested(interestOrTentative)} — decide whether to call them later.`,
+      );
+    }
+    if (!PLAIN_DECLINES.some(({ re }) => re.test(text))) {
+      return needsLook(`It ${deferral.phrase.reason} (“${words}”) — not a yes or a no. Decide whether to call them later.`);
+    }
+  }
+
+  // Unsure, and not asking for anything either ("Thanks, I guess?", "Yes,
+  // maybe"; but "Maybe — what's the minimum term?" asks a real question).
   const hedge = HEDGE_RE.exec(text);
-  if (hedge && !(interest && (interest.label !== "asks a question" || REAL_QUESTION_RE.test(text)))) {
+  if (hedge && !firm) {
     return needsLook(`It sounds unsure (“${clip(hedge[0])}”), so it isn't a clear yes or no.`);
   }
 
   // 5. Another language.
-  if (isMainlyForeign(text) || (!interest && looksForeign(text))) {
+  if (isMainlyForeign(text) || (!interestOrTentative && looksForeign(text))) {
     return needsLook("It is written in another language, so the rules can't read it — check whether it asks to stop.");
   }
 
@@ -187,7 +245,7 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   for (const { re, reason } of PLAIN_DECLINES) {
     const match = re.exec(text);
     if (!match) continue;
-    const alsoInterested = findInterest(withoutClause(text, { index: match.index, text: match[0] }), { countQuestions: true });
+    const alsoInterested = anyInterest(withoutClause(text, { index: match.index, text: match[0] }));
     if (alsoInterested) return needsLook(`It ${reason} but ${interested(alsoInterested)} — check which they mean.`);
     return { ...base, verdict: "declined", trigger: sentenceAround(newText, match.index, match[0].length), declineReason: reason };
   }
@@ -195,11 +253,31 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
   // 7. Only thanks or an acknowledgement.
   if (isCourtesyOnly(text)) return { ...base, verdict: "acknowledged" };
 
-  // 8. Interest.
-  if (interest) return { ...base, verdict: "positive" };
+  // 8. Interest — unless all it adds to "I'll pass this on" or "I'll think
+  // about it" is a warm word or a bare yes ("Thanks, I will pass this on to
+  // the owner", "Sure, I'll forward it").
+  const tentative = findSignal(text, TENTATIVE_SIGNALS);
+  if (interest && !(tentative && !firm)) return { ...base, verdict: "positive" };
 
-  // 9. Nothing recognised.
+  // 9. Only that it will be read, thought over or passed on.
+  if (tentative) {
+    return needsLook(
+      `It only says they'll look at it, think it over or pass it on (“${clip(tentative.text)}”) — not a yes yet. Decide whether to follow up.`,
+    );
+  }
+
+  // 10. Nothing recognised.
   return needsLook("It shows no clear yes, no, question or request.");
+}
+
+/** Every sign of interest plus the tentative ones ("I'll pass it on"), for the checks where any of them should stop an automatic verdict. */
+const WITH_TENTATIVE = [...INTEREST_SIGNALS, ...TENTATIVE_SIGNALS];
+/** Concrete enough to outweigh a hedge or to make "I'll pass it on" a yes: "interested", or a request. */
+const FIRM_SIGNALS = [INTERESTED_RE, ...REQUESTS];
+
+function matchFound(re: RegExp, text: string): Found | null {
+  const match = re.exec(text);
+  return match ? { index: match.index, text: match[0] } : null;
 }
 
 /**
@@ -207,7 +285,7 @@ export function classifyReply(input: { subject?: string | null; text?: string | 
  * Bump the revision when the logic above changes without a pattern or word
  * list changing.
  */
-export const REPLY_RULES_VERSION = rulesVersion("reply", 5, [
+export const REPLY_RULES_VERSION = rulesVersion("reply", 6, [
   STOP_COMMANDS,
   FILLER_RE,
   STOP_REQUESTS,
@@ -215,15 +293,20 @@ export const REPLY_RULES_VERSION = rulesVersion("reply", 5, [
   EMAIL_WORD_RE,
   ASKS_ABOUT_STOPPING_BEFORE_RE,
   LATER_RE,
+  ASSENT_LEAD_RE,
   STOP_CUES,
   COMPLAINTS.map(({ re, reason }) => ({ re, reason })),
+  DEFERRALS.map(({ re, reason }) => ({ re, reason })),
   HEDGE_RE,
   REAL_QUESTION_RE,
   PLAIN_DECLINES.map(({ re, reason }) => ({ re, reason })),
   COURTESY_RE,
   GREETING_RES,
   NOT_A_NAME,
-  INTEREST_SIGNALS,
+  AFFIRMATIONS,
+  REQUESTS,
+  ENTHUSIASM,
+  TENTATIVE_SIGNALS,
   CONTACT_DETAIL_RE,
   QUESTION_RE,
   NEGATION_WORD_RE,

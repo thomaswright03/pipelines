@@ -151,3 +151,55 @@ describe("a reply worded like an out-of-office (review finding 4)", () => {
     expect(await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({ status: "contacted", replyNeedsReview: false });
   });
 });
+
+describe("deferrals and forwards are not interested replies (round-14 review finding 1)", () => {
+  it.each([
+    "Sounds great but not right now, maybe next quarter",
+    "Perfect timing actually but our budget is frozen till 2027",
+    "Thank you, I will pass this on to the owner.",
+    "I will think about it",
+  ])("%j is flagged for a look: not Responded, not counted, no further email", async (text) => {
+    mail = captureMail();
+    const lead = await makeColdLead({ email: "later@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const other = await makeAgentLead({ email: "later@shop.test", status: "new" });
+    const json = await (await inbound({ from: "later@shop.test", text })).json();
+    expect(json.verdict).not.toBe("positive");
+    expect(json).toMatchObject({ optedOut: false, needsReview: expect.arrayContaining([`cold-outreach:${lead.id}`]) });
+    expect(json.review).toMatch(/not a yes yet|isn't a yes yet/);
+    expect(await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({
+      status: "contacted",
+      replyNeedsReview: true,
+      repliedAt: null,
+    });
+    expect(await prisma.suppressedEmail.count()).toBe(0);
+    // Held until the operator decides, in every pipeline.
+    expect(await sendFirstTouch("dataleadsell", other.id)).toMatchObject({ ok: false });
+    expect(mail.messages).toHaveLength(0);
+  });
+
+  it("a hedge with a real question is still an interested reply", async () => {
+    const lead = await makeColdLead({ email: "term@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const json = await (await inbound({ from: "term@shop.test", text: "Maybe — what's the minimum term?" })).json();
+    expect(json).toMatchObject({ optedOut: false, review: null });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("responded");
+  });
+});
+
+describe("a yes that only opens a stop request (round-14 review finding 14)", () => {
+  it.each(["Yes, unsubscribe me", "Sure, remove me from your list"])("%j is honoured as an opt-out at once", async (text) => {
+    const lead = await makeColdLead({ email: "yesstop@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const json = await (await inbound({ from: "yesstop@shop.test", text })).json();
+    expect(json.optedOut).toBe(true);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("lost");
+    expect(await prisma.suppressedEmail.findUnique({ where: { email: "yesstop@shop.test" } })).not.toBeNull();
+  });
+
+  it("a stop request with real interest still needs a look", async () => {
+    const lead = await makeColdLead({ email: "mixed@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const json = await (
+      await inbound({ from: "mixed@shop.test", text: "Please stop emailing me, but I'd like a call about pricing." })
+    ).json();
+    expect(json).toMatchObject({ optedOut: false, needsReview: [`cold-outreach:${lead.id}`] });
+    expect(await prisma.suppressedEmail.count()).toBe(0);
+  });
+});

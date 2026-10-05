@@ -7,22 +7,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
-import { normalizePhone } from "@/lib/phone";
 import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { pickNextAgentCity, markAgentCityUsed } from "@/lib/agent-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { SOLD_COUNTIES, citiesInCounty, stateForCounty } from "@/lib/agent-cities";
-import {
-  agentLeadEditSchema,
-  agentLeadSchema,
-  fieldErrorsOf,
-  normalizeWebsite,
-  type AgentLeadInput,
-  type FormState,
-} from "@/lib/lead-forms";
+import { agentLeadEditSchema, agentLeadSchema, type AgentLeadInput } from "@/lib/lead-forms";
+import type { Prisma } from "@/generated/prisma/client";
 import { createLeadsFromCandidates, describeDiscovery } from "@/lib/outreach/discovery";
-import { checkAddressForLead, editLead } from "@/lib/outreach/lead-edit";
-import { enteredByHandEvidence } from "@/lib/outreach/evidence";
+import { agentLeadColumns, createManualLead, updateManualLead, type LeadFormState, type ManualLeadSpec } from "@/lib/outreach/manual-lead";
 import { getAdreStatus, loadAdreRoster, processAdreChunk, type AdreChunkResult, type AdreStatus } from "@/lib/adre-import";
 import { AdreEmptyRosterError, AdreFormatError } from "@/lib/az-adre";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
@@ -34,7 +26,6 @@ const MAX_PER_RUN = 50;
 // off), which leaves room under the 60 s function limit for saving and the
 // response. The Yelp call (≤10 s) is inside this budget.
 const RUN_TIME_BUDGET_MS = 45 * 1000;
-const UNEXPECTED = "Something went wrong saving that — nothing was changed. Try again in a moment.";
 
 function revalidate(leadId?: string) {
   revalidatePath(BASE_PATH);
@@ -42,80 +33,24 @@ function revalidate(leadId?: string) {
   if (leadId) revalidatePath(`${BASE_PATH}/${leadId}`);
 }
 
-// --- Manual entry and editing ---
+// --- Manual entry and editing (shared with every pipeline: outreach/manual-lead.ts) ---
 
-type AgentFormState = FormState<AgentLeadInput> & { leadId?: string };
+const manualLead: ManualLeadSpec<AgentLeadInput, AgentLeadInput & { name: string }> = {
+  pipeline: "dataleadsell",
+  createSchema: agentLeadSchema,
+  editSchema: agentLeadEditSchema,
+  columns: agentLeadColumns,
+  insert: (db, data) => db.agentLead.create({ data: { ...(data as Prisma.AgentLeadUncheckedCreateInput), source: "Manual entry" } }),
+  currentNotes: async (db, id) => (await db.agentLead.findUnique({ where: { id }, select: { notes: true } }))?.notes,
+  logScopes: { create: "action.createAgent", update: "action.updateAgent" },
+};
 
-function agentColumns(d: AgentLeadInput & { name: string }) {
-  return {
-    name: d.name,
-    brokerage: d.brokerage || null,
-    phone: normalizePhone(d.phone),
-    city: d.city || null,
-    county: d.county || null,
-    state: d.county ? stateForCounty(d.county) : null,
-    website: normalizeWebsite(d.website ?? ""),
-    notes: d.notes || null,
-  };
+export async function createAgentAction(input: AgentLeadInput): Promise<LeadFormState<AgentLeadInput>> {
+  return createManualLead(manualLead, input);
 }
 
-export async function createAgentAction(input: AgentLeadInput): Promise<AgentFormState> {
-  const parsed = agentLeadSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<AgentLeadInput>(parsed.error) };
-  }
-  const d = parsed.data;
-  const email = d.email ? d.email.toLowerCase() : null;
-  try {
-    if (email) {
-      const problem = await checkAddressForLead("dataleadsell", email);
-      if (problem) {
-        return {
-          error: "This email can't be used.",
-          fieldErrors: { email: problem.message },
-          ...(problem.link ? { fieldLinks: { email: problem.link } } : {}),
-        };
-      }
-    }
-    const lead = await prisma.agentLead.create({
-      data: {
-        ...agentColumns(d),
-        email,
-        emailEvidence: email ? enteredByHandEvidence() : null,
-        source: "Manual entry",
-      },
-    });
-    revalidate();
-    return { ok: true, leadId: lead.id };
-  } catch (err) {
-    logError("action.createAgent", err);
-    return { error: failureMessage(err, UNEXPECTED) };
-  }
-}
-
-export async function updateAgentAction(leadId: string, input: AgentLeadInput): Promise<AgentFormState> {
-  const existing = await prisma.agentLead.findUnique({ where: { id: leadId }, select: { notes: true } }).catch(() => null);
-  const parsed = agentLeadEditSchema(existing?.notes).safeParse(input);
-  if (!parsed.success) {
-    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<AgentLeadInput>(parsed.error) };
-  }
-  const d = parsed.data;
-  try {
-    const outcome = await editLead("dataleadsell", leadId, d.email || null, agentColumns(d));
-    if (!outcome.ok) {
-      if (outcome.field !== "email") return { error: outcome.error };
-      return {
-        error: "This email can't be used.",
-        fieldErrors: { email: outcome.error },
-        ...(outcome.link ? { fieldLinks: { email: outcome.link } } : {}),
-      };
-    }
-    revalidate(leadId);
-    return { ok: true, leadId };
-  } catch (err) {
-    logError("action.updateAgent", err, { leadId });
-    return { error: failureMessage(err, UNEXPECTED) };
-  }
+export async function updateAgentAction(leadId: string, input: AgentLeadInput): Promise<LeadFormState<AgentLeadInput>> {
+  return updateManualLead(manualLead, leadId, input);
 }
 
 // --- Yelp discovery ---

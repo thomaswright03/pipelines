@@ -30,6 +30,11 @@ export const RULE_EXAMPLES: { group: string; verdict: ReplyVerdict; examples: st
     ],
   },
   {
+    group: "1. a yes that only opens a stop request is an opt-out",
+    verdict: "opt_out",
+    examples: ["Yes, unsubscribe me", "Sure, remove me from your list", "OK. Remove me."],
+  },
+  {
     group: "1. a stop request with interest needs a look",
     verdict: "needs_look",
     examples: [
@@ -67,9 +72,24 @@ export const RULE_EXAMPLES: { group: string; verdict: ReplyVerdict; examples: st
     ],
   },
   {
+    group: "4. a reply that puts it off needs a look, however warmly it says so",
+    verdict: "needs_look",
+    examples: [
+      "Sounds great but not right now, maybe next quarter",
+      "Perfect timing actually but our budget is frozen till 2027",
+      "Check back in a few months.",
+      "Remind me in two weeks.",
+    ],
+  },
+  {
     group: "4. a hedged reply needs a look",
     verdict: "needs_look",
-    examples: ["Maybe.", "Thanks, I guess.", "Not sure yet.", "Not interested right now, maybe next year."],
+    examples: ["Maybe.", "Thanks, I guess.", "Not sure yet.", "Not interested right now, maybe next year.", "Yes, maybe."],
+  },
+  {
+    group: "4. a hedge with a real question or a request is interested",
+    verdict: "positive",
+    examples: ["Maybe — what's the minimum term?", "I guess so. Send me the pricing for Mesa."],
   },
   {
     group: "5. another language needs a look",
@@ -112,7 +132,12 @@ export const RULE_EXAMPLES: { group: string; verdict: ReplyVerdict; examples: st
     ],
   },
   {
-    group: "9. nothing recognised needs a look",
+    group: "9. only passing it on or thinking it over needs a look",
+    verdict: "needs_look",
+    examples: ["Thank you, I will pass this on to the owner.", "I will think about it", "Thanks! Forwarding to my business partner."],
+  },
+  {
+    group: "10. nothing recognised needs a look",
     verdict: "needs_look",
     examples: ["We'll stick with what we have.", "Hmm.", "Please don't take this personally.", "Thanks\nNo"],
   },

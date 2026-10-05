@@ -22,12 +22,14 @@ import {
   CALL_OUTCOME_LABEL,
   canMarkReplied,
   isBackwardMove,
-  LOST_REASONS,
+  closeGuidance,
+  lostReasonsFor,
   statusLabel,
 } from "@/lib/lead-status";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { LEAD_NOUN, PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
+import { ENV_OFF_ASK, ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
 import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -50,8 +52,6 @@ type LeadActionsLead = {
 /** Long replies are shown up to this many characters; the full text is in the history below. */
 const REPLY_PREVIEW_CHARS = 600;
 const clipReply = (text: string) => (text.length > REPLY_PREVIEW_CHARS ? `${text.slice(0, REPLY_PREVIEW_CHARS)}…` : text);
-
-const LOST_REASON_CHOICES = LOST_REASONS.map((value) => ({ value, label: CALL_OUTCOME_LABEL[value] ?? value }));
 
 /** The latest reply recorded on the lead, shown in its own words when it needs a look, said no, or only said thanks. */
 export type LatestReply = {
@@ -118,6 +118,7 @@ export default function LeadActions({
   const moves = allowedTransitions(pipeline, lead.status);
   const backMoves = moves.filter((s) => isBackwardMove(lead.status, s));
   const forwardMoves = moves.filter((s) => !backMoves.includes(s));
+  const guidance = closeGuidance(moves);
   const needsAddressCheck = Boolean(lead.email && lead.sendBlockedReason?.startsWith("Unverified address"));
 
   async function remove() {
@@ -179,7 +180,7 @@ export default function LeadActions({
         title: `Mark ${lead.name} as Lost?`,
         body: <p>From {statusLabel(lead.status)} to Lost. No further outreach goes to this lead.</p>,
         choiceLabel: "Why was the lead lost?",
-        choices: LOST_REASON_CHOICES,
+        choices: lostReasonsFor(pipeline).map((value) => ({ value, label: CALL_OUTCOME_LABEL[value] ?? value })),
         confirmLabel: "Mark lost",
         danger: true,
       });
@@ -334,6 +335,7 @@ export default function LeadActions({
             Move to…
             <select
               value=""
+              aria-describedby={guidance ? "close-guidance" : undefined}
               disabled={isPending}
               onChange={(e) => {
                 if (e.target.value) void moveTo(e.target.value);
@@ -371,6 +373,11 @@ export default function LeadActions({
           </label>
         ) : (
           <p className="text-sm muted">No manual moves from {statusLabel(lead.status)}.</p>
+        )}
+        {guidance && (
+          <p id="close-guidance" className="-mt-1 text-xs muted">
+            {guidance}
+          </p>
         )}
       </section>
 
@@ -442,11 +449,18 @@ export default function LeadActions({
               <p className="text-sm muted">{sendHold}</p>
             ) : (
               paused && (
-                <p className="text-sm muted">
-                  {pausedByEnvironment
-                    ? "Sending is switched off on the server (OUTBOUND_EMAIL_DISABLED). Settings can't turn it back on: whoever manages the hosting settings has to remove that setting and redeploy."
-                    : "Outbound email is paused — resume it in Settings to send."}
-                </p>
+                <div className="text-sm muted">
+                  {pausedByEnvironment ? (
+                    <>
+                      <p>
+                        {ENV_OFF_SUMMARY} {ENV_OFF_ASK}
+                      </p>
+                      <p className="mt-1 text-xs">{ENV_OFF_DETAIL}</p>
+                    </>
+                  ) : (
+                    <p>Outbound email is paused — resume it in Settings to send.</p>
+                  )}
+                </div>
               )
             )}
           </>

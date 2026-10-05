@@ -37,6 +37,15 @@
 // same change (a spam *folder* is no complaint), and "No rush, whenever you
 // can." is now flagged (no positive signal) — 97.8% / 100% on 78 cases.
 
+// Round 14 (2026-10-05): both former held-out lists are now scored as
+// development batches (REVIEW_DEV_ROUNDS_5_7, REVIEW_DEV_ROUND_9): they
+// have been printed miss by miss on every CI run. Replies that only say the
+// email is being passed on or will be read ("Forwarding to our broker, she
+// decides.", "I'll look this over this weekend.") are relabelled
+// `review: true`: the round-14 review found such replies counted as
+// interested, and the rules now send them to a look (see the round-14 note
+// in replies.ts).
+
 export type LabelledReview = { text: string; review: boolean };
 
 export const REVIEW_DEV: LabelledReview[] = [
@@ -64,7 +73,7 @@ export const REVIEW_DEV: LabelledReview[] = [
   { text: "No problem, send it over.", review: false },
   { text: "We're good to go, send the link.", review: false },
   { text: "Send pricing please", review: false },
-  { text: "Received, will review.", review: false },
+  { text: "Received, will review.", review: true }, // relabelled in round 14
   // Round 8, from the reviewer's report: one-word answers were read as
   // "written in another language" ("y" is a Spanish stop word).
   { text: "Y", review: false },
@@ -83,7 +92,7 @@ export const REVIEW_DEV: LabelledReview[] = [
   { text: "Yes, interested — what does it cost?", review: false },
 ];
 
-export const REVIEW_HELD_OUT: LabelledReview[] = [
+export const REVIEW_DEV_ROUNDS_5_7: LabelledReview[] = [
   { text: "Not interested at this time.", review: true },
   { text: "No thank you, we're covered.", review: true },
   { text: "Wrong contact — try our office manager.", review: true },
@@ -126,12 +135,12 @@ export const REVIEW_HELD_OUT: LabelledReview[] = [
   { text: "I'm interested but only for Tucson.", review: false },
   { text: "Can we meet next week?", review: false },
   { text: "Great timing, we were just looking for this.", review: false },
-  { text: "Forwarding to our broker, she decides.", review: false },
+  { text: "Forwarding to our broker, she decides.", review: true }, // relabelled in round 14
   { text: "What's the difference between the two plans?", review: false },
   { text: "Sounds good. Send the contract.", review: false },
   { text: "Do you have references in Mesa?", review: false },
   { text: "Please call my cell instead: 602-555-0144.", review: false },
-  { text: "I'll look this over this weekend.", review: false },
+  { text: "I'll look this over this weekend.", review: true }, // relabelled in round 14
   { text: "Maybe — what's the minimum term?", review: false },
   { text: "Thanks! Talk soon.", review: false },
   { text: "Can you include the property addresses?", review: false },
@@ -157,7 +166,7 @@ export const REVIEW_HELD_OUT: LabelledReview[] = [
   { text: "Not looking for anything like this.", review: true },
   { text: "No problem, call me at 3.", review: false },
   { text: "We're good to go — send the invoice.", review: false },
-  { text: "I'll pass this along to my broker.", review: false },
+  { text: "I'll pass this along to my broker.", review: true }, // relabelled in round 14
   { text: "No worries, Thursday works.", review: false },
   { text: "I'm good with that price.", review: false },
   { text: "Who do I pay?", review: false },
@@ -176,7 +185,7 @@ export const REVIEW_HELD_OUT: LabelledReview[] = [
 // 2026-09-26 before the round-9 rule change and scored as-is; kept apart
 // so the eval reports it as its own split. Same held-out rules as above:
 // never edit the classifier against these.
-export const REVIEW_UNLISTED_HELD_OUT: LabelledReview[] = [
+export const REVIEW_DEV_ROUND_9: LabelledReview[] = [
   { text: "We'll stick with what we have.", review: true },
   { text: "Not at this time.", review: true },
   { text: "Maybe next year.", review: true },
@@ -214,7 +223,7 @@ export const REVIEW_UNLISTED_HELD_OUT: LabelledReview[] = [
   { text: "Ok, send it over.", review: false },
   { text: "Tell me more about the Maricopa list.", review: false },
   { text: "I'm in. How do I pay?", review: false },
-  { text: "My partner handles this, cc'ing her here.", review: false },
+  { text: "My partner handles this, cc'ing her here.", review: true }, // relabelled in round 14
   { text: "Call me at 480-555-0199.", review: false },
   { text: "Absolutely, when can we start?", review: false },
   { text: "This could be useful for us. What's involved?", review: false },

@@ -21,7 +21,23 @@ const items: ConnectionStatus[] = [
     summary: "No reply has arrived yet.",
     next: "Mark replies by hand.",
   },
-  { key: "daily-run", label: "Daily Cold Outreach run", tone: "error", summary: "Last run failed.", next: "Open the Cold Outreach page." },
+  {
+    key: "garbage-ai-daily",
+    label: "Daily Garbage AI search",
+    tone: "error",
+    summary: "Last run failed.",
+    next: "Open the Garbage AI page: it lists the run.",
+    link: { href: "/garbage-ai", label: "Open the Garbage AI page" },
+  },
+  {
+    key: "dataleadsell-daily",
+    label: "Daily dataleadsell run",
+    tone: "off",
+    badge: "Off",
+    summary: "Switched off.",
+    next: "Turn it on.",
+    link: { href: "/dataleadsell", label: "Open the dataleadsell.com page" },
+  },
   { key: "yelp", label: "Yelp search", tone: "warn", summary: "No search has run yet.", next: "Press Test connection.", testable: true },
 ];
 
@@ -38,7 +54,7 @@ describe("ConnectionStatusList", () => {
     expect(rowOf(html, "mail")).toContain("Working");
     expect(rowOf(html, "replies")).toContain("Not confirmed yet");
     expect(rowOf(html, "replies")).not.toContain("Check");
-    expect(rowOf(html, "daily-run")).toContain("Not working");
+    expect(rowOf(html, "garbage-ai-daily")).toContain("Not working");
     expect(rowOf(html, "yelp")).toContain("Check");
   });
 
@@ -55,6 +71,15 @@ describe("ConnectionStatusList", () => {
     expect(rowOf(html, "mail")).toContain("Test connection");
     expect(rowOf(html, "yelp")).toContain('aria-label="Test connection: Yelp search"');
     expect(rowOf(html, "replies")).not.toContain("Test connection");
-    expect(rowOf(html, "daily-run")).not.toContain("Test connection");
+    expect(rowOf(html, "garbage-ai-daily")).not.toContain("Test connection");
+  });
+
+  it("links a row's next step to the job's own page, and shows a switched-off job as Off, not as a problem", () => {
+    expect(rowOf(html, "garbage-ai-daily")).toMatch(/href="\/garbage-ai"[^>]*>Open the Garbage AI page</);
+    const off = rowOf(html, "dataleadsell-daily");
+    expect(off).toContain('data-tone="off"');
+    expect(off).toContain(">Off<");
+    expect(off).not.toMatch(/Not working|Check/);
+    expect(html).toContain('id="connection-mail"');
   });
 });

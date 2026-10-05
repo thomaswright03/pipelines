@@ -114,7 +114,12 @@ export default function PipelineCard({
                   Runs separately
                 </span>
               )}
-              <button onClick={() => setEditing(true)} className="btn-ghost text-xs">
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                aria-label={`Edit ${meta.name} description`}
+                className="btn-ghost text-xs"
+              >
                 Edit
               </button>
             </div>
@@ -145,11 +150,11 @@ export default function PipelineCard({
         <div>
           {rest.kind === "internal" ? (
             <div className="flex flex-wrap gap-2">
-              <Link href={rest.href} className="btn-primary">
+              <Link href={rest.href} aria-label={`Open pipeline: ${meta.name}`} className="btn-primary">
                 Open pipeline
               </Link>
-              <Link href={`${rest.href}/inbox`} className="btn-secondary">
-                Inbox
+              <Link href={`${rest.href}/inbox`} aria-label={`Sent & replies: ${meta.name}`} className="btn-secondary">
+                Sent &amp; replies
               </Link>
             </div>
           ) : (

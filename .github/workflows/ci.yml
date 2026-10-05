@@ -74,18 +74,26 @@ jobs:
 
       # The reply classifier's outcomes (unsafe, needs a look, handled
       # automatically) and precision/recall of the other heuristics
-      # (automatic replies, bounces, brokerage addresses, guessed sites) on
-      # the development and held-out splits in tests/corpus/ (also part of
-      # the run above, where an unsafe outcome or a drop below any floor
-      # fails the build).
+      # (automatic replies, bounces, brokerage addresses, guessed sites),
+      # from tests/corpus/ (also part of the run above, where an unsafe
+      # outcome or a drop below any floor fails the build). Numbers from
+      # real replies and from synthetic cases are summarised apart; the
+      # frozen held-out set (real only) is printed only in aggregate.
       - name: Heuristic scores
         if: always()
         run: |
           npx vitest run tests/heuristics-eval.test.ts --reporter=basic 2>&1 | tee eval.log
           {
-            echo "### Heuristics on the labelled sets (quote the held-out split)"
+            echo "### Heuristics on the labelled sets"
             echo
-            grep -E "precision|miss:|Real replies|Reply outcomes|UNSAFE|held, not suppressed|interest missed" eval.log | sed 's/^/    /'
+            echo "#### Real replies (quote the frozen HELD-OUT line once it has 50 or more cases)"
+            echo
+            grep -E "^Reply outcomes \[[^]]*, real\]" eval.log | sed 's/^/    /' || true
+            echo
+            echo "#### Synthetic development sets (written by the rules' author; optimistic)"
+            echo
+            grep -E "synthetic\]" eval.log | sed 's/^/    /' || true
+            grep -E "^  (miss:|UNSAFE|held, not suppressed|interest missed)" eval.log | sed 's/^/    /' || true
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Browser smoke tests against the production build: single send, bulk

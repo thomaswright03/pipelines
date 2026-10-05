@@ -77,7 +77,7 @@ describe("a courtesy reply (acknowledged)", () => {
     expect(await markRepliedAction("cold-outreach", lead.id)).toMatchObject({ ok: true });
     const correction = await prisma.outreachCorrection.findFirstOrThrow();
     expect(correction).toMatchObject({ kind: "courtesy_was_reply", leadId: lead.id, detail: "Thank you!" });
-    expect(correction.rulesVersion).toMatch(/^reply\.5-/);
+    expect(correction.rulesVersion).toMatch(/^reply\.6-/);
     expect(await getQualitySignals()).toMatchObject({ acknowledged: 1, courtesyWasReply: 1 });
   });
 });

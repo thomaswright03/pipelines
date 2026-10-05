@@ -69,8 +69,13 @@ the bulk send, and the daily cron.
     dataleadsell). The words that triggered it are shown on the lead page, and a wrong opt-out can be
     reversed there with **Remove from do-not-email list**.
   - **Positive**: a yes, interest, a question or a request (send details, call me, a number to call) with
-    nothing that could be a stop request, a "no" or a hedge ("I guess", "maybe" without a real question).
-    It counts as a reply and moves the lead to Responded.
+    nothing that could be a stop request, a "no", a hedge ("I guess", "maybe" without a real question or
+    request) or a deferral ("not right now", "maybe next quarter", "our budget is frozen", "check back in
+    March"). Warm words don't outweigh a deferral: "Sounds great but not right now" is not a yes. A reply
+    that only says it will be passed on or thought over ("Thank you, I will pass this on to the owner", "I
+    will think about it") is not a yes either, unless it also asks something or asks for something. It
+    counts as a reply and moves the lead to Responded. A yes that only opens a stop request ("Yes,
+    unsubscribe me", "Sure, remove me from your list") agrees to it, and the reply is an opt-out.
   - **Plain no** (`declined`): only a no — "Not interested", "No thanks", "We're all set", "Pass", "Not
     for us" — with no stop request, question, complaint or interest. It is **not** an opt-out: the address
     is not put on the do-not-email list. A lead still being worked (Contacted, on the call deck) moves to
@@ -85,19 +90,22 @@ the bulk send, and the daily cron.
   - **Needs a look**: everything else — a stop request that also sounds interested ("Stop! This is exactly
     what I need. Call me."), a request that names only calls or texts, words that *may* be asking not to be
     emailed ("Kindly exclude me from future mailings", "I never signed up for this", "Pls rmv"), a complaint
-    ("wrong person", "who is this?", "spam"), a no mixed with interest, a hedge ("Thanks, I guess?"),
-    another language, or nothing recognisable. Every lead with that address, in any pipeline, is flagged
+    ("wrong person", "who is this?", "spam"), a no mixed with interest, a hedge ("Thanks, I guess?"), a
+    deferral ("Perfect timing, but our budget is frozen till 2027" — the reason says to decide whether to
+    call them later), a reply that only says it will be passed on or thought over, another language, or
+    nothing recognisable. Every lead with that address, in any pipeline, is flagged
     **Reply needs a look**; the reply doesn't count as a reply or as an opt-out; a Contacted lead stays off
     the call deck; and nothing is emailed to the address until the operator resolves it on the lead page:
     **Mark opted out**, **Mark replied**, a status move, or **Keep as …** (which asks for confirmation).
   - A reply that matched no lead holds its address the same way (needs a look, plain no or thank-you) until
-    it is attached, marked opted out or dismissed on **Replies**.
+    it is attached, marked opted out or dismissed on **Unmatched replies**.
   - Only the replier's own words are read: quoted history, signatures (including a sign-off and the lines
     under it), legal and newsletter footers ("This email is confidential…", "To unsubscribe from our
     newsletter click here") and our own "Reply STOP" footer are removed first.
   - The trade-off: the rules don't try to read every phrasing, so some replies wait for the operator. On
-    the synthetic held-out sets 26% of replies need a look (40% before plain no's and thank-yous got their
-    own verdicts; see [measuring-rules.md](measuring-rules.md), "Measuring the reply and address rules");
+    the synthetic development sets 28.5% of replies need a look (40% before plain no's and thank-yous got
+    their own verdicts, 26% before deferrals and forwards stopped counting as interest; see
+    [measuring-rules.md](measuring-rules.md));
     none is suppressed or counted as a yes by mistake. The cost of the two new verdicts: a reply misread as
     a plain no closes a lead (reversible, and counted), and a thank-you that was really interest isn't
     counted until the operator marks it — in both cases the address gets no further email.

@@ -15,6 +15,7 @@ import {
   BOUNCE_MOVES_TO_LOST,
   declinedStatus,
   isLostReason,
+  lostReasonsFor,
   isStatusOf,
   statusLabel,
   type ColdCallOutcome,
@@ -51,6 +52,9 @@ export async function changeStatus(pipelineId: PipelineId, leadId: string, to: s
     return refuse(`${lead.name} can't move from ${statusLabel(lead.status)} to ${statusLabel(to)}.`);
   }
   if (to === "lost" && !isLostReason(reason)) return refuse(`Pick why ${lead.name} was lost first.`);
+  if (to === "lost" && !(lostReasonsFor(pipelineId) as readonly string[]).includes(reason ?? "")) {
+    return refuse(`${lead.name} said no, so move them to ${statusLabel(declinedStatus(pipelineId))} instead of Lost.`);
+  }
   const pipeline = getPipeline(pipelineId);
   if (to === "contacted") {
     // Only as "undo Mark replied": Contacted always means "was emailed".

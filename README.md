@@ -18,8 +18,9 @@ access is gated by Vercel Deployment Protection (SSO). Three pipelines live here
 All three share one set of send rules: one pitch per address across pipelines, the do-not-email list,
 reply holds and both kill switches apply to every pipeline.
 
-Each pipeline has a lead list, a call deck for phone follow-up and Stats. **Replies** (`/replies`) tracks
-inbound mail, **Settings** holds the kill switch, connections (with a reply-loop check to run after each deploy) and
+Each pipeline has a lead list, a call deck for phone follow-up, **Sent & replies** (its sent and failed
+emails and its leads' replies) and Stats. **Unmatched replies** (`/replies`) holds replies from addresses on
+no lead and tracks whether inbound mail is arriving, **Settings** holds the kill switch, connections (with a reply-loop check to run after each deploy) and
 the do-not-email list, and **Operator
 guide** (`/help`) is the runbook, with a glossary. To stop all outbound email without the app, set
 `OUTBOUND_EMAIL_DISABLED=1` in Vercel and redeploy; it applies when the redeploy is live, usually within 1–3
@@ -73,7 +74,7 @@ Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach
   Vercel (hosting, cron, SSO). Local development and CI use none of them: mail goes to an outbox or a local
   catcher, and `fetch` is stubbed in tests.
 - **UI.** React 19 server components with small client components in `src/components/`, Tailwind v4.
-  English-only, with no translation layer (see "Known limitations").
+  English-only by the client's request, with no translation layer (see "Known limitations").
 
 ## Running it locally
 
@@ -127,18 +128,17 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
 
 ## Known limitations
 
-- **The interface language is not decided.** The interface is English-only: the one operator and every
-  recipient are in the US, so strings are hard-coded in the components. That is the developer's
-  recommendation (recorded 2026-09-26); the owner has not confirmed it — see docs/deployment.md →
-  "Owner-only setup". Spanish/French would mean moving every string into a translation layer with full
-  catalogues, a persistent switcher and localised dates and numbers. Replies are separate: common Spanish,
-  French, German, Portuguese, Italian and Dutch opt-outs are honoured, and any other reply in another
-  language needs a look.
-- **Replies the rules can't read with confidence wait for the operator.** About a quarter (26%) of the
-  synthetic held-out replies land on "needs a look", and nothing is emailed to such an address until the
-  operator resolves it (docs/outreach-safety.md). A plain "no thanks" closes the lead and a "Thanks" /
+- **English-only interface, by the client's request.** The owner decided on 2026-10-05 that the interface
+  stays English-only, because the client asked for English only; there is no Spanish or French interface
+  and no translation layer, and dates and numbers are formatted for the US. Strings are written directly
+  in the components. Replies are separate: common Spanish, French, German, Portuguese, Italian and Dutch
+  opt-outs are honoured, and any other reply in another language needs a look.
+- **Replies the rules can't read with confidence wait for the operator.** Over a quarter (28.5%) of the
+  synthetic development replies land on "needs a look" — including a reply that puts it off ("not right
+  now", "maybe next quarter") without saying no, or only says it will be passed on — and nothing is
+  emailed to such an address until the operator resolves it (docs/outreach-safety.md). A plain "no thanks" closes the lead and a "Thanks" /
   "Got it" changes nothing, without the operator; both also stop further email to the address, and neither
-  is treated as an opt-out. The Replies page and the lead list show how many are waiting.
+  is treated as an opt-out. The Unmatched replies page and the lead list show how many are waiting.
 - **Email finding is a heuristic.** Neither Yelp nor ADRE gives a business's website, so
   `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly (no
   search engine: those block automated queries or charge for them). A guessed site is only used when it

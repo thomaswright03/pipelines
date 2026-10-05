@@ -5,6 +5,11 @@
 //   this?"), redirect ("wrong person") or suppress ("this is spam").
 // - HEDGE_RE ("I guess", "not sure", "maybe") makes a reply not a clear
 //   answer either way, so it needs a look.
+// - DEFERRALS put it off ("not right now", "maybe next quarter", "our
+//   budget is frozen", "check back in March"). Warm words around one
+//   ("Sounds great, but not right now") don't make it a yes: it needs a
+//   look, so it is never counted as a reply and the lead isn't taken off
+//   the route to phone follow-up by itself.
 // - PLAIN_DECLINES are a plain no. On its own (nothing interested, no
 //   question, no stop word, no complaint, no hedge) the reply is a
 //   confident decline: the lead is closed and the address is held — never
@@ -55,6 +60,40 @@ export const PLAIN_DECLINES: Phrase[] = [
   },
   { re: /\bnot\s+(?:currently\s+)?(?:looking\s+for|in\s+the\s+market)\b/i, reason: "says they're not looking" },
   { re: /\bretired\b/i, reason: "says they've retired" },
+];
+
+const PERIOD = String.raw`(?:month|quarter|year|season|spring|summer|fall|autumn|winter|q[1-4]|fiscal\s+year|budget\s+(?:cycle|year))s?`;
+const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
+
+export const DEFERRALS: Phrase[] = [
+  // "Not right now", "not at this time", "not yet", "not this year"
+  {
+    re: /\bnot\s+(?:right\s+|just\s+)?now\b|\bnot\s+(?:at\s+)?(?:the|this)\s+(?:moment|time|point)\b|\bnot\s+(?:quite\s+)?yet\b|\bnot\s+this\s+(?:week|month|quarter|year|season|time\s+around)\b|\bnot\s+(?:a\s+)?(?:good|great|the\s+right|the\s+best)\s+time\b|\bbad\s+time(?:ing)?\b/i,
+    reason: "puts it off",
+  },
+  // "Maybe next quarter", "next year", "in a few months", "after the holidays", "down the road"
+  {
+    re: new RegExp(
+      String.raw`\b(?:maybe|perhaps|possibly|probably)\s+(?:later|another\s+time|some\s*(?:other\s+)?time|down\s+the\s+road|in\s+the\s+future|next)\b|\b(?:next|later\s+this|later\s+next|early\s+next|end\s+of\s+(?:the|this|next))\s+${PERIOD}\b|\bin\s+(?:a\s+(?:few|couple(?:\s+of)?)|(?:a\s+)?few|several|two|three|four|five|six|\d+)\s+(?:months|quarters|years)\b|\bin\s+(?:a|one|1)\s+(?:month|quarter|year)\b|\b(?:after|past|until|till|til|before)\s+(?:the\s+)?(?:holidays|new\s+year|first\s+of\s+the\s+year|season|busy\s+season|summer|winter|spring|fall|20\d\d|${MONTH})\b|\bdown\s+the\s+road\b|\bin\s+the\s+(?:near\s+)?future\b|\b(?:some\s+)?other\s+time\b|\banother\s+time\b|\blater\s+(?:on|this\s+year|in\s+the\s+year)\b|\bmaybe\s+later\b`,
+      "i",
+    ),
+    reason: "puts it off until later",
+  },
+  // "Our budget is frozen", "no budget", "can't afford it", "spending freeze"
+  {
+    re: /\bbudget(?:'?s|\s+is|\s+was|\s+has\s+been|\s+are)?\s+(?:is\s+)?(?:frozen|tight|spent|used\s+up|gone|maxed|exhausted|allocated|set|cut|locked|on\s+hold)\b|\b(?:no|zero|not\s+(?:in\s+)?(?:the|our|my)?\s*)\s*budget\b|\b(?:don'?t|do\s+not|doesn'?t)\s+have\s+(?:the\s+|a\s+|any\s+)?(?:budget|money|funds)\b|\b(?:can'?t|cannot|couldn'?t)\s+afford\b|\b(?:budget|spending|hiring)\s+freeze\b|\bfrozen\s+budget\b|\bbudgets?\s+(?:are|is)\s+frozen\b/i,
+    reason: "says there's no budget for it now",
+  },
+  // "Check back in…", "reach out again next year", "circle back later", "remind me in two weeks", "try me in January"
+  {
+    re: /\b(?:check|circle|touch|follow)\s+(?:back|up)\s+(?:with\s+(?:me|us)\s+)?(?:in|next|after|later|around|closer|again|another|some)\b|\b(?:reach|get)\s+(?:out|back\s+in\s+touch)\s+(?:to\s+(?:me|us)\s+)?(?:again\s+)?(?:in|next|after|later|around|closer)\b|\bremind\s+(?:me|us)\b|\btry\s+(?:me|us)\s+(?:again|in|next|after|later)\b|\b(?:contact|e-?mail|call)\s+(?:me|us)\s+(?:again\s+)?(?:later|another\s+time|in\s+(?:a\s+few|a\s+couple|\d+|two|three|six)\s+(?:months|weeks))\b/i,
+    reason: "asks to be contacted later",
+  },
+  // "Too busy", "swamped", "on hold", "hold off", "back burner", "revisit", "not a priority"
+  {
+    re: /\btoo\s+busy\b|\b(?:swamped|slammed)\b|\bon\s+(?:hold|pause)\b|\bhold(?:ing)?\s+off\b|\bback\s*burner\b|\brevisit\b|\bnot\s+(?:a|our|my)\s+(?:top\s+)?priority\b|\b(?:put|putting|keep|keeping)\s+(?:it|this|you|your\s+\w+)\s+on\s+file\b|\bwhen\s+(?:the\s+)?time\s+(?:is\s+right|comes)\b|\bwhen\s+(?:we'?re|we\s+are|i'?m|i\s+am)\s+ready\b/i,
+    reason: "puts it off for now",
+  },
 ];
 
 export const COMPLAINTS: Phrase[] = [

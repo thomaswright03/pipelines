@@ -1,4 +1,4 @@
-// Answering a reply from the Inbox: the operator writes back to someone who
+// Answering a reply from a pipeline's Sent & replies tab: the operator writes back to someone who
 // replied to a pitch, and the app sends it from the pipeline's address as
 // part of the same email thread. Never sent while outbound email is paused
 // or to an address on the do-not-email list.
@@ -70,7 +70,7 @@ export async function sendInboxReply(pipelineId: PipelineId, inboundReplyId: str
       await pipeline.addActivity(tx, leadId, {
         type: "email",
         date: sentAt,
-        notes: `You replied from the Inbox to ${to} — “${subject}”\n\n${body}`.slice(0, 4_000),
+        notes: `You replied from Sent & replies to ${to} — “${subject}”\n\n${body}`.slice(0, 4_000),
       });
       await pipeline.update(tx, leadId, { ourReplyAt: sentAt });
     });

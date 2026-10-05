@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PipelineInboxPage from "@/components/PipelineInboxPage";
 import { getPipelineInbox, parseInboxTab } from "@/lib/outreach/inbox";
 
-export const metadata: Metadata = { title: "Garbage AI — Inbox" };
+export const metadata: Metadata = { title: "Garbage AI — Sent & replies" };
 export const dynamic = "force-dynamic";
 
 export default async function GarbageAiInboxPage({ searchParams }: PageProps<"/garbage-ai/inbox">) {

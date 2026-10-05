@@ -151,3 +151,52 @@ describe("addresses held back by the old unchecked website guess", () => {
     expect(await confirmAddressAction("cold-outreach", lead.id)).toMatchObject({ ok: false });
   });
 });
+
+describe("two tabs saving the same address at once (round-14 review finding 8)", () => {
+  it("two simultaneous 'Add lead' submits with one address create exactly one lead; the other gets the usual field error", async () => {
+    const results = await Promise.all([
+      createLeadAction(coldInput({ name: "Twin Tabs Co", email: "twin@twintabs.test" })),
+      createLeadAction(coldInput({ name: "Twin Tabs Co", email: "Twin@TwinTabs.test" })),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const refused = results.find((r) => !r.ok)!;
+    expect(refused).toMatchObject({
+      error: "This email can't be used.",
+      fieldErrors: { email: expect.stringMatching(/already belongs to Twin Tabs Co/) },
+    });
+    expect(refused.fieldLinks?.email?.href).toMatch(/^\/vault-pipeline\//);
+    expect(await prisma.lead.count({ where: { email: "twin@twintabs.test" } })).toBe(1);
+  });
+
+  it("holds for many submits at once, across pipelines that each keep their own leads", async () => {
+    const cold = Array.from({ length: 5 }, () => createLeadAction(coldInput({ name: "Rush Co", email: "rush@x.test" })));
+    const agents = Array.from({ length: 5 }, () =>
+      createAgentAction({
+        name: "Rush Agent",
+        brokerage: "",
+        email: "rush@x.test",
+        phone: "",
+        city: "",
+        county: "",
+        website: "",
+        notes: "",
+      }),
+    );
+    const results = await Promise.all([...cold, ...agents]);
+    expect((await Promise.all(cold)).filter((r) => r.ok)).toHaveLength(1);
+    expect((await Promise.all(agents)).filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok).every((r) => r.fieldErrors?.email)).toBe(true);
+    expect(await prisma.lead.count({ where: { email: "rush@x.test" } })).toBe(1);
+    expect(await prisma.agentLead.count({ where: { email: "rush@x.test" } })).toBe(1);
+  });
+
+  it("an edit and an add racing for one address: exactly one gets it", async () => {
+    const existing = await makeColdLead({ name: "Old Name", email: null });
+    const [edit, add] = await Promise.all([
+      updateLeadAction(existing.id, coldInput({ name: "Old Name", email: "race@x.test" })),
+      createLeadAction(coldInput({ name: "New Co", email: "race@x.test" })),
+    ]);
+    expect([edit.ok, add.ok].filter(Boolean)).toHaveLength(1);
+    expect(await prisma.lead.count({ where: { email: "race@x.test" } })).toBe(1);
+  });
+});

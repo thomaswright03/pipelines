@@ -4,6 +4,7 @@ import { readdir, rm } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { count, leadStatus, resetDb, seedAgentLead, seedColdLeads, withDb } from "./db";
 import { OUTBOX_DIR } from "../playwright.config";
+import { outageHtml } from "../src/lib/outage-page";
 
 async function outboxCount(): Promise<number> {
   try {
@@ -191,7 +192,7 @@ test("a reply from an unknown address can be attached to the right lead", async 
   );
   await page.goto("/vault-pipeline");
   await page.getByRole("link", { name: "Match it to a lead" }).click();
-  await expect(page).toHaveTitle(/^Replies/);
+  await expect(page).toHaveTitle(/^Unmatched replies/);
   await expect(page.getByText("Forwarding for my boss - interested!")).toBeVisible();
 
   await page.getByLabel("Find the lead it belongs to").fill("Test Business 1");
@@ -612,4 +613,129 @@ test("at 375px the do-not-email list shows each address whole, with its date, re
   expect(splitPieces).toEqual([]);
   const remove = row.getByRole("button", { name: `Remove ${long} from the list` });
   expect((await remove.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+});
+
+/**
+ * WCAG contrast ratio of the element's text against what is painted behind it: its own and its
+ * ancestors' background colours, composited. A gradient on the element itself (a primary button's
+ * top-to-bottom shade) counts by its colour halfway along, behind the vertically centred text.
+ */
+async function textContrast(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).evaluate((el) => {
+    // Canvas turns any CSS colour (Tailwind's oklch included) into sRGB bytes.
+    const ctx = document.createElement("canvas").getContext("2d")!;
+    const rgba = (color: string) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r!, g!, b!, a! / 255] as const;
+    };
+    const over = (top: readonly number[], under: readonly number[]) => [0, 1, 2].map((i) => top[i]! * top[3]! + under[i]! * (1 - top[3]!));
+    const luminance = (c: readonly number[]) => {
+      const [r, g, b] = c.slice(0, 3).map((v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    // Background layers from the element outwards, down to the first opaque one.
+    const layers: (readonly number[])[] = [];
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const bg = rgba(getComputedStyle(node).backgroundColor);
+      if (bg[3] > 0) layers.push(bg);
+      if (bg[3] === 1) break;
+    }
+    let behind: readonly number[] = [255, 255, 255];
+    for (const layer of layers.reverse()) behind = over(layer, behind);
+    const stops = (getComputedStyle(el).backgroundImage.match(/(?:rgba?|oklch|oklab|color)\([^)]*\)|#[0-9a-f]{3,8}/gi) ?? []).map(rgba);
+    const middle = stops.length > 0 ? [0, 1, 2, 3].map((i) => (stops[0]![i]! + stops.at(-1)![i]!) / 2) : null;
+    const backgrounds = middle ? [over(middle, behind)] : [behind];
+    const text = luminance(over(rgba(getComputedStyle(el).color), behind));
+    return Math.min(
+      ...backgrounds.map((b) => {
+        const back = luminance(b);
+        return (Math.max(text, back) + 0.05) / (Math.min(text, back) + 0.05);
+      }),
+    );
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the skip link is readable when it takes focus, in the ${theme} theme`, async ({ page }) => {
+    for (const how of ["system", "picked"] as const) {
+      if (how === "system") {
+        await page.emulateMedia({ colorScheme: theme });
+      } else {
+        // The opposite system setting, overridden by the header's theme choice.
+        await page.emulateMedia({ colorScheme: theme === "dark" ? "light" : "dark" });
+        await page.addInitScript((t) => localStorage.setItem("theme", t), theme);
+      }
+      await page.goto("/");
+      await page.keyboard.press("Tab");
+      const skip = page.getByRole("link", { name: "Skip to content" });
+      await expect(skip).toBeFocused();
+      await expect(skip).toBeVisible();
+      expect(await textContrast(page, "a[href='#main']"), `${theme} theme (${how})`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
+test("the browser tab and home-screen icons are the header's O mark, not the framework default", async ({ page, request }) => {
+  await page.goto("/");
+  const icons = await page
+    .locator("head link[rel='icon'], head link[rel='apple-touch-icon']")
+    .evaluateAll((links) => links.map((l) => `${l.getAttribute("rel")} ${l.getAttribute("href")?.split("?")[0]}`));
+  expect(icons).toEqual(expect.arrayContaining(["icon /favicon.ico", "icon /icon.svg", "apple-touch-icon /apple-icon.png"]));
+  const svg = await (await request.get("/icon.svg")).text();
+  // The header mark's gradient (indigo-500 to violet-600).
+  expect(svg).toContain("#6366f1");
+  expect(svg).toContain("#7c3aed");
+  const ico = await request.get("/favicon.ico");
+  expect(ico.ok()).toBe(true);
+  // create-next-app's favicon is 25,931 bytes; ours holds 16, 32 and 48 px renders of icon.svg.
+  const body = await ico.body();
+  expect(body.length).not.toBe(25_931);
+  expect(body.readUInt16LE(4)).toBe(3);
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the database-down page uses the app's font, mark and ${theme} theme, readably`, async ({ page }) => {
+    // The page Proxy serves during an outage, delivered from the app's own origin so its font and icon load as they would.
+    const html = outageHtml();
+    await page.route("**/outage-preview", (route) => route.fulfill({ status: 503, contentType: "text/html; charset=utf-8", body: html }));
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto("/outage-preview");
+    await expect(page.getByRole("heading", { name: "Can't reach the database right now" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Try again" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Outreach — dashboard" })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.fonts.check("16px Geist"))).toBe(true);
+    expect(await page.locator("body").evaluate((b) => getComputedStyle(b).fontFamily)).toMatch(/^Geist/);
+    const background = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--background").trim());
+    expect(background).toBe(theme === "dark" ? "#0a0a0c" : "#f7f7fb");
+    for (const selector of ["h1", ".card p", "a.btn"]) {
+      expect(await textContrast(page, selector), `${selector} in the ${theme} theme`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
+test("the database-down page follows a theme picked in the header over the system setting", async ({ page }) => {
+  const html = outageHtml();
+  await page.route("**/outage-preview", (route) => route.fulfill({ status: 503, contentType: "text/html; charset=utf-8", body: html }));
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+  await page.goto("/outage-preview");
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--background").trim())).toBe("#0a0a0c");
+});
+
+test("each dashboard card's buttons are named after its pipeline", async ({ page }) => {
+  await page.goto("/");
+  const edits = await page
+    .getByRole("button", { name: /^Edit .+ description$/ })
+    .evaluateAll((b) => b.map((e) => e.getAttribute("aria-label")));
+  expect(edits.length).toBeGreaterThanOrEqual(3);
+  expect(new Set(edits).size).toBe(edits.length);
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sent & replies: Cold Outreach" })).toHaveAttribute("href", "/vault-pipeline/inbox");
 });

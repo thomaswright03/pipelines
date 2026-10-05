@@ -13,6 +13,11 @@
 // fixed, so this set now scores 100% and fresh (real) cases are needed for
 // an independent measure.
 //
+// Round 14 (2026-10-05): the second batch (formerly "held-out", now
+// `ADDRESS_DEV_2`) has been printed miss by miss on every CI run and fixed against,
+// so it is scored as a second development batch. A genuinely unseen
+// measure needs real cases (docs/measuring-rules.md).
+//
 // belongs: true  — the address is this agent's own.
 // belongs: false — a colleague's, a shared inbox, or not identifiable as theirs.
 
@@ -80,7 +85,7 @@ export const ADDRESS_CORPUS: LabelledAddress[] = [
 // First run (2026-09-25): precision 100%, recall 100%. Round 6: grown to 50
 // with fresh cases, scored as-is — precision 100%, recall 96.0% (rejected
 // annemarie.dupont@ for "Anne-Marie Dupont").
-export const ADDRESS_HELD_OUT: LabelledAddress[] = [
+export const ADDRESS_DEV_2: LabelledAddress[] = [
   { agent: "Carla Mendez", email: "carla.mendez@homesmart.test", belongs: true },
   { agent: "Carla Mendez", email: "cmendez@homesmart.test", belongs: true },
   { agent: "Carla Mendez", email: "carlamendez@homesmart.test", belongs: true },

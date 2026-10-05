@@ -6,6 +6,7 @@ import { setAllowCrossPipelineRepeatsAction, setOutboundPausedAction } from "@/l
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { ENV_OFF_ASK, ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
 
 export default function SettingsControls({
   paused,
@@ -75,18 +76,20 @@ export default function SettingsControls({
       <section aria-labelledby="pause-heading" className="card flex flex-col gap-3 p-4">
         <h2 id="pause-heading" className="flex items-center gap-2 text-base font-semibold">
           <span className={`h-2 w-2 rounded-full ${paused || offByEnvironment ? "bg-red-500" : "bg-emerald-500"}`} aria-hidden />
-          Outbound email: {offByEnvironment ? "off (server setting)" : paused ? "paused" : "on"}
+          Outbound email: {offByEnvironment ? "switched off by your hosting" : paused ? "paused" : "on"}
         </h2>
         {offByEnvironment && (
-          <p className="notice-warning">
-            <strong>Switched off on the server.</strong> OUTBOUND_EMAIL_DISABLED is set in the hosting environment, so nothing is sent from
-            any pipeline whatever the switch below says. Sending comes back only when that variable is removed and the app redeployed.
-          </p>
+          <div className="notice-warning">
+            <p>
+              <strong>Switched off outside this app.</strong> {ENV_OFF_SUMMARY} The switch below can&apos;t override it. {ENV_OFF_ASK}
+            </p>
+            <p className="mt-1 text-xs">{ENV_OFF_DETAIL}</p>
+          </div>
         )}
         <p className="text-sm muted">
           {paused
             ? `Paused${pausedSince ? ` since ${pausedSince}` : ""}. Nothing is sent from any pipeline — manual, bulk or a daily run — until you resume.`
-            : "The emergency stop. Pausing takes effect on the very next send, including one in the middle of a bulk send. If this page can't be reached, set OUTBOUND_EMAIL_DISABLED=1 in the hosting dashboard instead (see the operator guide)."}
+            : "The emergency stop. Pausing takes effect on the very next send, including one in the middle of a bulk send. If this page can't be reached, sending can also be stopped from the hosting dashboard — the operator guide's Emergency stop says how."}
         </p>
         <button
           type="button"

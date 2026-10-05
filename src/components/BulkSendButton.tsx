@@ -6,7 +6,8 @@ import { previewBulkSendAction, sendBulkChunkAction } from "@/lib/actions/outrea
 import type { BulkPreview } from "@/lib/outreach/send";
 import { LEAD_NOUN, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { plural } from "@/lib/format";
-import { bulkSendSummary, runBulkSend, type BulkProgress } from "@/lib/bulk-send-run";
+import { ENV_OFF_ASK, ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
+import { batchesFor, bulkSendSummary, nextBatchAfter, runBulkSend, type BulkProgress, type NextBatch } from "@/lib/bulk-send-run";
 
 type Progress = BulkProgress;
 
@@ -15,7 +16,7 @@ type Phase =
   | { kind: "loading" }
   | { kind: "preview"; preview: BulkPreview }
   | { kind: "sending"; preview: BulkPreview; progress: Progress; stopping: boolean }
-  | { kind: "done"; progress: Progress; summary: string; tone: "success" | "warning" | "error" }
+  | { kind: "done"; progress: Progress; summary: string; tone: "success" | "warning" | "error"; next: NextBatch | null }
   | { kind: "error"; message: string };
 
 /**
@@ -23,7 +24,9 @@ type Phase =
  * distinct addresses, what's skipped and why, a sample) and sends only
  * after an explicit "Send to N leads". The send runs as one server call per
  * email, so progress is visible and Stop takes effect after the email in
- * progress.
+ * progress. One batch covers at most BULK_BATCH_LIMIT leads; the preview
+ * says how many batches the rest need, and a batch that runs to the end
+ * offers "Send the next N", which shows a fresh preview to confirm.
  */
 export default function BulkSendButton({ pipeline, disabled }: { pipeline: PipelineId; disabled?: boolean }) {
   const router = useRouter();
@@ -40,7 +43,8 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
 
   async function open() {
     setPhase({ kind: "loading" });
-    dialogRef.current?.showModal();
+    // Already open when the next batch is started from the result.
+    if (!dialogRef.current?.open) dialogRef.current?.showModal();
     try {
       const result = await previewBulkSendAction(pipeline);
       setPhase(result.ok ? { kind: "preview", preview: result.preview } : { kind: "error", message: result.error });
@@ -67,7 +71,12 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
         onProgress: (p) => setPhase((current) => (current.kind === "sending" ? { ...current, progress: p } : current)),
       },
     );
-    setPhase({ kind: "done", progress, ...bulkSendSummary(progress, stopReason, preview, noun) });
+    setPhase({
+      kind: "done",
+      progress,
+      ...bulkSendSummary(progress, stopReason, preview, noun),
+      next: nextBatchAfter(stopReason, preview),
+    });
     router.refresh();
   }
 
@@ -137,6 +146,11 @@ export default function BulkSendButton({ pipeline, disabled }: { pipeline: Pipel
               Close
             </button>
           )}
+          {phase.kind === "done" && phase.next && (
+            <button type="button" onClick={open} className="btn-primary">
+              Send the next {phase.next.size}
+            </button>
+          )}
         </div>
       </dialog>
     </>
@@ -147,11 +161,18 @@ function PreviewBody({ preview, noun }: { preview: BulkPreview; noun: { one: str
   const n = (count: number, prefix = "") => plural(count, `${prefix}${noun.one}`, `${prefix}${noun.many}`);
   if (preview.paused) {
     return (
-      <p className="notice-warning">
-        {preview.pausedByEnvironment
-          ? "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so nothing can be sent. It comes back on only when that setting is removed from the hosting environment."
-          : "Outbound email is paused, so nothing can be sent. Resume it on the Settings page first."}
-      </p>
+      <div className="notice-warning">
+        {preview.pausedByEnvironment ? (
+          <>
+            <p>
+              {ENV_OFF_SUMMARY} {ENV_OFF_ASK}
+            </p>
+            <p className="mt-1 text-xs">{ENV_OFF_DETAIL}</p>
+          </>
+        ) : (
+          <p>Outbound email is paused, so nothing can be sent. Resume it on the Settings page first.</p>
+        )}
+      </div>
     );
   }
   const skippedParts = [
@@ -160,7 +181,8 @@ function PreviewBody({ preview, noun }: { preview: BulkPreview; noun: { one: str
     preview.skipped.duplicateInBatch && `${n(preview.skipped.duplicateInBatch)} sharing an address with another ${noun.one} in this batch`,
     preview.skipped.suppressed && `${n(preview.skipped.suppressed)} on the do-not-email list`,
     preview.skipped.refusedEarlier && `${n(preview.skipped.refusedEarlier)} whose address a mail server refused on an earlier send`,
-    preview.skipped.replyNeedsLook && `${n(preview.skipped.replyNeedsLook)} whose address has a reply waiting for a look (see Replies)`,
+    preview.skipped.replyNeedsLook &&
+      `${n(preview.skipped.replyNeedsLook)} whose address has a reply waiting for a look (on the lead, or on Unmatched replies)`,
     preview.skipped.alreadyAnswered && `${n(preview.skipped.alreadyAnswered)} whose address already answered with a no or a thank-you`,
   ].filter(Boolean);
   if (preview.willSend === 0) {
@@ -182,8 +204,9 @@ function PreviewBody({ preview, noun }: { preview: BulkPreview; noun: { one: str
       </p>
       {preview.totalEligible > preview.leadIds.length && (
         <p className="muted">
-          {n(preview.totalEligible, "New ")} have an email; one batch covers at most {preview.batchLimit}. Run it again afterwards for the
-          rest.
+          {n(preview.totalEligible, "New ")} have an email:{" "}
+          {plural(batchesFor(preview.totalEligible, preview.batchLimit), "batch", "batches")} of up to {preview.batchLimit}. This is the
+          first; when it finishes you can start the next from here, after its own preview.
         </p>
       )}
       {skippedParts.length > 0 && <p className="muted">Skipped: {skippedParts.join("; ")}.</p>}

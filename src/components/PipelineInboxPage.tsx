@@ -1,4 +1,4 @@
-// Every pipeline's Inbox pages: what was sent, what failed, and who replied.
+// Every pipeline's Sent & replies pages: what was sent, what failed, and who replied.
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { INBOX_LIMIT, type InboxTab, type PipelineInbox } from "@/lib/outreach/inbox";
@@ -51,11 +51,18 @@ export default function PipelineInboxPage({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="accent-text text-2xl font-bold tracking-tight">{title} — Inbox</h1>
+        <h1 className="accent-text text-2xl font-bold tracking-tight">{title} — Sent &amp; replies</h1>
         <p className="mt-1 text-sm muted">{TAB_HELP[tab]}</p>
+        <p className="mt-1 text-sm muted">
+          Replies from an address that isn&apos;t on any lead (an assistant, a forward) aren&apos;t here: they wait on{" "}
+          <Link href="/replies" className="font-medium text-indigo-700 underline underline-offset-2 dark:text-indigo-300">
+            Unmatched replies
+          </Link>{" "}
+          until you attach them to a lead.
+        </p>
       </div>
 
-      <nav aria-label="Inbox folders" className="flex flex-wrap gap-1.5">
+      <nav aria-label="Sent & replies folders" className="flex flex-wrap gap-1.5">
         {(Object.keys(TAB_LABEL) as InboxTab[]).map((t) => (
           <Link
             key={t}

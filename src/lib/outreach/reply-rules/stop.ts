@@ -166,6 +166,13 @@ export const STOP_REQUESTS: RegExp[] = [
   /\b(?:cancellatemi|cancellami|disiscrivetemi|disiscrivimi|rimuovetemi|rimuovimi)\b/i,
 ];
 
+// "Yes, unsubscribe me", "Sure — remove me from your list", "OK. Remove me.":
+// a yes that opens the reply and only introduces the stop request agrees to
+// stopping; it isn't interest. Anything more before the request ("Yes, I'm
+// interested, but remove this address") still pulls the other way.
+export const ASSENT_LEAD_RE =
+  /^\s*(?:yes+|yeah|yep|yup|yea|sure(?:\s+thing)?|ok(?:ay)?|k|absolutely|definitely|certainly|of\s+course|fine|alright|all\s+right|please\s+do|go\s+ahead)[\s,.!;:—–-]*(?:(?:please|pls|plz|kindly|just)\s+)*$/i;
+
 // A stop request that names only another channel ("stop calling my cell",
 // "lose my number") and no email word isn't read as an email opt-out: it
 // needs a look.
