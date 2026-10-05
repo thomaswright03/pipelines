@@ -180,15 +180,19 @@ five minutes.
 
 These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. The code is ready for each.
 
-1. **Apply the migrations** in this release to production before deploying it — including
-   `20261002090000_inbound_verdict` (additive: each reply's verdict, backfilled from the stored fields, and
-   the rules version on each correction), `20261001090000_send_log_template_version` (additive: the subject
-   and template version of each send),
+1. **Apply every pending migration** to production before deploying this release. To see which are
+   pending, run `PIPELINES_DIRECT_URL="<Neon unpooled URL>" npx prisma migrate status`; then apply them all
+   with `npx prisma migrate deploy` (see the top of this page). This release can include any of these, oldest
+   first (a test checks that every directory in `prisma/migrations` from the first one below on is listed):
    `20260927090000_history_lookup_retries_reply_review`, `20260927100000_estimated_value_cents`,
    `20260928090000_inbound_kind`, `20260928100000_send_failure_status`, `20260929090000_rules_version`,
-   `20260929100000_connection_checks`, `20260930090000_send_attempts`, `20260930100000_send_log_lead_index`
-   (all additive) and `20260929110000_lead_status_check`. See the top of this page.
-   The status check is added `NOT VALID`, so it can't fail on existing rows. Afterwards, check for rows it
+   `20260929100000_connection_checks`, `20260929110000_lead_status_check`, `20260930090000_send_attempts`,
+   `20260930100000_send_log_lead_index`, `20261001090000_send_log_template_version` (the subject and
+   template version of each send), `20261002090000_inbound_verdict` (each reply's verdict, backfilled from
+   the stored fields, and the rules version on each correction) and `20261003090000_garbage_ai_pipeline`
+   (the Garbage AI tables: `HaulerLead` with its status check, its activity and send log, and
+   `ScrapedHaulerCity` — new and empty, so nothing existing changes). All are additive.
+   `20260929110000_lead_status_check` adds its status checks `NOT VALID`, so they can't fail on existing rows. Afterwards, check for rows it
    would reject and fix them (for example with the lead page's status control), then validate it:
 
    ```sql

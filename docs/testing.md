@@ -30,13 +30,14 @@ What's covered, by file:
 | `tests/garbage-ai.test.ts`, `tests/garbage-ai-pages.test.tsx` | Garbage AI: the pitch, who it never pitches (clients, national haulers, agencies, Mountain High Disposal's area) and where it never searches; its daily run through the shared runner (finds, screens and emails haulers; refused/failed send outcomes; skipped with no Yelp call under the Settings pause and `OUTBOUND_EMAIL_DISABLED`); the send hold; its pages, including "Never emailed" in place of Send and on the list row |
 | `tests/auto-mail.test.ts` | Automatic replies (headers, subjects, wording) change nothing but the history and still reach the call deck; bounce notices in Postfix/Gmail/Exchange/DSN form mark the send bounced; unmatched bounces; the Stats reply/opt-out/automatic figures in both pipelines |
 | `tests/call-deck.test.ts` | Call-deck cards (company, place, emailed date, latest history) and an order a saved call doesn't reshuffle |
-| `tests/connections.test.ts` | Settings → Connections: "Not confirmed yet" on a fresh install, "Working" only after a reply/send/search/test, the no-replies warning for old sends, Test connection passing and failing (no email sent), failed and overdue runs, missing secrets, no setting names in the copy |
+| `tests/connections.test.ts` | Settings → Connections: "Not confirmed yet" on a fresh install, "Working" only after a reply/send/search/test, the no-replies warning for old sends, Test connection passing and failing (no email sent), failed and overdue runs, missing secrets, no setting names in the copy (including while the hosting's switch is on, whose variable only appears in a separate developer line) |
 | `tests/connection-status-list.test.ts` | The Connections list as rendered: each tone's badge, "Not confirmed yet", next steps, where Test connection appears |
 | `tests/bulk-send-run.test.ts` | The bulk-send dialog's loop: progress, Stop, three-failures stop, paused stop, lost server, the closing summary |
 | `tests/call-deck-session.test.ts` | The call deck's saved place: restore, start over, corrupt data, no or throwing browser storage |
 | `tests/rules-version.test.ts` | The rules version: changes with a rule, stored on every inbound reply and every accepted address |
 | `tests/status-constraint.test.ts` | The database refuses unknown lead statuses (and its list matches the app's); unknown ones are labelled as such |
-| `tests/proxy.test.ts` | Page requests during a database outage get 503; the probe is reused for 5 s |
+| `tests/proxy.test.ts` | Page requests during a database outage get 503 with the app-styled outage page (Geist from `public/fonts`, both themes, the theme picked in the header); the probe is reused for 5 s |
+| `tests/deployment-doc.test.ts` | `docs/deployment.md`'s owner-only setup names every migration from the first one it lists to the newest, and gives `npx prisma migrate status` |
 | `tests/db-health.test.ts` | Database-outage detection and `/api/health` |
 | `tests/discovery.test.ts`, `tests/email-finder.test.ts` | Discovery and email lookup |
 | `tests/adre.test.ts` | Resumable ADRE import; a roster whose columns changed, or that lists nobody in the county, is reported instead of "succeeding" with zero |
