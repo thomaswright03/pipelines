@@ -95,11 +95,11 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   automatic, and change nothing else. The lead keeps its status, gets no reply time, isn't counted as
   replied, and still moves to the call deck after 7 days. A real reply later counts as usual; if a person
   did write one that was read as automatic, **Mark replied** records it. Automatic replies from addresses
-  on no lead are filed away rather than listed on Replies.
+  on no lead are filed away rather than listed on Unmatched replies.
 - **Bounce notices** (from `mailer-daemon`/`postmaster`, with delivery-status fields, or a bounce subject
   plus 5.x.x codes) mark the failed recipient's latest send bounced, with the same rules as **Mark
   bounced**, and add the notice to the lead's History. One that doesn't name a recipient the app can match
-  is listed on Replies, labelled as a bounce, with **Mark bounced** on the lead you pick instead of
+  is listed on Unmatched replies, labelled as a bounce, with **Mark bounced** on the lead you pick instead of
   **Attach**.
 - A lead that was emailed and is **Contacted**, **Cold call list** or **No phone number** moves to
   **Responded** and its reply time is set. That takes it off the call deck and counts it in the Stats
@@ -115,7 +115,7 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   a customer) is flagged **Reply needs a look** instead. The address is not put on the do-not-email list,
   but it gets no more email: a later send to it from any pipeline is refused as "already answered", and
   a New lead with the address is marked **Already answered**. If the reply was really interest, move the
-  lead back to Responded — that is counted as a correction on Replies.
+  lead back to Responded — that is counted as a correction on Unmatched replies.
 - A **thank-you only** reply ("Thanks", "Got it", "Received", "Thanks for reaching out, Jane") is recorded
   in the lead's History and changes nothing else: no reply time, no status change, no flag. The address gets
   no more email, as for a plain no. **Mark replied** counts it as a reply if it was one (also counted as a
@@ -145,7 +145,7 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   also goes on the do-not-email list; a plain no closes the lead); **Dismiss** removes it from the list. An
   unmatched reply that needs a look, says no or only says thanks holds its address until it is attached,
   dismissed or marked opted out.
-- **Is it working?** Every pipeline page and Replies show when the last reply arrived. Once a pitch is more
+- **Is it working?** Every pipeline page and Unmatched replies show when the last reply arrived. Once a pitch is more
   than 48 hours old, the dashboard shows a red **Replies don't seem to be reaching the app** warning, and the
   header a **Replies not arriving** pill on every page, when no inbound message of any kind (reply,
   out-of-office or bounce) has ever been recorded, none in the last 7 days, or none since the last 20
