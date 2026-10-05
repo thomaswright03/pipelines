@@ -171,8 +171,8 @@ function headerPills({ mail, byEnvironment, paused, repliesMissing }: HeaderStat
       href: "/replies",
       full: "Replies not arriving",
       short: "Replies",
-      label: "Replies not arriving — see the Replies page",
-      detail: "Replies (opt-outs among them) don't seem to be reaching the app — see the Replies page.",
+      label: "Replies not arriving — see Unmatched replies",
+      detail: "Replies (opt-outs among them) don't seem to be reaching the app — see the Unmatched replies page.",
       tone: "amber",
       dot: true,
     });

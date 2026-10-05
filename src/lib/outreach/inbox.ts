@@ -36,11 +36,11 @@ type RepliedItem = LeadRef & {
   /** The classifier's verdict (reply-classifier.ts); "marked" for a lead marked replied by hand with no recorded reply. */
   verdict: string | null;
   at: Date;
-  /** When you last replied to the lead (from the Inbox, or marked by hand). */
+  /** When you last replied to the lead (from Sent & replies, or marked by hand). */
   ourReplyAt: Date | null;
   /** The address is on the do-not-email list, so it can't be answered from here. */
   optedOut: boolean;
-  /** A recorded reply that can be answered from the Inbox (not a lead only marked replied by hand). */
+  /** A recorded reply that can be answered from Sent & replies (not a lead only marked replied by hand). */
   canReply: boolean;
   /** Opens the reply in Gmail: its Message-ID when the Worker passed one on, otherwise mail from the sender. */
   gmailUrl: string | null;

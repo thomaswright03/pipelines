@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { PIPELINE_BASE_PATH, PIPELINE_IDS, PIPELINE_LABEL } from "@/lib/outreach/pipeline-id";
 import HowThisWorks from "@/components/HowThisWorks";
 import ReplyStatus from "@/components/ReplyStatus";
 import UnmatchedReplies from "@/components/UnmatchedReplies";
@@ -11,7 +13,9 @@ import FinderQuality from "@/components/FinderQuality";
 import { getFinderQuality } from "@/lib/outreach/finder-quality";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Replies" };
+export const metadata: Metadata = { title: "Unmatched replies" };
+
+const LINK = "font-medium text-indigo-700 underline underline-offset-2 dark:text-indigo-300";
 
 export default async function RepliesPage() {
   const [health, replies, quality, finder] = await Promise.all([
@@ -24,7 +28,20 @@ export default async function RepliesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="accent-text text-2xl font-bold tracking-tight">Replies</h1>
+        <h1 className="accent-text text-2xl font-bold tracking-tight">Unmatched replies</h1>
+        <p className="text-sm muted">
+          Only replies from an address that isn&apos;t on any lead wait here. A reply from a lead&apos;s own address is recorded on the lead
+          and listed on its pipeline&apos;s <em>Sent &amp; replies</em> tab:{" "}
+          {PIPELINE_IDS.map((p, i) => (
+            <span key={p}>
+              {i > 0 && (i === PIPELINE_IDS.length - 1 ? " or " : ", ")}
+              <Link href={`${PIPELINE_BASE_PATH[p]}/inbox?tab=replied`} className={LINK}>
+                {PIPELINE_LABEL[p]}
+              </Link>
+            </span>
+          ))}
+          .
+        </p>
         <p className="text-sm">
           {health.unmatched > 0
             ? "Match each reply below to the lead it belongs to, or dismiss it."

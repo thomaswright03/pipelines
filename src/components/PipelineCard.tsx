@@ -149,7 +149,7 @@ export default function PipelineCard({
                 Open pipeline
               </Link>
               <Link href={`${rest.href}/inbox`} className="btn-secondary">
-                Inbox
+                Sent &amp; replies
               </Link>
             </div>
           ) : (

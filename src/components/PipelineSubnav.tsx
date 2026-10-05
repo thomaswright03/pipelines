@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Leads · Call deck · Inbox · Stats, shown on every page of a pipeline.
+// Leads · Call deck · Sent & replies · Stats, shown on every page of a pipeline.
 export default function PipelineSubnav({ basePath, label }: { basePath: string; label: string }) {
   const pathname = usePathname();
   const links = [
     { href: basePath, label: "Leads", active: pathname === basePath || /^\/[^/]+\/(?!cold-call|stats|inbox)[^/]+$/.test(pathname) },
     { href: `${basePath}/cold-call`, label: "Call deck", active: pathname.startsWith(`${basePath}/cold-call`) },
-    { href: `${basePath}/inbox`, label: "Inbox", active: pathname.startsWith(`${basePath}/inbox`) },
+    { href: `${basePath}/inbox`, label: "Sent & replies", active: pathname.startsWith(`${basePath}/inbox`) },
     { href: `${basePath}/stats`, label: "Stats", active: pathname.startsWith(`${basePath}/stats`) },
   ];
   return (

@@ -269,6 +269,34 @@ describe("LeadActions: marking a lead Lost", () => {
     chooseLost();
     expect(within(await screen.findByRole("dialog")).getByRole("combobox", { name: "Why was the lead lost?" })).toBeTruthy();
   });
+
+  it("says when to use Not interested and when Lost where a pipeline has both, and Lost doesn't offer a no", async () => {
+    for (const pipeline of ["dataleadsell", "garbage-ai"] as const) {
+      const { unmount } = render(
+        <LeadActions pipeline={pipeline} lead={{ ...NEW_LEAD, status: "contacted", emailed: true }} suppression={null} paused={false} />,
+      );
+      const menu = screen.getByRole("combobox", { name: "Move to…" });
+      expect(menu.getAttribute("aria-describedby")).toBe("close-guidance");
+      expect(document.getElementById("close-guidance")!.textContent).toMatch(
+        /^Said no, by reply or on a call\? Choose Not interested\. Choose Lost when/,
+      );
+      chooseLost();
+      const reasons = within(await screen.findByRole("dialog")).getByRole("combobox", { name: "Why was the lead lost?" });
+      const offered = [...reasons.querySelectorAll("option")].map((o) => o.textContent);
+      expect(offered).not.toContain("Not interested");
+      expect(offered).toContain("No answer");
+      unmount();
+    }
+  });
+
+  it("keeps Not interested as a Lost reason in Cold Outreach, which has no separate stage, and shows no guidance there", async () => {
+    renderLead({ status: "contacted", emailed: true });
+    expect(document.getElementById("close-guidance")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Move to…" }).getAttribute("aria-describedby")).toBeNull();
+    chooseLost();
+    const reasons = within(await screen.findByRole("dialog")).getByRole("combobox", { name: "Why was the lead lost?" });
+    expect([...reasons.querySelectorAll("option")].map((o) => o.textContent)).toContain("Not interested");
+  });
 });
 
 describe("LeadActions: bounces", () => {

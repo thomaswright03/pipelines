@@ -1,6 +1,6 @@
 // Operator corrections to the automatic heuristics, recorded where they
-// happen, and summed up as the production quality signal on the Replies
-// page. The labelled corpus in tests/corpus/ measures the heuristics
+// happen, and summed up as the production quality signal on the Unmatched
+// replies page. The labelled corpus in tests/corpus/ measures the heuristics
 // before a change ships; these counts show how they do on real mail.
 import { prisma } from "@/lib/db";
 import type { Db } from "@/lib/outreach/pipelines";

@@ -98,7 +98,7 @@ the bulk send, and the daily cron.
     the call deck; and nothing is emailed to the address until the operator resolves it on the lead page:
     **Mark opted out**, **Mark replied**, a status move, or **Keep as …** (which asks for confirmation).
   - A reply that matched no lead holds its address the same way (needs a look, plain no or thank-you) until
-    it is attached, marked opted out or dismissed on **Replies**.
+    it is attached, marked opted out or dismissed on **Unmatched replies**.
   - Only the replier's own words are read: quoted history, signatures (including a sign-off and the lines
     under it), legal and newsletter footers ("This email is confidential…", "To unsubscribe from our
     newsletter click here") and our own "Reply STOP" footer are removed first.

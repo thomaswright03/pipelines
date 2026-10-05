@@ -7,7 +7,7 @@ import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import { REPLY_MAX_LENGTH } from "@/lib/lead-forms";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 
-// "Reply" on a row of the Inbox's Replied folder: a box to write back to
+// "Reply" on a row of the Replied folder of Sent & replies: a box to write back to
 // that person, sent by the app from the pipeline's address in the same thread.
 export default function InboxReplyForm({
   pipeline,

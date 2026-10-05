@@ -8,13 +8,13 @@ const LINKS = [
   { href: "/dataleadsell", label: "dataleadsell.com" },
   { href: "/vault-pipeline", label: "Cold Outreach" },
   { href: "/garbage-ai", label: "Garbage AI" },
-  { href: "/replies", label: "Replies" },
+  { href: "/replies", label: "Unmatched replies" },
   { href: "/settings", label: "Settings" },
 ];
 
 /**
  * `unmatchedReplies`: replies waiting to be matched to a lead, shown as a
- * count on "Replies" — green when some of them (`interestedReplies`) read
+ * count on "Unmatched replies" — green when some of them (`interestedReplies`) read
  * as interested.
  */
 export default function SiteNav({

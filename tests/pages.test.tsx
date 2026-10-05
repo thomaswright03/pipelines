@@ -336,7 +336,11 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
       expect(page.getByRole("link", { name: "Call deck" })).toBeTruthy();
     }
     const replies = await renderPage(Replies());
-    expect(replies.getByRole("heading", { name: "Replies" })).toBeTruthy();
+    expect(replies.getByRole("heading", { level: 1, name: "Unmatched replies" })).toBeTruthy();
+    // It says what lives where, and links to each pipeline's own replies.
+    expect(replies.text).toContain("Only replies from an address that isn't on any lead wait here.");
+    expect(replies.getByRole("link", { name: "Cold Outreach" }).getAttribute("href")).toBe("/vault-pipeline/inbox?tab=replied");
+    expect(replies.getByRole("link", { name: "Garbage AI" }).getAttribute("href")).toBe("/garbage-ai/inbox?tab=replied");
     // Nothing has arrived: no claim about replies "so far".
     expect(replies.text).toContain("No replies have arrived yet.");
     expect(replies.text).not.toContain("every reply so far");
@@ -387,7 +391,7 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
 
     const layout = await renderPage(RootLayout({ children: <p>Inside</p>, params: Promise.resolve({}) } as never));
     const repliesLink = layout.getAllByRole("link").find((link) => link.getAttribute("href") === "/replies");
-    expect(repliesLink?.textContent).toBe("Replies2 waiting to be matched, 1 interested");
+    expect(repliesLink?.textContent).toBe("Unmatched replies2 waiting to be matched, 1 interested");
     const pipeline = await renderPage(AgentList(pageProps()));
     expect(pipeline.text).toContain("2 replies came from an address that isn't on any lead — 1 read as interested.");
   });
@@ -449,6 +453,8 @@ describe("the inbox pages", () => {
       data: { pipeline: "cold-outreach", email: "gone@x.test", state: "refused", lastError: "550 no such user" },
     });
     const page = await renderPage(VaultInbox(pageProps()));
+    expect(page.getByRole("heading", { level: 1, name: "Cold Outreach — Sent & replies" })).toBeTruthy();
+    expect(page.getByRole("link", { name: "Unmatched replies" }).getAttribute("href")).toBe("/replies");
     expect(page.getByRole("link", { name: "Sent (1)" }).getAttribute("href")).toBe("/vault-pipeline/inbox?tab=sent");
     expect(page.getByRole("link", { name: "Failed (1)" })).toBeTruthy();
     expect(page.getByRole("link", { name: "Replied (0)" })).toBeTruthy();

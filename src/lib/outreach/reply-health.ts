@@ -3,7 +3,7 @@
 // breaks, the app just sees no replies — which looks the same as nobody
 // replying, skews the reply rate and, worst, leaves opt-outs unrecorded
 // while outreach goes on. So every page's header and the dashboard warn,
-// and the pipeline and Replies pages say when the last reply arrived, as
+// and the pipeline and Unmatched replies pages say when the last reply arrived, as
 // soon as pitches that are more than 2 days old have had no inbound message
 // of any kind (reply, automatic reply or bounce, matched or not) after them.
 import { prisma } from "@/lib/db";

@@ -18,8 +18,9 @@ access is gated by Vercel Deployment Protection (SSO). Three pipelines live here
 All three share one set of send rules: one pitch per address across pipelines, the do-not-email list,
 reply holds and both kill switches apply to every pipeline.
 
-Each pipeline has a lead list, a call deck for phone follow-up and Stats. **Replies** (`/replies`) tracks
-inbound mail, **Settings** holds the kill switch, connections (with a reply-loop check to run after each deploy) and
+Each pipeline has a lead list, a call deck for phone follow-up, **Sent & replies** (its sent and failed
+emails and its leads' replies) and Stats. **Unmatched replies** (`/replies`) holds replies from addresses on
+no lead and tracks whether inbound mail is arriving, **Settings** holds the kill switch, connections (with a reply-loop check to run after each deploy) and
 the do-not-email list, and **Operator
 guide** (`/help`) is the runbook, with a glossary. To stop all outbound email without the app, set
 `OUTBOUND_EMAIL_DISABLED=1` in Vercel and redeploy; it applies when the redeploy is live, usually within 1–3
@@ -137,7 +138,7 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
   now", "maybe next quarter") without saying no, or only says it will be passed on — and nothing is
   emailed to such an address until the operator resolves it (docs/outreach-safety.md). A plain "no thanks" closes the lead and a "Thanks" /
   "Got it" changes nothing, without the operator; both also stop further email to the address, and neither
-  is treated as an opt-out. The Replies page and the lead list show how many are waiting.
+  is treated as an opt-out. The Unmatched replies page and the lead list show how many are waiting.
 - **Email finding is a heuristic.** Neither Yelp nor ADRE gives a business's website, so
   `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly (no
   search engine: those block automated queries or charge for them). A guessed site is only used when it

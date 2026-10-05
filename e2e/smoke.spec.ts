@@ -191,7 +191,7 @@ test("a reply from an unknown address can be attached to the right lead", async 
   );
   await page.goto("/vault-pipeline");
   await page.getByRole("link", { name: "Match it to a lead" }).click();
-  await expect(page).toHaveTitle(/^Replies/);
+  await expect(page).toHaveTitle(/^Unmatched replies/);
   await expect(page.getByText("Forwarding for my boss - interested!")).toBeVisible();
 
   await page.getByLabel("Find the lead it belongs to").fill("Test Business 1");

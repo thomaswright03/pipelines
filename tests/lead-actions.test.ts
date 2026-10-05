@@ -6,7 +6,7 @@ import { updateVaultScheduleAction } from "@/lib/actions/pipeline-schedule";
 import { getPipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { addSuppressionAction, removeSuppressionByEmailAction } from "@/lib/actions/settings";
 import { getPipeline } from "@/lib/outreach/pipelines";
-import { makeAgentLead, makeColdLead } from "./helpers";
+import { makeAgentLead, makeColdLead, makeHaulerLead } from "./helpers";
 
 function scheduleForm(enabled: boolean, businessesPerRun: string) {
   const data = new FormData();
@@ -149,6 +149,23 @@ describe("manual moves never overwrite a change made meanwhile", () => {
     expect(await updateLeadStatusAction("cold-outreach", lead.id, "lost", "no_need")).toEqual({
       ok: true,
       message: "Lossy is already Lost.",
+    });
+  });
+
+  it("sends a no to Not interested, not Lost, in the pipelines that have that stage", async () => {
+    const agent = await makeAgentLead({ name: "Saidno Agent", status: "contacted", lastEmailedAt: new Date() });
+    expect(await updateLeadStatusAction("dataleadsell", agent.id, "lost", "not_interested")).toEqual({
+      ok: false,
+      error: "Saidno Agent said no, so move them to Not interested instead of Lost.",
+    });
+    expect((await prisma.agentLead.findUniqueOrThrow({ where: { id: agent.id } })).status).toBe("contacted");
+    const hauler = await makeHaulerLead({ name: "Saidno Hauling", status: "contacted", lastEmailedAt: new Date() });
+    expect(await updateLeadStatusAction("garbage-ai", hauler.id, "lost", "not_interested")).toMatchObject({ ok: false });
+    // Any other reason is still a Lost.
+    expect(await updateLeadStatusAction("garbage-ai", hauler.id, "lost", "no_answer")).toMatchObject({ ok: true });
+    expect(await prisma.haulerLead.findUniqueOrThrow({ where: { id: hauler.id } })).toMatchObject({
+      status: "lost",
+      callOutcome: "no_answer",
     });
   });
 });

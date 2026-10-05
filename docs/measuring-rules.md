@@ -79,14 +79,14 @@ number (`src/lib/outreach/rules-version.ts`): editing a pattern or list changes 
 module's revision when only the logic around them changes. The export script includes it, so a change in
 accuracy can be traced to the rule change that caused it.
 
-In production, the **Replies** page shows how often the operator corrects the rules (last 90 days):
+In production, the **Unmatched replies** page shows how often the operator corrects the rules (last 90 days):
 opt-outs read from replies and how many were undone, opt-outs the rules missed (a reply later marked opted
 out by hand), replies flagged for a look (and how many said "wrong person"), plain no's closed
 automatically and how many were reopened (moved back to Responded), thank-you-only replies and how many
 were then marked replied, and found addresses that bounced. These are recorded in `OutreachCorrection`,
 with the version of the rules whose decision was corrected (`rulesVersion`).
 
-**How found addresses are doing** (Replies page, `src/lib/outreach/finder-quality.ts`) shows the email
+**How found addresses are doing** (Unmatched replies page, `src/lib/outreach/finder-quality.ts`) shows the email
 finder on real mail, per pipeline and per `emailRulesVersion`, over the last 90 days: leads emailed and
 sends, bounces, replies saying "wrong person" or "no longer works here", and found addresses the operator
 replaced before the pitch (an `address_corrected` correction) — next to the same figures for addresses

@@ -6,10 +6,14 @@ shows and what the app does on its own, for the operator and for whoever support
 
 ## What each screen shows
 
-Each pipeline has a lead list, a **call deck** for phone follow-up, and **Stats**. Every lead page has
-**Edit details** and **Delete lead…**. **Replies** (`/replies`) shows whether replies are arriving and lists
-replies from addresses that match no lead (and bounce notices that name no lead), so they can be attached
-to the right one. **Settings** (`/settings`) holds the switches that apply to every pipeline,
+Each pipeline has a lead list, a **call deck** for phone follow-up, **Sent & replies** (every email that
+pipeline sent, every one that failed, and every reply from a lead's own address, which can be answered from
+there) and **Stats**. Every lead page has **Edit details** and **Delete lead…**; its **Move to…** picker
+says when to choose **Not interested** (they said no) and when **Lost** (it ended any other way) in the two
+pipelines that have both, and Lost there doesn't offer "Not interested" as a reason.
+**Unmatched replies** (`/replies`) shows whether replies are arriving and lists only replies from addresses
+that match no lead (and bounce notices that name no lead), so they can be attached to the right one. Each
+of the two pages links to the other. **Settings** (`/settings`) holds the switches that apply to every pipeline,
 **Connections** (whether sending, reply delivery, every scheduled job — the three daily runs, the
 call-deck move and the daily report email — and Yelp are working, with the next step
 when one isn't, and a **Test connection** button for email and Yelp) and the searchable do-not-email list.
@@ -133,7 +137,7 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   5,000-character limit. Leads whose Notes already exceed it (from before this change) stay editable; their
   Notes just can't grow.
 - A reply from an address that is on no lead (an assistant, a personal inbox, a forward) is kept with its
-  text and listed on **Replies**, with a count next to "Replies" in the header (green when some read as
+  text and listed on **Unmatched replies**, with a count next to it in the header (green when some read as
   interested). Replies read as interested are marked **Interested**, listed first and counted separately —
   they are usually a prospect writing from another address, so attach them to the right lead so it moves to
   Responded. **Attach** records it on the

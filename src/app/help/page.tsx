@@ -105,10 +105,12 @@ export default function HelpPage() {
           <li>
             <strong>Match stray replies.</strong> A number next to{" "}
             <Link href="/replies" className={link}>
-              Replies
+              Unmatched replies
             </Link>{" "}
             in the menu means replies came from an address that isn&apos;t on any lead (an assistant, a personal inbox). For each one,
             search for the lead it belongs to and press <strong>Attach</strong> — or <strong>Dismiss</strong> if it belongs to nobody.
+            Replies from a lead&apos;s own address never wait there: they are recorded on the lead and listed on that pipeline&apos;s{" "}
+            <em>Sent &amp; replies</em> tab, with every email it sent and every one that failed.
           </li>
           <li>
             <strong>Look at flagged replies — every day.</strong> The app only acts on a reply by itself when it is sure:
@@ -116,8 +118,8 @@ export default function HelpPage() {
               <li>a plain &ldquo;STOP&rdquo; or &ldquo;remove me&rdquo; goes on the do-not-email list;</li>
               <li>a clear &ldquo;yes, call me&rdquo; or a question moves the lead to Responded;</li>
               <li>
-                a plain &ldquo;not interested&rdquo; or &ldquo;no thanks&rdquo; closes the lead (Lost / Not interested) — it isn&apos;t put
-                on the do-not-email list, but nothing more is emailed to that address;
+                a plain &ldquo;not interested&rdquo; or &ldquo;no thanks&rdquo; closes the lead (Lost in Cold Outreach, Not interested in
+                the other two) — it isn&apos;t put on the do-not-email list, but nothing more is emailed to that address;
               </li>
               <li>
                 a reply that only says &ldquo;Thanks&rdquo;, &ldquo;Got it&rdquo; or &ldquo;Received&rdquo; is noted in the lead&apos;s
@@ -131,7 +133,7 @@ export default function HelpPage() {
             them later. Nothing is emailed to that address until you decide, so a reply asking to stop is never ignored — but it waits for
             you. Open the lead: the reply is shown with the reason, and <strong>Mark opted out</strong>, <strong>Mark replied</strong> and{" "}
             <strong>Keep as …</strong> are right under it. If the app closed a lead on a &ldquo;no&rdquo; that wasn&apos;t one, move it back
-            to Responded; if a &ldquo;thanks&rdquo; meant more, press <strong>Mark replied</strong>. The Replies page counts these
+            to Responded; if a &ldquo;thanks&rdquo; meant more, press <strong>Mark replied</strong>. The Unmatched replies page counts these
             corrections.
           </li>
           <li>
