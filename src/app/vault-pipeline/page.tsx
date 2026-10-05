@@ -9,6 +9,7 @@ import PipelineAlerts from "@/components/PipelineAlerts";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import VaultScheduleSettings from "@/components/VaultScheduleSettings";
 import LeadTable from "@/components/LeadTable";
+import PipelineTotals from "@/components/PipelineTotals";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { getPipelineSchedule, VAULT_DAILY_RUN_TIME_LABEL, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
 import { getAppSettings } from "@/lib/outreach/settings";
@@ -32,10 +33,11 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     ...searchWhere(params.q, ["name", "company", "email", "city"]),
   };
 
-  const [filteredTotal, total, counts, schedule, settings, runs, ready, dailyRunUnsent, blocked, replyHealth, nextCity] = await Promise.all(
-    [
+  const [filteredTotal, total, withEmail, counts, schedule, settings, runs, ready, dailyRunUnsent, blocked, replyHealth, nextCity] =
+    await Promise.all([
       prisma.lead.count({ where }),
       prisma.lead.count(),
+      prisma.lead.count({ where: { email: { not: null } } }),
       prisma.lead.groupBy({ by: ["status"], _count: true }),
       getPipelineSchedule(VAULT_SCHEDULE_ID),
       getAppSettings(),
@@ -45,8 +47,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
       getPipeline("cold-outreach").countBlockedNew(prisma),
       getReplyHealth(),
       peekNextCity(prisma),
-    ],
-  );
+    ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.lead.findMany({
     where,
@@ -119,6 +120,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         <h2 id="tools-heading" className="text-lg font-semibold">
           Find and email businesses
         </h2>
+        <PipelineTotals pipeline="cold-outreach" total={total} withEmail={withEmail} />
         <OutreachControls
           pipeline="cold-outreach"
           paused={settings.outboundPaused}

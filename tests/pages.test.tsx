@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { suppressEmail } from "@/lib/email-suppression";
 import { COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-email-template";
-import { makeAgentLead, makeColdLead } from "./helpers";
+import { makeAgentLead, makeColdLead, makeHaulerLead } from "./helpers";
 import { pageProps, renderPage } from "./render-page";
 
 vi.mock("next/navigation", () => ({
@@ -35,6 +35,7 @@ const { default: Dashboard } = await import("@/app/page");
 const { default: RootLayout } = await import("@/app/layout");
 const { default: VaultList } = await import("@/app/vault-pipeline/page");
 const { default: AgentList } = await import("@/app/dataleadsell/page");
+const { default: HaulerList } = await import("@/app/garbage-ai/page");
 const { default: VaultLead } = await import("@/app/vault-pipeline/[id]/page");
 const { default: AgentLead } = await import("@/app/dataleadsell/[id]/page");
 const { default: VaultEdit } = await import("@/app/vault-pipeline/[id]/edit/page");
@@ -304,6 +305,36 @@ describe("the Stats pages", () => {
     expect(card("Checked, no address found")).toMatch(/^1Checked, no address found/);
     expect(page.text).toContain("“Probate leads”");
     expect(page.text).toContain("1 of 1 agents emailed replied (100%)");
+  });
+});
+
+describe("the three pipeline pages", () => {
+  it("share one layout: the same summary tiles, then the same sections in the same order", async () => {
+    await makeColdLead({ email: null });
+    await makeColdLead();
+    await makeAgentLead();
+    await makeHaulerLead({ email: null });
+    const shapes = [];
+    for (const [List, noun, total, withEmail] of [
+      [VaultList, "leads", "2", "1"],
+      [AgentList, "agents", "1", "1"],
+      [HaulerList, "haulers", "1", "0"],
+    ] as const) {
+      const page = await renderPage(List(pageProps()));
+      const tools = page.body.querySelector("section#tools")!;
+      expect(tools.querySelector("h2")!.textContent).toBe(`Find and email ${noun === "leads" ? "businesses" : noun}`);
+      const tiles = [...tools.querySelectorAll(".grid > .card")].map((c) => c.textContent);
+      expect(tiles).toEqual([`${total}Total ${noun}`, `${withEmail}With email`]);
+      // The order of the tools' headings, with each pipeline's own words taken out.
+      shapes.push(
+        [...tools.querySelectorAll("h2, h3")]
+          .map((h) => h.textContent!.replace(/agents|haulers|businesses|leads/g, "…"))
+          .filter((h) => !/ADRE/.test(h)),
+      );
+    }
+    expect(shapes[0]).toEqual(["Find and email …", "Send outreach to new …", "Daily automation", "Recent runs"]);
+    expect(shapes[1]).toEqual(shapes[0]);
+    expect(shapes[2]).toEqual(shapes[0]);
   });
 });
 

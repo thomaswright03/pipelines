@@ -11,6 +11,7 @@ import { getReplyHealth } from "@/lib/outreach/reply-health";
 import AdreImportPanel from "@/components/AdreImportPanel";
 import DailyRunSettings from "@/components/DailyRunSettings";
 import LeadTable from "@/components/LeadTable";
+import PipelineTotals from "@/components/PipelineTotals";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { DATALEADSELL_DAILY_RUN_TIME_LABEL, DATALEADSELL_SCHEDULE_ID, getPipelineSchedule } from "@/lib/pipeline-schedule";
@@ -127,10 +128,7 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <h2 id="tools-heading" className="text-lg font-semibold">
           Find and email agents
         </h2>
-        <div className="grid grid-cols-2 gap-4">
-          <Stat label="Total agents" value={total} />
-          <Stat label="With email" value={withEmail} />
-        </div>
+        <PipelineTotals pipeline="dataleadsell" total={total} withEmail={withEmail} />
         <OutreachControls
           pipeline="dataleadsell"
           paused={settings.outboundPaused}
@@ -154,15 +152,6 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         />
         <AdreImportPanel initial={{ ...adre, loadedAtLabel: adre.loadedAt ? formatDate(adre.loadedAt) : null }} />
       </section>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="card p-4">
-      <div className="text-2xl font-semibold">{value.toLocaleString("en-US")}</div>
-      <div className="text-sm muted">{label}</div>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { getReplyHealth } from "@/lib/outreach/reply-health";
 import DailyRunSettings from "@/components/DailyRunSettings";
 import { updateGarbageAiScheduleAction } from "@/lib/actions/pipeline-schedule";
 import LeadTable from "@/components/LeadTable";
+import PipelineTotals from "@/components/PipelineTotals";
 import { GARBAGE_AI_SENDER_EMAIL } from "@/lib/garbage-ai-config";
 import { GARBAGE_AI_DAILY_RUN_TIME_LABEL, GARBAGE_AI_SCHEDULE_ID, getPipelineSchedule } from "@/lib/pipeline-schedule";
 import { getAppSettings } from "@/lib/outreach/settings";
@@ -34,10 +35,11 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
   };
   const pipeline = getPipeline("garbage-ai");
 
-  const [filteredTotal, total, counts, schedule, settings, runs, ready, dailyRunUnsent, blocked, replyHealth, nextCity] = await Promise.all(
-    [
+  const [filteredTotal, total, withEmail, counts, schedule, settings, runs, ready, dailyRunUnsent, blocked, replyHealth, nextCity] =
+    await Promise.all([
       prisma.haulerLead.count({ where }),
       prisma.haulerLead.count(),
+      prisma.haulerLead.count({ where: { email: { not: null } } }),
       prisma.haulerLead.groupBy({ by: ["status"], _count: true }),
       getPipelineSchedule(GARBAGE_AI_SCHEDULE_ID),
       getAppSettings(),
@@ -47,8 +49,7 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
       pipeline.countBlockedNew(prisma),
       getReplyHealth(),
       peekNextHaulerCity(prisma),
-    ],
-  );
+    ]);
   const page = Math.min(params.page, pageCount(filteredTotal));
   const leads = await prisma.haulerLead.findMany({
     where,
@@ -127,6 +128,7 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
         <h2 id="tools-heading" className="text-lg font-semibold">
           Find and email haulers
         </h2>
+        <PipelineTotals pipeline="garbage-ai" total={total} withEmail={withEmail} />
         <OutreachControls
           pipeline="garbage-ai"
           paused={settings.outboundPaused}
