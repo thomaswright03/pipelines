@@ -82,13 +82,42 @@ export async function runBulkSend(
   return { progress, stopReason };
 }
 
+/** Batches needed for `count` leads at up to `batchLimit` per batch. */
+export function batchesFor(count: number, batchLimit: number): number {
+  return Math.max(0, Math.ceil(count / Math.max(batchLimit, 1)));
+}
+
+export type NextBatch = {
+  /** New leads with an email this batch didn't cover. */
+  remaining: number;
+  /** Batches they need. */
+  batches: number;
+  /** How many the next batch can take. */
+  size: number;
+};
+
+/**
+ * What's left after a batch that ran to the end: the result dialog offers
+ * the next batch (with its own preview and confirmation). Null after a
+ * stop, a pause or a failure, or when nothing is left.
+ */
+export function nextBatchAfter(
+  stopReason: string | null,
+  preview: Pick<BulkPreview, "totalEligible" | "leadIds" | "batchLimit">,
+): NextBatch | null {
+  const remaining = preview.totalEligible - preview.leadIds.length;
+  if (stopReason || remaining <= 0) return null;
+  return { remaining, batches: batchesFor(remaining, preview.batchLimit), size: Math.min(remaining, preview.batchLimit) };
+}
+
 /** The closing line of a bulk send, and how it should look. */
 export function bulkSendSummary(
   progress: BulkProgress,
   stopReason: string | null,
-  preview: Pick<BulkPreview, "willSend" | "totalEligible" | "leadIds">,
+  preview: Pick<BulkPreview, "willSend" | "totalEligible" | "leadIds" | "batchLimit">,
   noun: { one: string; many: string } = { one: "lead", many: "leads" },
 ): { summary: string; tone: "success" | "warning" | "error" } {
+  const next = nextBatchAfter(stopReason, preview);
   const summary =
     `Sent ${progress.sent} of ${preview.willSend}.` +
     (progress.skipped ? ` ${plural(progress.skipped, noun.one, noun.many)} skipped.` : "") +
@@ -97,8 +126,8 @@ export function bulkSendSummary(
       : "") +
     (progress.failed ? ` ${plural(progress.failed, "send")} failed.` : "") +
     (stopReason ? ` ${stopReason}` : "") +
-    (!stopReason && preview.totalEligible > preview.leadIds.length
-      ? ` ${plural(preview.totalEligible - preview.leadIds.length, `more New ${noun.one}`, `more New ${noun.many}`)} can go in the next batch.`
+    (next
+      ? ` ${plural(next.remaining, `more New ${noun.one}`, `more New ${noun.many}`)} left: ${plural(next.batches, "more batch", "more batches")} of up to ${preview.batchLimit}.`
       : "");
   const tone = progress.failed || stopReason ? (progress.sent ? "warning" : "error") : progress.refused ? "warning" : "success";
   return { summary, tone };

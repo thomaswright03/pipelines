@@ -11,6 +11,7 @@
 // each message are listed in docs/deployment.md → "Settings → Connections".)
 import { prisma } from "@/lib/db";
 import { describeMailDestination, type Env } from "@/lib/mail-transport-kind";
+import { ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
 import { formatDateTime } from "@/lib/time";
 import { getAppSettings, lastSendFailure, lastServiceChecks } from "@/lib/outreach/settings";
 import { getReplyHealth, REPLY_WATCH_WINDOW_DAYS, replyIsRecent } from "@/lib/outreach/reply-health";
@@ -44,6 +45,8 @@ export type ConnectionStatus = {
   next: string | null;
   /** The page the next step happens on, when it has one. */
   link?: StatusLink;
+  /** A secondary line in smaller type: specifics for whoever manages the hosting. */
+  detail?: string;
   /** Whether Settings offers a "Test connection" button for this service. */
   testable?: boolean;
 };
@@ -187,8 +190,11 @@ async function mailStatus(env: Env): Promise<ConnectionStatus> {
     );
   }
   if (settings.pausedBy === "environment") {
-    parts.push("Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so nothing is being sent.");
-    return status("warn", "Remove OUTBOUND_EMAIL_DISABLED in the hosting dashboard and redeploy when sending should resume.");
+    parts.push(ENV_OFF_SUMMARY);
+    return {
+      ...status("warn", `Ask whoever manages the app's hosting to turn sending back on when it should resume.`),
+      detail: ENV_OFF_DETAIL,
+    };
   }
   if (settings.outboundPaused) {
     parts.push("Outbound email is paused, so nothing is being sent.");

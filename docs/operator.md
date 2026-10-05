@@ -205,3 +205,9 @@ time, or the email service was unreachable and nothing was sent) stay New and ar
 run, oldest first, under all the usual send rules. Every pipeline page shows "N leads found but not yet
 emailed" next to the bulk-send button.
 
+**Send outreach to new leads…** (the bulk send) covers at most 50 leads per confirmation
+(`BULK_BATCH_LIMIT` in `src/lib/outreach/send.ts`). Its preview says how many New leads have an email and
+how many batches of up to 50 that is; when a batch runs to the end, the result offers **Send the next N**,
+which shows a fresh preview of that batch to confirm. A batch that was stopped, paused or cut short by the
+email service offers only Close.
+

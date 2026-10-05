@@ -144,6 +144,62 @@ describe("BulkSendButton", () => {
     expect(screen.queryByRole("button", { name: /Send to/ })).toBeNull();
   });
 
+  it("when sending is switched off by the hosting, says so plainly, with the setting only in a developer line", async () => {
+    outreach.previewBulkSendAction.mockResolvedValue({ ok: true, preview: { ...PREVIEW, paused: true, pausedByEnvironment: true } });
+    render(<BulkSendButton pipeline="cold-outreach" />);
+    fireEvent.click(screen.getByRole("button", { name: "Send outreach to new leads…" }));
+    const lead = await screen.findByText(/^Sending is switched off by whoever manages the app's hosting/);
+    expect(lead.textContent).not.toMatch(/OUTBOUND_EMAIL_DISABLED|redeploy/);
+    expect(screen.getByText(/^For your developer: the OUTBOUND_EMAIL_DISABLED environment variable is set/).className).toContain("text-xs");
+    expect(screen.queryByRole("button", { name: /Send to/ })).toBeNull();
+  });
+
+  it("says how many batches the New leads need, and offers the next batch, with its own preview, when one finishes", async () => {
+    const ids = (from: number, n: number) => Array.from({ length: n }, (_, i) => `l${from + i}`);
+    const batch = (first: number, totalEligible: number): BulkPreview => ({
+      ...PREVIEW,
+      totalEligible,
+      leadIds: ids(first, Math.min(50, totalEligible)),
+      willSend: Math.min(50, totalEligible),
+      distinctAddresses: Math.min(50, totalEligible),
+    });
+    outreach.previewBulkSendAction
+      .mockResolvedValueOnce({ ok: true, preview: batch(0, 120) })
+      .mockResolvedValueOnce({ ok: true, preview: batch(50, 70) });
+    outreach.sendBulkChunkAction.mockImplementation(async (_p: string, leadIds: string[]) => chunk(leadIds, { sent: 1 }));
+    render(<BulkSendButton pipeline="cold-outreach" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send outreach to new leads…" }));
+    expect((await screen.findByText(/^120 New leads have an email/)).textContent).toMatch(/3 batches of up to 50\. This is the first/);
+    fireEvent.click(screen.getByRole("button", { name: "Send to 50 leads" }));
+    expect((await screen.findByText(/^Sent 50 of 50\./)).textContent).toContain("70 more New leads left: 2 more batches of up to 50.");
+    expect(outreach.sendBulkChunkAction).toHaveBeenCalledTimes(50);
+
+    // The next batch is previewed and confirmed like the first; nothing is sent until then.
+    fireEvent.click(screen.getByRole("button", { name: "Send the next 50" }));
+    expect(await screen.findByRole("button", { name: "Send to 50 leads" })).toBeTruthy();
+    expect(screen.getByText(/^70 New leads have an email/).textContent).toMatch(/2 batches of up to 50/);
+    expect(outreach.previewBulkSendAction).toHaveBeenCalledTimes(2);
+    expect(outreach.sendBulkChunkAction).toHaveBeenCalledTimes(50);
+    fireEvent.click(screen.getByRole("button", { name: "Send to 50 leads" }));
+    expect((await screen.findByText(/^Sent 50 of 50\./)).textContent).toContain("20 more New leads left: 1 more batch of up to 50.");
+    expect(outreach.sendBulkChunkAction.mock.calls[50]![1]).toEqual(ids(50, 50));
+    expect(screen.getByRole("button", { name: "Send the next 20" })).toBeTruthy();
+  });
+
+  it("doesn't offer the next batch after Stop", async () => {
+    outreach.previewBulkSendAction.mockResolvedValue({ ok: true, preview: { ...PREVIEW, totalEligible: 80 } });
+    const first = deferred<ReturnType<typeof chunk>>();
+    outreach.sendBulkChunkAction.mockReturnValueOnce(first.promise);
+    render(<BulkSendButton pipeline="cold-outreach" />);
+    fireEvent.click(screen.getByRole("button", { name: "Send outreach to new leads…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to 3 leads" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop sending" }));
+    await act(async () => first.resolve(chunk(["a"], { sent: 1 })));
+    expect(await screen.findByText(/You stopped the send\./)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Send the next/ })).toBeNull();
+  });
+
   it("says nothing was sent when the preview can't reach the server", async () => {
     outreach.previewBulkSendAction.mockRejectedValue(new TypeError("Failed to fetch"));
     render(<BulkSendButton pipeline="cold-outreach" />);

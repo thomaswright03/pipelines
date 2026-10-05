@@ -17,12 +17,27 @@ export function outboundDisabledByEnvironment(env: Record<string, string | undef
   return Boolean(value) && !["0", "false", "no", "off"].includes(value!);
 }
 
-export const ENV_PAUSED_MESSAGE = `Outbound email is switched off on the server (${OUTBOUND_DISABLED_ENV} is set) — nothing was sent.`;
+// What the operator is told while the switch is on. The operator can't act
+// on a variable name, so every message leads with what happened and who to
+// ask; the variable and the steps follow in a separate line for whoever
+// manages the hosting (the screens show ENV_OFF_DETAIL in smaller type).
+
+/** What is true, in plain words. */
+export const ENV_OFF_SUMMARY =
+  "Sending is switched off by whoever manages the app's hosting (usually your developer), so nothing is emailed from any pipeline.";
+/** Who to ask. */
+export const ENV_OFF_ASK = "Ask them to turn it back on when sending should resume — the switch on Settings can't.";
+/** The secondary line: what to change, for the person who manages the hosting. */
+export const ENV_OFF_DETAIL = `For your developer: the ${OUTBOUND_DISABLED_ENV} environment variable is set. Remove it in the hosting dashboard and redeploy to resume sending.`;
+
+/** A send refused while the switch is on. */
+export const ENV_PAUSED_MESSAGE =
+  "Sending is switched off by whoever manages the app's hosting, so nothing was sent. Ask your developer to turn it back on.";
 
 /** Thrown by the mail layer if anything tries to send while the environment switch is on. */
 export class OutboundDisabledError extends Error {
   constructor() {
-    super(ENV_PAUSED_MESSAGE);
+    super(`Outbound email is disabled by ${OUTBOUND_DISABLED_ENV}; nothing was sent.`);
     this.name = "OutboundDisabledError";
   }
 }

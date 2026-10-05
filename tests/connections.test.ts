@@ -1,6 +1,6 @@
 // Settings → Connections: a broken integration is shown as broken, in plain
 // words with the next step, instead of looking like "nobody replied".
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { POST } from "@/app/api/email-inbound/route";
@@ -168,10 +168,23 @@ describe("Settings → Connections", () => {
 
   it("never shows setting names or README references to the operator", async () => {
     const all = [...(await getConnectionStatus({ VERCEL: "1", EMAIL_TRANSPORT: "outbox" })), ...(await getConnectionStatus(ENV))];
+    vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
+    all.push(...(await getConnectionStatus(ENV)));
     for (const item of all) {
       const text = `${item.summary} ${item.next ?? ""}`;
-      expect(text, item.key).not.toMatch(/README|[A-Z]{3,}_[A-Z_]{3,}/);
+      expect(text, item.key).not.toMatch(/README|[A-Z]{3,}_[A-Z_]{3,}|redeploy|hosting environment/);
     }
+  });
+
+  it("switched off by the hosting: says so plainly and who to ask, with the setting only in the developer line", async () => {
+    vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
+    const mail = (await statusOf())["mail"];
+    expect(mail).toMatchObject({
+      tone: "warn",
+      summary: expect.stringContaining("Sending is switched off by whoever manages the app's hosting (usually your developer)"),
+      next: "Ask whoever manages the app's hosting to turn sending back on when it should resume.",
+      detail: expect.stringMatching(/^For your developer: the OUTBOUND_EMAIL_DISABLED environment variable is set\./),
+    });
   });
 
   it("warns when a job hasn't run for over a day", async () => {

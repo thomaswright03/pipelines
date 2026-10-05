@@ -109,10 +109,11 @@ describe("the root layout", () => {
     expect(page.queryByText("Replies not arriving")).toBeNull();
   });
 
-  it("says when sending is switched off on the server, even with the Settings switch on", async () => {
+  it("says when sending is switched off by the hosting, even with the Settings switch on", async () => {
     vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
     const page = await renderPage(RootLayout({ children: <p>Page body</p>, params: Promise.resolve({}) } as never));
-    expect(page.getByRole("link", { name: /switched off on the server/ })).toBeTruthy();
+    expect(page.getByRole("link", { name: "Outbound email switched off by your hosting" })).toBeTruthy();
+    expect(page.text).not.toContain("OUTBOUND_EMAIL_DISABLED");
     expect(page.getByText("Sending off (server)")).toBeTruthy();
   });
 
@@ -425,11 +426,23 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect(settings.getByRole("heading", { name: "Outbound email: paused" })).toBeTruthy();
   });
 
-  it("show Settings with outbound email switched off on the server", async () => {
+  it("show Settings with outbound email switched off by the hosting: plain words first, the setting in a developer line", async () => {
     vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
     const settings = await renderPage(Settings(pageProps()));
-    expect(settings.getByRole("heading", { name: "Outbound email: off (server setting)" })).toBeTruthy();
-    expect(settings.text).toMatch(/OUTBOUND_EMAIL_DISABLED is set in the hosting environment/);
+    expect(settings.getByRole("heading", { name: "Outbound email: switched off by your hosting" })).toBeTruthy();
+    const notice = settings.getByText(/^Switched off outside this app\./).closest("div")!;
+    const [lead, detail] = [...notice.querySelectorAll("p")].map((p) => p.textContent ?? "");
+    expect(lead).toMatch(
+      /^Switched off outside this app\. Sending is switched off by whoever manages the app's hosting \(usually your developer\)/,
+    );
+    expect(lead).toContain("Ask them to turn it back on");
+    expect(lead).not.toMatch(/OUTBOUND_EMAIL_DISABLED|redeploy|hosting environment/);
+    expect(detail).toMatch(/^For your developer: the OUTBOUND_EMAIL_DISABLED environment variable is set\./);
+    // Not paused here, so the emergency-stop line shows too: no variable name in it either.
+    vi.unstubAllEnvs();
+    const on = await renderPage(Settings(pageProps()));
+    expect(on.text).toContain("sending can also be stopped from the hosting dashboard — the operator guide's Emergency stop says how.");
+    expect(on.text).not.toContain("OUTBOUND_EMAIL_DISABLED");
   });
 
   it("tell the operator on a lead page which stop is on, and where it can be undone", async () => {
@@ -440,7 +453,10 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
 
     vi.stubEnv("OUTBOUND_EMAIL_DISABLED", "1");
     const off = await renderPage(VaultLead(pageProps({ id: lead.id })));
-    expect(off.text).toContain("Sending is switched off on the server (OUTBOUND_EMAIL_DISABLED). Settings can't turn it back on");
+    expect(off.text).toContain(
+      "Sending is switched off by whoever manages the app's hosting (usually your developer), so nothing is emailed from any pipeline. Ask them to turn it back on",
+    );
+    expect(off.getByText(/^For your developer: the OUTBOUND_EMAIL_DISABLED/).className).toContain("text-xs");
     expect(off.text).not.toContain("resume it in Settings");
   });
 });

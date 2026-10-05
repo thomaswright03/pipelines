@@ -233,7 +233,7 @@ describe("the daily Garbage AI run", () => {
     ["the Settings pause", "Outbound email is paused, so the daily run didn't search or send."],
     [
       "the server's OUTBOUND_EMAIL_DISABLED switch",
-      "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED), so the daily run didn't search or send.",
+      "Sending is switched off by whoever manages the app's hosting, so the daily run didn't search or send. (For your developer: OUTBOUND_EMAIL_DISABLED is set.)",
     ],
   ])("is skipped by %s: no search, no lookups, no sends", async (stop, summary) => {
     mail = captureMail();

@@ -1,7 +1,7 @@
 "use server";
 
 import { failureMessage } from "@/lib/db-health";
-import { outboundDisabledByEnvironment } from "@/lib/outbound-switch";
+import { ENV_OFF_DETAIL, outboundDisabledByEnvironment } from "@/lib/outbound-switch";
 import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/log";
 import { recordServiceCheck, setAllowCrossPipelineRepeats, setOutboundPaused } from "@/lib/outreach/settings";
@@ -21,7 +21,7 @@ export async function setOutboundPausedAction(paused: boolean): Promise<ActionRe
       message: paused
         ? "Outbound email is paused. Nothing will be sent — manual, bulk or automated — until you resume."
         : outboundDisabledByEnvironment()
-          ? "The pause switch is off, but OUTBOUND_EMAIL_DISABLED is still set on the server, so nothing is sent until it is removed."
+          ? `The pause switch is off, but sending is still switched off by whoever manages the app's hosting, so nothing is sent until they turn it back on. (${ENV_OFF_DETAIL})`
           : "Outbound email resumed.",
     };
   } catch (err) {

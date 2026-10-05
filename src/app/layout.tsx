@@ -183,9 +183,9 @@ function headerPills({ mail, byEnvironment, paused, repliesMissing }: HeaderStat
       href: "/settings",
       full: byEnvironment ? "Sending off (server)" : "Sending paused",
       short: byEnvironment ? "Off" : "Paused",
-      label: byEnvironment ? "Outbound email switched off on the server" : "Outbound email paused",
+      label: byEnvironment ? "Outbound email switched off by your hosting" : "Outbound email paused",
       detail: byEnvironment
-        ? "Outbound email is switched off on the server (OUTBOUND_EMAIL_DISABLED); nothing is emailed."
+        ? "Sending is switched off by whoever manages the app's hosting; nothing is emailed. Ask your developer to turn it back on."
         : "Outbound email is paused in Settings; nothing is emailed until it is resumed.",
       tone: "red",
       dot: true,

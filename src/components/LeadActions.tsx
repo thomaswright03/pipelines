@@ -29,6 +29,7 @@ import {
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { LEAD_NOUN, PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import StatusBadge from "@/components/StatusBadge";
+import { ENV_OFF_ASK, ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
 import ActionMessage, { type Feedback, unconfirmedMessage } from "@/components/ActionMessage";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -448,11 +449,18 @@ export default function LeadActions({
               <p className="text-sm muted">{sendHold}</p>
             ) : (
               paused && (
-                <p className="text-sm muted">
-                  {pausedByEnvironment
-                    ? "Sending is switched off on the server (OUTBOUND_EMAIL_DISABLED). Settings can't turn it back on: whoever manages the hosting settings has to remove that setting and redeploy."
-                    : "Outbound email is paused — resume it in Settings to send."}
-                </p>
+                <div className="text-sm muted">
+                  {pausedByEnvironment ? (
+                    <>
+                      <p>
+                        {ENV_OFF_SUMMARY} {ENV_OFF_ASK}
+                      </p>
+                      <p className="mt-1 text-xs">{ENV_OFF_DETAIL}</p>
+                    </>
+                  ) : (
+                    <p>Outbound email is paused — resume it in Settings to send.</p>
+                  )}
+                </div>
               )
             )}
           </>

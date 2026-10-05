@@ -23,6 +23,7 @@ import { createLeadsFromCandidates, type DiscoveryCandidate, type DiscoveryResul
 import { describeError, logError } from "@/lib/log";
 import { sendFirstTouch } from "@/lib/outreach/send";
 import { getAppSettings } from "@/lib/outreach/settings";
+import { OUTBOUND_DISABLED_ENV } from "@/lib/outbound-switch";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import type { RunOutcome } from "@/lib/outreach/runs";
@@ -102,8 +103,13 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   const startedAt = now();
   const settings = await getAppSettings();
   if (settings.outboundPaused) {
-    const why = settings.pausedBy === "environment" ? "switched off on the server (OUTBOUND_EMAIL_DISABLED)" : "paused";
-    return { status: "skipped", summary: `Outbound email is ${why}, so the daily run didn't search or send.` };
+    if (settings.pausedBy === "environment") {
+      return {
+        status: "skipped",
+        summary: `Sending is switched off by whoever manages the app's hosting, so the daily run didn't search or send. (For your developer: ${OUTBOUND_DISABLED_ENV} is set.)`,
+      };
+    }
+    return { status: "skipped", summary: "Outbound email is paused, so the daily run didn't search or send." };
   }
 
   // Discovery failing (Yelp down, rate-limited, key revoked) must not stop

@@ -2,7 +2,9 @@
 // stops early. The server side of each chunk is tested in send.test.ts.
 import { describe, expect, it } from "vitest";
 import {
+  batchesFor,
   bulkSendSummary,
+  nextBatchAfter,
   LOST_SERVER,
   runBulkSend,
   STOPPED_BY_USER,
@@ -100,7 +102,7 @@ describe("runBulkSend", () => {
 
 describe("bulkSendSummary", () => {
   const base: BulkProgress = { sent: 0, skipped: 0, failed: 0, refused: 0, processed: 0, total: 3, messages: [] };
-  const preview = { willSend: 3, totalEligible: 3, leadIds: ["a", "b", "c"] };
+  const preview = { willSend: 3, totalEligible: 3, leadIds: ["a", "b", "c"], batchLimit: 3 };
 
   it("a clean run is a success", () => {
     expect(bulkSendSummary({ ...base, sent: 3 }, null, preview)).toEqual({ summary: "Sent 3 of 3.", tone: "success" });
@@ -120,9 +122,34 @@ describe("bulkSendSummary", () => {
     });
     expect(result.summary).not.toMatch(/email service/);
   });
-  it("mentions the next batch when more leads are waiting", () => {
+  it("says how many leads and batches are left when more are waiting", () => {
     expect(bulkSendSummary({ ...base, sent: 3 }, null, { ...preview, totalEligible: 5 }).summary).toBe(
-      "Sent 3 of 3. 2 more New leads can go in the next batch.",
+      "Sent 3 of 3. 2 more New leads left: 1 more batch of up to 3.",
     );
+    expect(bulkSendSummary({ ...base, sent: 3 }, null, { ...preview, totalEligible: 10 }, { one: "agent", many: "agents" }).summary).toBe(
+      "Sent 3 of 3. 7 more New agents left: 3 more batches of up to 3.",
+    );
+  });
+});
+
+describe("the next batch", () => {
+  const preview = (totalEligible: number, inBatch = 50) => ({
+    totalEligible,
+    leadIds: Array.from({ length: Math.min(inBatch, totalEligible) }, (_, i) => `l${i}`),
+    batchLimit: 50,
+  });
+
+  it("counts batches of up to the limit", () => {
+    expect([0, 1, 50, 51, 100, 2_858].map((n) => batchesFor(n, 50))).toEqual([0, 1, 1, 2, 2, 58]);
+  });
+  it("is offered after a batch that ran to the end, sized to what's left", () => {
+    expect(nextBatchAfter(null, preview(2_858))).toEqual({ remaining: 2_808, batches: 57, size: 50 });
+    expect(nextBatchAfter(null, preview(70))).toEqual({ remaining: 20, batches: 1, size: 20 });
+  });
+  it("isn't offered when nothing is left, or after a stop, a pause, a failure or a lost connection", () => {
+    expect(nextBatchAfter(null, preview(50))).toBeNull();
+    for (const reason of [STOPPED_BY_USER, STOPPED_PAUSED, STOPPED_SERVICE_DOWN, LOST_SERVER]) {
+      expect(nextBatchAfter(reason, preview(2_858))).toBeNull();
+    }
   });
 });
