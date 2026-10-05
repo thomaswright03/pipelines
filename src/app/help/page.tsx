@@ -125,11 +125,13 @@ export default function HelpPage() {
               </li>
             </ul>
             Everything else is marked <em>Reply needs a look</em> in the lead list (for example &ldquo;who is this?&rdquo;, &ldquo;please no
-            further contact&rdquo;, &ldquo;maybe&rdquo;, or a reply in Spanish). Nothing is emailed to that address until you decide, so a
-            reply asking to stop is never ignored — but it waits for you. Open the lead: the reply is shown with the reason, and{" "}
-            <strong>Mark opted out</strong>, <strong>Mark replied</strong> and <strong>Keep as …</strong> are right under it. If the app
-            closed a lead on a &ldquo;no&rdquo; that wasn&apos;t one, move it back to Responded; if a &ldquo;thanks&rdquo; meant more, press{" "}
-            <strong>Mark replied</strong>. The Replies page counts these corrections.
+            further contact&rdquo;, &ldquo;maybe&rdquo;, &ldquo;sounds great, but not until next quarter&rdquo;, &ldquo;I&apos;ll pass this
+            on to the owner&rdquo;, or a reply in Spanish). A reply that puts you off isn&apos;t counted as interest: decide whether to call
+            them later. Nothing is emailed to that address until you decide, so a reply asking to stop is never ignored — but it waits for
+            you. Open the lead: the reply is shown with the reason, and <strong>Mark opted out</strong>, <strong>Mark replied</strong> and{" "}
+            <strong>Keep as …</strong> are right under it. If the app closed a lead on a &ldquo;no&rdquo; that wasn&apos;t one, move it back
+            to Responded; if a &ldquo;thanks&rdquo; meant more, press <strong>Mark replied</strong>. The Replies page counts these
+            corrections.
           </li>
           <li>
             <strong>Work the call deck.</strong> Leads that didn&apos;t reply within a week move to the call deck (the <em>Call deck</em>{" "}

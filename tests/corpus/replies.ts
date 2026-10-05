@@ -45,9 +45,25 @@
 // ("Can I unsubscribe later if it doesn't work out?"), so that case no
 // longer measures anything new: 100% / 100% on 126 cases.
 //
+// Round 14 (2026-10-05): the review found deferrals and gatekeeper
+// forwards with a warm word counted as interested replies ("Sounds great
+// but not right now, maybe next quarter", "Perfect timing actually but our
+// budget is frozen till 2027", "Thank you, I will pass this on to the
+// owner.", "I will think about it"). They and similar phrasings are in
+// REPLY_DEV_OUTCOMES below, labelled needs_look: putting it off, passing it
+// on or thinking it over is not a yes. Four older cases that only say the
+// email is being passed on or will be read were labelled positive and are
+// relabelled needs_look under the same rule (marked where they are). Every
+// split in this file is now development data — each has been printed miss
+// by miss on every CI run — so the former "held-out" lists below are
+// scored as development batches. The only held-out set is
+// tests/corpus/held-out/replies.ts: real replies, exported, frozen.
+//
 // optOut: true  — the sender is asking not to be contacted (CAN-SPAM opt-out).
 // optOut: false — anything else, including "no thanks" and complaints that
 //                 don't ask to stop (those are flagged for a look instead).
+
+import type { ReplyOutcome } from "./real-replies";
 
 export type LabelledReply = { text: string; subject?: string; optOut: boolean };
 
@@ -216,7 +232,7 @@ export const REPLY_CORPUS: LabelledReply[] = [
 // Round 10, from the review, with the outcome the app should reach (the
 // three-outcome labels scored since the round-10 redesign). Development
 // cases: the redesign was checked against these.
-export const REPLY_DEV_OUTCOMES: { text: string; subject?: string; expected: "opt_out" | "positive" | "needs_look" }[] = [
+export const REPLY_DEV_OUTCOMES: { text: string; subject?: string; expected: ReplyOutcome }[] = [
   // Interested replies that contain opt-out words: never suppressed.
   {
     text: "Interested! Can you call me Thursday?\n\nThis email and any attachments are confidential. If you received this in error, please notify the sender and delete it. To unsubscribe from our newsletter click here.",
@@ -256,9 +272,42 @@ export const REPLY_DEV_OUTCOMES: { text: string; subject?: string; expected: "op
   { text: "Please do not.", expected: "needs_look" },
   { text: "Please do not send any further correspondence. What does it cost, though?", expected: "needs_look" },
   { text: "Please do! Send the details.", expected: "positive" },
+  // Round 14, from the review: deferrals and forwards with a warm word are
+  // not interested replies (each was counted as one), plus similar ones.
+  { text: "Sounds great but not right now, maybe next quarter", expected: "needs_look" },
+  { text: "Perfect timing actually but our budget is frozen till 2027", expected: "needs_look" },
+  { text: "Thank you, I will pass this on to the owner.", expected: "needs_look" },
+  { text: "I will think about it", expected: "needs_look" },
+  { text: "Love it, but we're swamped until after the holidays.", expected: "needs_look" },
+  { text: "Great idea — check back in a few months.", expected: "needs_look" },
+  { text: "Sounds good, maybe later.", expected: "needs_look" },
+  { text: "Awesome. Reach out again next year, budget's tight right now.", expected: "needs_look" },
+  { text: "Interesting, but not at this time.", expected: "needs_look" },
+  { text: "Yes, but not yet.", expected: "needs_look" },
+  { text: "Remind me in two weeks.", expected: "needs_look" },
+  { text: "Try me again in January.", expected: "needs_look" },
+  { text: "Perfect, I'll forward it to the right person.", expected: "needs_look" },
+  { text: "Thanks, I'll run it by my partner and get back to you.", expected: "needs_look" },
+  { text: "Great, we'll review and let you know.", expected: "needs_look" },
+  { text: "Yes, maybe.", expected: "needs_look" },
+  // ...while a hedge or a forward that comes with a real question or a
+  // request is still interested.
+  { text: "Maybe — what's the minimum term?", expected: "positive" },
+  { text: "I'll pass this along to my broker. What's the price for Maricopa?", expected: "positive" },
+  { text: "Forwarding to my partner — call me at 480-555-0101 to set it up.", expected: "positive" },
+  { text: "Yes! Let's talk next week.", expected: "positive" },
+  // Round 14, from the review: a yes that only opens a stop request agrees
+  // to it ("Yes, unsubscribe me" was held for a look); a stop request with
+  // real interest still needs a look.
+  { text: "Yes, unsubscribe me", expected: "opt_out" },
+  { text: "Sure, remove me from your list", expected: "opt_out" },
+  { text: "OK. Please remove me.", expected: "opt_out" },
+  { text: "Please stop emailing me, but I'd like a call about pricing.", expected: "needs_look" },
+  // A polite plain no stays a decline.
+  { text: "Not interested at this time.", expected: "declined" },
 ];
 
-// --- Held-out split ------------------------------------------------------
+// --- Development, rounds 5-7 (formerly the held-out split) ----------------
 // Written on 2026-09-25 after the rules above were last changed, and scored
 // once as-is. First run: precision 100%, recall 80% (4 of 20 opt-outs
 // missed). Because a missed opt-out means emailing someone who asked us to
@@ -269,7 +318,7 @@ export const REPLY_DEV_OUTCOMES: { text: string; subject?: string; expected: "op
 // (fix the rule from a development case or real traffic instead, and add
 // fresh held-out cases). tests/heuristics-eval.test.ts prints this split's
 // score separately.
-export const REPLY_HELD_OUT: LabelledReply[] = [
+export const REPLY_DEV_ROUNDS_5_7: LabelledReply[] = [
   { text: "Unsubscribe me from this list.", optOut: true },
   { text: "please stop", optOut: true },
   { text: "STOP EMAILING ME", optOut: true },
@@ -406,12 +455,13 @@ export const REPLY_HELD_OUT: LabelledReply[] = [
   { text: "I don't want any of the Pinal leads, only Maricopa.", optOut: false },
 ];
 
+// --- Development, round 9 (formerly a held-out split) ---------------------
 // "None of the above": opt-outs phrased in ways the rules didn't list
 // (polite, rude, other languages) and look-alikes that aren't opt-outs.
 // Written on 2026-09-26 before the round-9 rule change and scored as-is;
 // the eval reports this as its own split. Never edit the classifier
 // against these.
-export const REPLY_UNLISTED_HELD_OUT: LabelledReply[] = [
+export const REPLY_DEV_ROUND_9: LabelledReply[] = [
   { text: "I'd prefer not to get these emails.", optOut: true },
   { text: "Please stop, not interested.", optOut: true },
   { text: "Keine Werbung, bitte.", optOut: true },

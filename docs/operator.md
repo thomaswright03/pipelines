@@ -117,7 +117,10 @@ What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
   no more email, as for a plain no. **Mark replied** counts it as a reply if it was one (also counted as a
   correction).
 - A reply that may be asking to stop, a complaint ("wrong person", "who is this?", "spam"), a no mixed with
-  interest, a hedge ("Thanks, I guess?"), or one that shows no clear yes, no, question or request
+  interest, a hedge ("Thanks, I guess?"), one that puts it off ("Sounds great but not right now, maybe next
+  quarter", "our budget is frozen till 2027", "check back in March"), one that only says it will be passed
+  on or thought over ("Thank you, I will pass this on to the owner"), or one that shows no clear yes, no,
+  question or request
   ([outreach-safety.md](outreach-safety.md) → "Replies") is flagged **Reply needs a look**, with the reason,
   instead of moving the lead to Responded. It gets no reply time, so it isn't counted in the reply rate, a
   Contacted lead stays off the call deck, and **nothing is emailed to the address** until the operator

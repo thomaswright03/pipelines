@@ -252,8 +252,9 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
     handling (`suppressEmail`) is ready to be called from it.
 14. **Look at flagged replies every day.** A reply the rules can't read with confidence holds every email to
     its address until someone resolves it on the lead page (or on Replies for an unknown address). On the
-    synthetic evaluation sets that is about a quarter of replies (26%, down from 40% now that plain no's and
-    thank-you-only replies are handled on their own); the dashboard and Replies show the count.
+    synthetic evaluation sets that is over a quarter of replies (28.5%: replies that put it off or only say
+    they'll pass it on now wait for you instead of counting as interest); the dashboard and Replies show the
+    count.
 15. **Know the emergency stop.** Add `OUTBOUND_EMAIL_DISABLED` only when you need it (steps in "Emergency
     stop" above); it is not set in normal operation. Consider saving the steps somewhere you can reach
     without the app.

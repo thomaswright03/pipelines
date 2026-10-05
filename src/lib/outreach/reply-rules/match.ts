@@ -13,7 +13,14 @@ import {
   stripReplyPrefix,
 } from "@/lib/outreach/reply-rules/stop";
 import { extractNewReplyText } from "@/lib/outreach/reply-rules/reply-text";
-import { CONTACT_DETAIL_RE, INTEREST_SIGNALS, NEGATION_WORD_RE, NOT_A_NEGATION_RE, QUESTION_RE } from "@/lib/outreach/reply-rules/interest";
+import {
+  AFFIRMATIONS,
+  CONTACT_DETAIL_RE,
+  INTEREST_SIGNALS,
+  NEGATION_WORD_RE,
+  NOT_A_NEGATION_RE,
+  QUESTION_RE,
+} from "@/lib/outreach/reply-rules/interest";
 
 export type Found = { index: number; text: string; /** How to name it in a reason, when not by quoting `text`. */ label?: string };
 
@@ -42,9 +49,15 @@ function negatedInClause(text: string, index: number, ignore: RegExp | null): bo
   return NEGATION_WORD_RE.test(ignore ? clause.replace(ignore, "") : clause);
 }
 
-/** A sign of interest not negated in its own clause, a number or address to use, or (optionally) a question. */
-export function findInterest(text: string, { countQuestions }: { countQuestions: boolean }): Found | null {
-  const signal = firstMatch(text, INTEREST_SIGNALS, ({ index }) => !negatedInClause(text, index, NOT_A_NEGATION_RE));
+/**
+ * A sign of interest not negated in its own clause (from `signals`, every
+ * group by default), a number or address to use, or (optionally) a question.
+ */
+export function findInterest(
+  text: string,
+  { countQuestions, signals = INTEREST_SIGNALS }: { countQuestions: boolean; signals?: readonly RegExp[] },
+): Found | null {
+  const signal = firstMatch(text, signals, ({ index }) => !negatedInClause(text, index, NOT_A_NEGATION_RE));
   if (signal) return signal;
   const detail = CONTACT_DETAIL_RE.exec(text);
   if (detail) return { index: detail.index, text: detail[0], label: "gives a number or address to use" };
@@ -55,6 +68,11 @@ export function findInterest(text: string, { countQuestions }: { countQuestions:
   return null;
 }
 
+/** The first of `signals` in `text` not negated in its own clause — no numbers or questions. */
+export function findSignal(text: string, signals: readonly RegExp[]): Found | null {
+  return firstMatch(text, signals, ({ index }) => !negatedInClause(text, index, NOT_A_NEGATION_RE));
+}
+
 /**
  * Whether `text` says yes or "interested" in so many words (not negated) —
  * a stronger sign than a question or a phone number, which out-of-office
@@ -63,7 +81,7 @@ export function findInterest(text: string, { countQuestions }: { countQuestions:
  */
 export function showsClearInterest(text: string): boolean {
   const own = extractNewReplyText(text).replace(/[‘’ʼ]/g, "'");
-  return firstMatch(own, INTEREST_SIGNALS.slice(0, 3), ({ index }) => !negatedInClause(own, index, null)) !== null;
+  return firstMatch(own, AFFIRMATIONS, ({ index }) => !negatedInClause(own, index, null)) !== null;
 }
 
 /** Whether the unsubscribe at `index` is asked about for later ("can I unsubscribe later if…?") rather than requested. */
@@ -112,6 +130,16 @@ export function findStopCue(text: string): Found | null {
     if (/^(?:not|never|don|dont|didn|did|do|nor|no)\b/i.test(words)) return true;
     return !isNegated(text, index);
   });
+}
+
+/** The first phrase from `phrases` in `text`, with where it was found. */
+export function findPhrase<T extends { re: RegExp }>(text: string, phrases: readonly T[]): (Found & { phrase: T }) | null {
+  let best: (Found & { phrase: T }) | null = null;
+  for (const phrase of phrases) {
+    const match = phrase.re.exec(text);
+    if (match && (!best || match.index < best.index)) best = { index: match.index, text: match[0], phrase };
+  }
+  return best;
 }
 
 /** `text` with the clause holding `found` blanked out (same length), so what's left can be searched for anything else. */

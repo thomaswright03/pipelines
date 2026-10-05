@@ -37,6 +37,11 @@
 // (100% / 100%), so those three no longer measure anything new. Same
 // author wrote the batch and the rules.
 
+// Round 14 (2026-10-05): the second batch (formerly "held-out", now
+// `AUTO_REPLY_DEV_2, BOUNCE_DEV_2`) has been printed miss by miss on every CI run and fixed against,
+// so it is scored as a second development batch. A genuinely unseen
+// measure needs real cases (docs/measuring-rules.md).
+
 import type { MailHeaders } from "@/lib/outreach/auto-mail";
 
 export type LabelledAutoReply = { subject: string; text: string; headers?: MailHeaders; auto: boolean };
@@ -68,7 +73,7 @@ export const AUTO_REPLY_DEV: LabelledAutoReply[] = [
   { subject: "Re: out of office stuff", text: "Tell me more.", auto: false },
 ];
 
-export const AUTO_REPLY_HELD_OUT: LabelledAutoReply[] = [
+export const AUTO_REPLY_DEV_2: LabelledAutoReply[] = [
   {
     subject: "Automatic reply: Quick question for Mesa agents",
     text: "Hello, I'm out of the office through Friday. For urgent matters call 602-555-0142.",
@@ -202,7 +207,7 @@ export const BOUNCE_DEV: LabelledBounce[] = [
   },
 ];
 
-export const BOUNCE_HELD_OUT: LabelledBounce[] = [
+export const BOUNCE_DEV_2: LabelledBounce[] = [
   {
     from: "Mail Delivery System <Mailer-Daemon@exim.host.example>",
     subject: "Mail delivery failed: returning message to sender",

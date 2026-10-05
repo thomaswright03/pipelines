@@ -16,6 +16,11 @@
 // Both were real gaps, fixed from new development cases, so those two
 // held-out cases no longer measure anything new.
 
+// Round 14 (2026-10-05): the second batch (formerly "held-out", now
+// `SITE_DEV_2`) has been printed miss by miss on every CI run and fixed against,
+// so it is scored as a second development batch. A genuinely unseen
+// measure needs real cases (docs/measuring-rules.md).
+
 import type { LeadFacts } from "@/lib/outreach/site-evidence";
 
 export type LabelledSite = { website: string; html: string; facts: LeadFacts; belongs: boolean };
@@ -78,7 +83,7 @@ export const SITE_DEV: LabelledSite[] = [
   },
 ];
 
-export const SITE_HELD_OUT: LabelledSite[] = [
+export const SITE_DEV_2: LabelledSite[] = [
   { website: "https://www.saguarodental.com", html: '<a href="tel:+16025550142">Call us</a>', facts: phx("Saguaro Dental"), belongs: true },
   {
     website: "https://www.saguarodental.com",
