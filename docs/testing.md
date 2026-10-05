@@ -37,6 +37,7 @@ What's covered, by file:
 | `tests/rules-version.test.ts` | The rules version: changes with a rule, stored on every inbound reply and every accepted address |
 | `tests/status-constraint.test.ts` | The database refuses unknown lead statuses (and its list matches the app's); unknown ones are labelled as such |
 | `tests/proxy.test.ts` | Page requests during a database outage get 503 with the app-styled outage page (Geist from `public/fonts`, both themes, the theme picked in the header); the probe is reused for 5 s |
+| `tests/lint-config.test.ts` | Lint runs on ESLint 10, and every plugin of eslint-config-next (React, hooks, jsx-a11y, import, Next, TypeScript) still reports its problems through the `@eslint/compat` wrapper in `eslint.config.mjs` |
 | `tests/deployment-doc.test.ts` | `docs/deployment.md`'s owner-only setup names every migration from the first one it lists to the newest, and gives `npx prisma migrate status` |
 | `tests/db-health.test.ts` | Database-outage detection and `/api/health` |
 | `tests/discovery.test.ts`, `tests/email-finder.test.ts` | Discovery and email lookup |
