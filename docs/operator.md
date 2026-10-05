@@ -49,8 +49,8 @@ every pipeline: **Move to… → Lost**, which asks why (Not interested, Too bus
 to contact) before it confirms, and keeps the reason on the lead. **Mark bounced** is only offered while a
 bounce is still possible (not after a reply opted the lead out).
 
-The interface is English-only; whether that is final is the owner's decision (README → "Known
-limitations"). A reply in another language is honoured when it is a common opt-out and otherwise needs a
+The interface is English-only, by the client's request (the owner's decision of 2026-10-05; README →
+"Known limitations"). A reply in another language is honoured when it is a common opt-out and otherwise needs a
 look.
 
 A third dashboard card, **AI Lead Responder**, links out to a separate Vercel project. It is not code in

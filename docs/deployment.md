@@ -231,11 +231,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 7. **Lawful basis for the outreach.** This is a legal review, not a code change. See README → "Known limitations".
 8. **Review the held-back leads** after applying `20260926090000_lead_evidence_and_reply_text`: filter each
    pipeline's list to New and check the flagged rows (see "Unverified addresses" above).
-9. **Decide the interface language.** Still open. The developer's recommendation (2026-09-26) is
-   English-only for this single-operator, US-only tool. Confirm it by replacing the first bullet of
-   README → "Known limitations" with your decision and its date, or commission Spanish/French (every
-   string into a translation layer with complete catalogues, a persistent switcher and localised dates
-   and numbers).
+9. **Interface language — decided.** English-only, by the client's request (the owner's decision,
+   2026-10-05; README → "Known limitations"). Nothing to do.
 10. **Grow the evaluation sets with real, anonymised replies and agent addresses** (see [measuring-rules.md](measuring-rules.md), "Measuring the
    reply and address rules"). Only the owner can read the production replies.
 11. **Approve the Cold Outreach subject line.** The subject (`src/lib/vault-email-template.ts`) is the
