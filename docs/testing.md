@@ -53,7 +53,7 @@ What's covered, by file:
 | `tests/client-disconnect-log.test.ts` | Only React's "destination stream closed early" (a browser leaving mid-response) is dropped from the server log |
 | `tests/lead-actions.test.ts` | Stage rules, moves racing a reply, the Settings do-not-email list |
 | `tests/site-evidence.test.ts` | Guessed sites must show the lead's phone/street, or the city plus the name in the title; duplicate detection by name plus phone/address/city |
-| `tests/lead-edit.test.ts` | Editing (address rules, links to the holder, pitched leads keep their address), deleting, unverified addresses |
+| `tests/lead-edit.test.ts` | Editing (address rules, links to the holder, pitched leads keep their address), deleting, unverified addresses; two tabs adding (or adding and editing) one address at the same moment: exactly one gets it, the other gets the usual "already belongs to" field error |
 | `tests/unmatched-replies.test.ts` | Replies from unknown addresses: listed, attached to a lead, dismissed; the "no replies lately" warning |
 | `tests/greeting.test.ts` | dataleadsell greets agents by first name; the preview is what's sent |
 | `tests/e2e.test.ts` | One run per pipeline through the same server actions the pages use |

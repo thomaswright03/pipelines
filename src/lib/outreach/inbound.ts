@@ -101,7 +101,7 @@ type InboundResult = {
 /** Without a Message-ID, an identical reply within this window is treated as a re-delivery. */
 const HASH_DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Namespaces this module's advisory locks (send.ts uses 4242).
+// Namespaces this module's advisory locks (address-lock.ts uses 4242).
 const INBOUND_LOCK_NAMESPACE = 4243;
 const MAX_STORED_REPLY_CHARS = 2_000;
 const MAX_ATTEMPTS_PER_LEAD = 3;

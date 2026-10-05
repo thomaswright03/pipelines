@@ -35,9 +35,7 @@ import { PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { statusLabel } from "@/lib/lead-status";
 import { HOLDING_VERDICTS } from "@/lib/outreach/reply-classifier";
 import { formatDate } from "@/lib/time";
-
-// An arbitrary constant namespacing this app's advisory locks.
-const ADDRESS_LOCK_NAMESPACE = 4242;
+import { lockAddress } from "@/lib/outreach/address-lock";
 
 export const DUPLICATE_BLOCK_PREFIX = "Duplicate address";
 export const OPTED_OUT_BLOCK_PREFIX = "Opted out";
@@ -170,10 +168,6 @@ function describeAnswer(hold: Extract<ReplyHold, { kind: "answered" }>): string 
 function describeExistingPitch(existing: { pipeline: PipelineId; leadName: string | null }, self: PipelineId): string {
   const via = existing.leadName ? `via ${existing.leadName}` : "earlier";
   return existing.pipeline === self ? via : `${via} in ${PIPELINE_LABEL[existing.pipeline]}`;
-}
-
-async function lockAddress(tx: Db, email: string): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ADDRESS_LOCK_NAMESPACE}::int, hashtext(${email}))`;
 }
 
 /**

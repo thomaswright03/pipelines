@@ -11,7 +11,7 @@ import { ADDRESS_RULES_VERSION, addressFilterFor, hostNamesPerson } from "@/lib/
 import { SITE_RULES_VERSION, siteEvidence, type LeadFacts } from "@/lib/outreach/site-evidence";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { DUPLICATE_BLOCK_PREFIX, findExistingPitch } from "@/lib/outreach/send";
-import { getPipeline, type NamedLead, type OutreachLead } from "@/lib/outreach/pipelines";
+import { getPipeline, type Db, type NamedLead, type OutreachLead } from "@/lib/outreach/pipelines";
 import { LEAD_NOUN, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 
 /**
@@ -110,14 +110,21 @@ type AddressConflict = {
 };
 
 /** Who else already uses this address (another lead here, or an earlier pitch), with a link to them. */
-export async function findAddressConflict(pipelineId: PipelineId, email: string, excludeLeadId?: string): Promise<AddressConflict | null> {
+export async function findAddressConflict(
+  pipelineId: PipelineId,
+  email: string,
+  excludeLeadId?: string,
+  db: Db = prisma,
+): Promise<AddressConflict | null> {
   const pipeline = getPipeline(pipelineId);
-  const [others, settings] = await Promise.all([pipeline.findLeadsByEmail(prisma, email, excludeLeadId), getAppSettings()]);
+  // One after the other: inside a transaction (db) queries can't run in parallel.
+  const others = await pipeline.findLeadsByEmail(db, email, excludeLeadId);
+  const settings = await getAppSettings(db);
   if (others.length > 0) {
     const other = others[0]!;
     return { message: `${email} already belongs to ${other.name}`, href: `${pipeline.basePath}/${other.id}`, leadName: other.name };
   }
-  const pitched = await findExistingPitch(prisma, pipelineId, email, settings.allowCrossPipelineRepeats);
+  const pitched = await findExistingPitch(db, pipelineId, email, settings.allowCrossPipelineRepeats);
   if (pitched && !(pitched.pipeline === pipelineId && pitched.leadId === excludeLeadId)) {
     return {
       message: pitched.refused

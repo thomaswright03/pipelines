@@ -8,24 +8,21 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
-import { normalizePhone } from "@/lib/phone";
 import { normalizeState } from "@/lib/us-states";
 import { YelpError } from "@/lib/yelp-discovery";
 import { markHaulerCityUsed, pickNextHaulerCity } from "@/lib/garbage-ai-city-picker";
 import { isMountainHighCity } from "@/lib/garbage-ai-targeting";
 import { describeHaulerSearch, searchHaulers } from "@/lib/garbage-ai-daily-run";
 import { withRetry } from "@/lib/with-retry";
+import { coldOutreachLeadEditSchema, coldOutreachLeadSchema, type ColdOutreachLeadInput } from "@/lib/lead-forms";
+import type { Prisma } from "@/generated/prisma/client";
 import {
-  coldOutreachLeadEditSchema,
-  coldOutreachLeadSchema,
-  fieldErrorsOf,
-  normalizeWebsite,
-  parseMoneyToCents,
-  type ColdOutreachLeadInput,
-  type FormState,
-} from "@/lib/lead-forms";
-import { checkAddressForLead, editLead } from "@/lib/outreach/lead-edit";
-import { enteredByHandEvidence } from "@/lib/outreach/evidence";
+  businessLeadColumns,
+  createManualLead,
+  updateManualLead,
+  type LeadFormState,
+  type ManualLeadSpec,
+} from "@/lib/outreach/manual-lead";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 
 const BASE_PATH = "/garbage-ai";
@@ -36,79 +33,25 @@ function revalidate(leadId?: string) {
   if (leadId) revalidatePath(`${BASE_PATH}/${leadId}`);
 }
 
-const UNEXPECTED = "Something went wrong saving that — nothing was changed. Try again in a moment.";
 
-// --- Manual entry and editing (same fields and rules as Cold Outreach) ---
+// --- Manual entry and editing (same fields as Cold Outreach; shared flow: outreach/manual-lead.ts) ---
 
-type LeadFormState = FormState<ColdOutreachLeadInput> & { leadId?: string };
+const manualLead: ManualLeadSpec<ColdOutreachLeadInput, ColdOutreachLeadInput & { name: string }> = {
+  pipeline: "garbage-ai",
+  createSchema: coldOutreachLeadSchema,
+  editSchema: coldOutreachLeadEditSchema,
+  columns: businessLeadColumns,
+  insert: (db, data) => db.haulerLead.create({ data: data as Prisma.HaulerLeadUncheckedCreateInput }),
+  currentNotes: async (db, id) => (await db.haulerLead.findUnique({ where: { id }, select: { notes: true } }))?.notes,
+  logScopes: { create: "action.createHauler", update: "action.updateHauler" },
+};
 
-function haulerColumns(d: ColdOutreachLeadInput & { name: string }) {
-  return {
-    name: d.name,
-    company: d.company || null,
-    phone: normalizePhone(d.phone),
-    address: d.address || null,
-    city: d.city || null,
-    state: normalizeState(d.state ?? ""),
-    website: normalizeWebsite(d.website ?? ""),
-    source: d.source || "Manual entry",
-    estimatedValueCents: d.estimatedValue ? parseMoneyToCents(d.estimatedValue) : null,
-    notes: d.notes || null,
-  };
+export async function createHaulerAction(input: ColdOutreachLeadInput): Promise<LeadFormState<ColdOutreachLeadInput>> {
+  return createManualLead(manualLead, input);
 }
 
-export async function createHaulerAction(input: ColdOutreachLeadInput): Promise<LeadFormState> {
-  const parsed = coldOutreachLeadSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
-  }
-  const d = parsed.data;
-  const email = d.email ? d.email.toLowerCase() : null;
-  try {
-    if (email) {
-      const problem = await checkAddressForLead("garbage-ai", email);
-      if (problem) {
-        return {
-          error: "This email can't be used.",
-          fieldErrors: { email: problem.message },
-          ...(problem.link ? { fieldLinks: { email: problem.link } } : {}),
-        };
-      }
-    }
-    const lead = await prisma.haulerLead.create({
-      data: { ...haulerColumns(d), email, emailEvidence: email ? enteredByHandEvidence() : null },
-    });
-    revalidate();
-    return { ok: true, leadId: lead.id };
-  } catch (err) {
-    logError("action.createHauler", err);
-    return { error: failureMessage(err, UNEXPECTED) };
-  }
-}
-
-export async function updateHaulerAction(leadId: string, input: ColdOutreachLeadInput): Promise<LeadFormState> {
-  const existing = await prisma.haulerLead.findUnique({ where: { id: leadId }, select: { notes: true } }).catch(() => null);
-  const parsed = coldOutreachLeadEditSchema(existing?.notes).safeParse(input);
-  if (!parsed.success) {
-    return { error: "Fix the highlighted fields.", fieldErrors: fieldErrorsOf<ColdOutreachLeadInput>(parsed.error) };
-  }
-  const d = parsed.data;
-  try {
-    const outcome = await editLead("garbage-ai", leadId, d.email || null, haulerColumns(d));
-    if (!outcome.ok) {
-      if (outcome.field !== "email") return { error: outcome.error };
-      return {
-        error: "This email can't be used.",
-        fieldErrors: { email: outcome.error },
-        ...(outcome.link ? { fieldLinks: { email: outcome.link } } : {}),
-      };
-    }
-    revalidate(leadId);
-    return { ok: true, leadId };
-  } catch (err) {
-    logError("action.updateHauler", err, { leadId });
-    return { error: failureMessage(err, UNEXPECTED) };
-  }
+export async function updateHaulerAction(leadId: string, input: ColdOutreachLeadInput): Promise<LeadFormState<ColdOutreachLeadInput>> {
+  return updateManualLead(manualLead, leadId, input);
 }
 
 // --- Discovery ---

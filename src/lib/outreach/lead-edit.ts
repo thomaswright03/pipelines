@@ -1,4 +1,5 @@
-// Editing and deleting leads (every pipeline).
+// Editing and deleting leads (every pipeline). Adding one by hand:
+// manual-lead.ts.
 //
 // The address is what the one-pitch rule is keyed on, so editing it is
 // guarded the same way adding a lead is: an address held by another lead,
@@ -12,7 +13,8 @@ import { getSuppression } from "@/lib/email-suppression";
 import { formatDate } from "@/lib/time";
 import { findAddressConflict } from "@/lib/outreach/discovery";
 import { ADDRESS_BLOCK_PREFIXES, UNVERIFIED_BLOCK_PREFIX } from "@/lib/outreach/send";
-import { getPipeline } from "@/lib/outreach/pipelines";
+import { getPipeline, type Db } from "@/lib/outreach/pipelines";
+import { lockAddress } from "@/lib/outreach/address-lock";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { CHECKED_BY_HAND_PREFIX, ENTERED_BY_HAND_PREFIX, enteredByHandEvidence } from "@/lib/outreach/evidence";
@@ -20,16 +22,25 @@ import { recordCorrection } from "@/lib/outreach/corrections";
 
 type AddressProblem = { message: string; link: { href: string; label: string } | null };
 
-/** Why `email` can't be used for this (new or existing) lead, or null when it can. */
-export async function checkAddressForLead(pipelineId: PipelineId, email: string, leadId?: string): Promise<AddressProblem | null> {
-  const conflict = await findAddressConflict(pipelineId, email, leadId);
+/**
+ * Why `email` can't be used for this (new or existing) lead, or null when it
+ * can. Pass the transaction holding the address's lock as `db`, so the check
+ * and the save that follows it see the same thing.
+ */
+export async function checkAddressForLead(
+  pipelineId: PipelineId,
+  email: string,
+  leadId?: string,
+  db: Db = prisma,
+): Promise<AddressProblem | null> {
+  const conflict = await findAddressConflict(pipelineId, email, leadId, db);
   if (conflict) {
     return {
       message: conflict.refused ? `${conflict.message}, so it can't be used.` : `${conflict.message} — each address gets one pitch.`,
       link: conflict.href ? { href: conflict.href, label: `Open ${conflict.leadName ?? "that lead"}` } : null,
     };
   }
-  if (await getSuppression(email)) {
+  if (await getSuppression(email, db)) {
     return { message: `${email} is on the do-not-email list, so it can't be used for outreach.`, link: null };
   }
   return null;
@@ -48,7 +59,9 @@ type EditOutcome = { ok: true } | { ok: false; error: string; field?: "email"; l
 
 /**
  * Saves edited contact details. `details` holds the pipeline's own columns
- * (already validated and normalised); `email` is handled here.
+ * (already validated and normalised); `email` is handled here. A new address
+ * is checked and saved under the address's lock (address-lock.ts), so an
+ * edit and an "Add lead" with the same address can't both take it.
  */
 export async function editLead(
   pipelineId: PipelineId,
@@ -70,10 +83,6 @@ export async function editLead(
         error: `${lead.name} was already emailed at ${lead.email}, so the address can't be changed — the one pitch went there.`,
       };
     }
-    if (newEmail) {
-      const problem = await checkAddressForLead(pipelineId, newEmail, leadId);
-      if (problem) return { ok: false, field: "email", error: problem.message, link: problem.link };
-    }
     data.email = newEmail;
     data.emailEvidence = newEmail ? enteredByHandEvidence() : null;
     data.emailRulesVersion = null;
@@ -87,22 +96,32 @@ export async function editLead(
     }
   }
 
-  const applied = await pipeline.updateIfUnchanged(prisma, leadId, { status: lead.status, email: lead.email }, data);
-  if (!applied) {
-    return { ok: false, error: `${lead.name} changed a moment ago (for example, it was just emailed) — reload the page and try again.` };
-  }
-  // Replacing an address the lookup found: a sign it picked the wrong one.
-  if (newEmail !== lead.email && lead.email && lead.emailEvidence && !lead.emailEvidence.startsWith(ENTERED_BY_HAND_PREFIX)) {
-    await recordCorrection(prisma, {
-      kind: "address_corrected",
-      pipeline: pipelineId,
-      leadId,
-      email: lead.email,
-      detail: lead.emailEvidence,
-      rulesVersion: lead.emailRulesVersion,
-    });
-  }
-  return { ok: true };
+  const save = async (db: Db): Promise<EditOutcome> => {
+    const applied = await pipeline.updateIfUnchanged(db, leadId, { status: lead.status, email: lead.email }, data);
+    if (!applied) {
+      return { ok: false, error: `${lead.name} changed a moment ago (for example, it was just emailed) — reload the page and try again.` };
+    }
+    // Replacing an address the lookup found: a sign it picked the wrong one.
+    if (newEmail !== lead.email && lead.email && lead.emailEvidence && !lead.emailEvidence.startsWith(ENTERED_BY_HAND_PREFIX)) {
+      await recordCorrection(db, {
+        kind: "address_corrected",
+        pipeline: pipelineId,
+        leadId,
+        email: lead.email,
+        detail: lead.emailEvidence,
+        rulesVersion: lead.emailRulesVersion,
+      });
+    }
+    return { ok: true };
+  };
+
+  if (!newEmail || newEmail === lead.email) return save(prisma);
+  return prisma.$transaction(async (tx) => {
+    await lockAddress(tx, newEmail);
+    const problem = await checkAddressForLead(pipelineId, newEmail, leadId, tx);
+    if (problem) return { ok: false, field: "email", error: problem.message, link: problem.link };
+    return save(tx);
+  });
 }
 
 /**
