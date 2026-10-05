@@ -4,6 +4,9 @@
 import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
 import { templateVersion } from "@/lib/email-template-version";
 
+/** Where the pitch sends people to describe what they want built. */
+const START_URL = "https://wright-ai-solutions.com/start";
+
 export function buildOutreachEmail(businessName: string): { subject: string; body: string } {
   const subject = `I probably shouldn’t have sent this 😂`;
   const body = [
@@ -25,13 +28,17 @@ export function buildOutreachEmail(businessName: string): { subject: string; bod
     ``,
     `That's where I come in.`,
     ``,
-    `If there's something you've been wanting to improve, automate, or build, reply to this email or call me and tell me about it.`,
+    `If there's something you've been wanting to improve, automate, or build, tell me about it here:`,
+    ``,
+    `${START_URL}`,
     ``,
     `I'll take a look and let you know what I think I could do.`,
     ``,
     `No sales pitch. No cookie-cutter package.`,
     ``,
     `You tell me the problem. I'll figure out the solution.`,
+    ``,
+    `(Rather talk it through? Just reply to this email or give me a call. Or fill out the form on my website)`,
     ``,
     `Thomas Wright`,
     `(801)580-8630`,
