@@ -33,7 +33,6 @@ function revalidate(leadId?: string) {
   if (leadId) revalidatePath(`${BASE_PATH}/${leadId}`);
 }
 
-
 // --- Manual entry and editing (same fields as Cold Outreach; shared flow: outreach/manual-lead.ts) ---
 
 const manualLead: ManualLeadSpec<ColdOutreachLeadInput, ColdOutreachLeadInput & { name: string }> = {
