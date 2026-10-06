@@ -336,7 +336,7 @@ dl dd,
 
 /* Base shapes the component classes below build on. */
 @utility btn {
-  @apply inline-flex min-h-11 items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium sm:min-h-9;
+  @apply inline-flex min-h-11 items-center justify-center gap-1.5 px-3.5 py-2 text-sm font-medium sm:min-h-9;
   border-radius: var(--radius-pill);
   letter-spacing: -0.005em;
   transition:
@@ -500,7 +500,7 @@ dl dd,
 
   .tab-active,
   .tab-inactive {
-    @apply inline-flex min-h-11 items-center px-3.5 py-1 text-xs font-medium sm:min-h-8;
+    @apply inline-flex min-h-11 items-center px-3 py-1 text-xs font-medium sm:min-h-7;
     border-radius: var(--radius-pill);
     transition:
       background-color 180ms var(--ease),
@@ -515,15 +515,19 @@ dl dd,
       inset 0 1px 0 rgb(255 255 255 / 0.2),
       0 6px 14px -8px var(--accent-glow);
   }
+  /* The edge is an inset shadow, not a border, so a chip is exactly as wide as before. */
   .tab-inactive {
     color: var(--ink-2);
     background-color: var(--surface);
-    border: 1px solid var(--line);
-    box-shadow: var(--highlight);
+    box-shadow:
+      var(--highlight),
+      inset 0 0 0 1px var(--line);
   }
   .tab-inactive:hover {
     color: var(--ink);
-    border-color: var(--gold-line);
+    box-shadow:
+      var(--highlight),
+      inset 0 0 0 1px var(--gold-line);
   }
 
   .notice-info {
