@@ -67,7 +67,8 @@ describe("the dashboard", () => {
     const page = await renderPage(Dashboard());
     expect(page.getByRole("heading", { name: "Cold email outreach" })).toBeTruthy();
     expect(page.text).toContain("Finds leads, emails each address one pitch, tracks the replies");
-    expect(page.getByRole("heading", { name: "Runs elsewhere" })).toBeTruthy();
+    expect(page.queryByRole("heading", { name: "Runs elsewhere" })).toBeNull();
+    expect(page.queryByText("AI Lead Responder")).toBeNull();
     expect(page.queryByText(/need a look|needs a look/)).toBeNull();
   });
 
