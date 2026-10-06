@@ -16,47 +16,238 @@
   }
 }
 
+/* ==========================================================================
+   Design system
+   --------------------------------------------------------------------------
+   Art direction: "quiet, tailored, assured". Two themes define the same
+   semantic tokens; every component rule below reads tokens only.
+
+   Light, "Ivory & Ink": warm ivory paper, ink type, the brand's indigo
+   deepened to an ink-blue, thin gold lines.
+   Dark, "Midnight & Gilt": near-black with a violet cast, the brand indigo
+   lifted to periwinkle, gold highlights.
+
+   The accent is the product's original indigo (#6366f1, oklch hue 277),
+   kept on hue and given more depth.
+   ========================================================================== */
+
 :root {
-  --background: #f7f7fb;
-  --foreground: #18181b;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-soft: #eef2ff;
+  /* Surfaces */
+  --bg: #f6f2ea;
+  --surface: #fffdf9;
+  --surface-2: #f4efe6;
+  --surface-3: #ebe4d8;
+  --surface-glass: rgb(250 247 241 / 0.72);
+
+  /* Ink */
+  --ink: #1b1813;
+  --ink-2: #544c43;
+  --ink-3: #6a6157;
+  --ink-inverse: #fffdf9;
+
+  /* Lines */
+  --line: #e6ddcf;
+  --line-strong: #cfc2af;
+
+  /* The one accent: brand indigo, inked */
+  --accent: #3d3b9e;
+  --accent-fill-from: #5654d6;
+  --accent-fill-to: #34328f;
+  --accent-tint: rgb(86 84 214 / 0.08);
+  --accent-ring: rgb(86 84 214 / 0.32);
+  --on-accent: #fffdf9;
+  --accent-glow: rgb(70 68 190 / 0.38);
+
+  /* The metal */
+  --gold: #a8803a;
+  --gold-text: #6e4f14;
+  --gold-tint: rgb(168 128 58 / 0.12);
+  --gold-line: rgb(168 128 58 / 0.55);
+  /* The serif O on the indigo mark, the same in both themes. */
+  --on-mark: #f3e3bf;
+  --on-danger: #ffffff;
+
+  /* States */
+  --success: #2c6a3c;
+  --success-tint: rgb(44 106 60 / 0.09);
+  --warning: #7d5300;
+  --warning-tint: rgb(196 140 30 / 0.12);
+  --danger: #a3241a;
+  --danger-tint: rgb(163 36 26 / 0.08);
+  --danger-fill-from: #b8352a;
+  --danger-fill-to: #8a1c13;
+  --info: #2d548a;
+  --info-tint: rgb(45 84 138 / 0.08);
+
+  /* Shadows: soft, warm-tinted, negative spread */
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 0.75);
+  --shadow-sm: 0 1px 2px rgb(60 44 20 / 0.05), 0 2px 6px -2px rgb(60 44 20 / 0.06);
+  --shadow-md: 0 2px 4px rgb(60 44 20 / 0.04), 0 10px 24px -10px rgb(60 44 20 / 0.16);
+  --shadow-lg: 0 4px 8px rgb(60 44 20 / 0.04), 0 28px 64px -24px rgb(60 44 20 / 0.32);
+
+  /* Shape and motion */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --header-h: var(--site-header-h, 57px);
+
+  --grain-opacity: 0.045;
+
+  /* Kept for anything that still reads the original names. */
+  --background: var(--bg);
+  --foreground: var(--ink);
+
   color-scheme: light;
-}
-
-/* "wide:" — from 1400px the header row has room for its status pills' full text (layout.tsx). */
-@theme {
-  --breakpoint-wide: 87.5rem;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #0a0a0c;
-    --foreground: #f4f4f5;
-    --accent: #818cf8;
-    --accent-hover: #a5b4fc;
-    --accent-soft: rgba(99, 102, 241, 0.14);
+    --bg: #0c0b0f;
+    --surface: #15141a;
+    --surface-2: #1c1b22;
+    --surface-3: #25232c;
+    --surface-glass: rgb(14 13 18 / 0.7);
+    --ink: #f3eee6;
+    --ink-2: #bdb4a7;
+    --ink-3: #a79e91;
+    --ink-inverse: #0c0b0f;
+    --line: #29272f;
+    --line-strong: #3d3a45;
+    --accent: #b9baff;
+    --accent-fill-from: #b1b2ff;
+    --accent-fill-to: #8486f2;
+    --accent-tint: rgb(150 152 255 / 0.1);
+    --accent-ring: rgb(150 152 255 / 0.38);
+    --on-accent: #0c0b0f;
+    --accent-glow: rgb(132 134 242 / 0.4);
+    --gold: #d6b16a;
+    --gold-text: #e8c886;
+    --gold-tint: rgb(214 177 106 / 0.12);
+    --gold-line: rgb(214 177 106 / 0.45);
+    --success: #8fd39f;
+    --success-tint: rgb(143 211 159 / 0.1);
+    --warning: #f0c674;
+    --warning-tint: rgb(240 198 116 / 0.1);
+    --danger: #ff9b8f;
+    --danger-tint: rgb(255 155 143 / 0.09);
+    --danger-fill-from: #d9493c;
+    --danger-fill-to: #a2271c;
+    --info: #9cc3f0;
+    --info-tint: rgb(156 195 240 / 0.1);
+    --highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 28px -12px rgb(0 0 0 / 0.7);
+    --shadow-lg: 0 4px 8px rgb(0 0 0 / 0.3), 0 32px 72px -24px rgb(0 0 0 / 0.85);
+    --grain-opacity: 0.06;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --background: #0a0a0c;
-  --foreground: #f4f4f5;
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-soft: rgba(99, 102, 241, 0.14);
+  --bg: #0c0b0f;
+  --surface: #15141a;
+  --surface-2: #1c1b22;
+  --surface-3: #25232c;
+  --surface-glass: rgb(14 13 18 / 0.7);
+  --ink: #f3eee6;
+  --ink-2: #bdb4a7;
+  --ink-3: #a79e91;
+  --ink-inverse: #0c0b0f;
+  --line: #29272f;
+  --line-strong: #3d3a45;
+  --accent: #b9baff;
+  --accent-fill-from: #b1b2ff;
+  --accent-fill-to: #8486f2;
+  --accent-tint: rgb(150 152 255 / 0.1);
+  --accent-ring: rgb(150 152 255 / 0.38);
+  --on-accent: #0c0b0f;
+  --accent-glow: rgb(132 134 242 / 0.4);
+  --gold: #d6b16a;
+  --gold-text: #e8c886;
+  --gold-tint: rgb(214 177 106 / 0.12);
+  --gold-line: rgb(214 177 106 / 0.45);
+  --success: #8fd39f;
+  --success-tint: rgb(143 211 159 / 0.1);
+  --warning: #f0c674;
+  --warning-tint: rgb(240 198 116 / 0.1);
+  --danger: #ff9b8f;
+  --danger-tint: rgb(255 155 143 / 0.09);
+  --danger-fill-from: #d9493c;
+  --danger-fill-to: #a2271c;
+  --info: #9cc3f0;
+  --info-tint: rgb(156 195 240 / 0.1);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 28px -12px rgb(0 0 0 / 0.7);
+  --shadow-lg: 0 4px 8px rgb(0 0 0 / 0.3), 0 32px 72px -24px rgb(0 0 0 / 0.85);
+  --grain-opacity: 0.06;
   color-scheme: dark;
 }
+
+/*
+ * The Tailwind palette the markup's utility classes use, re-tuned to the
+ * same art direction so utilities and tokens agree: "zinc" is the warm
+ * ivory-to-ink neutral (cooler in its darkest steps, for the midnight
+ * theme), "indigo" the inked brand accent and "violet" the gold. Text steps
+ * keep Tailwind's lightness or darker, so contrast holds.
+ */
+@theme {
+  /* "wide:" — from 1400px the header row has room for its status pills' full text (layout.tsx). */
+  --breakpoint-wide: 87.5rem;
+
+  --color-zinc-50: oklch(98.4% 0.005 85);
+  --color-zinc-100: oklch(96% 0.008 85);
+  --color-zinc-200: oklch(91.5% 0.012 82);
+  --color-zinc-300: oklch(85.5% 0.016 80);
+  --color-zinc-400: oklch(70.5% 0.016 78);
+  --color-zinc-500: oklch(55% 0.014 75);
+  --color-zinc-600: oklch(44% 0.012 72);
+  --color-zinc-700: oklch(36.5% 0.01 70);
+  --color-zinc-800: oklch(26.5% 0.008 290);
+  --color-zinc-900: oklch(20.5% 0.008 290);
+  --color-zinc-950: oklch(15% 0.007 290);
+
+  --color-indigo-50: oklch(97% 0.014 277);
+  --color-indigo-100: oklch(93.8% 0.03 277);
+  --color-indigo-200: oklch(88% 0.058 277);
+  --color-indigo-300: oklch(80.5% 0.095 277);
+  --color-indigo-400: oklch(71% 0.135 277);
+  --color-indigo-500: oklch(55% 0.18 277);
+  --color-indigo-600: oklch(47% 0.165 277);
+  --color-indigo-700: oklch(40.5% 0.145 277);
+  --color-indigo-800: oklch(34% 0.12 277);
+  --color-indigo-900: oklch(28% 0.095 277);
+  --color-indigo-950: oklch(20% 0.065 277);
+
+  --color-violet-50: oklch(97.8% 0.014 85);
+  --color-violet-100: oklch(95% 0.03 85);
+  --color-violet-200: oklch(90.5% 0.052 84);
+  --color-violet-300: oklch(84% 0.075 82);
+  --color-violet-400: oklch(76% 0.095 80);
+  --color-violet-500: oklch(67% 0.1 78);
+  --color-violet-600: oklch(57% 0.095 76);
+  --color-violet-700: oklch(48% 0.085 74);
+  --color-violet-800: oklch(40.5% 0.07 72);
+  --color-violet-900: oklch(34.5% 0.058 70);
+  --color-violet-950: oklch(25% 0.042 68);
+
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
 
 /*
  * Only interactive elements animate their hover and focus changes (buttons,
@@ -67,8 +258,8 @@
 a,
 summary {
   transition-property: color, background-color, border-color, text-decoration-color, box-shadow;
-  transition-duration: 150ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -77,109 +268,763 @@ summary {
   *::after {
     transition-duration: 0ms !important;
     animation-duration: 0ms !important;
+    animation-delay: 0ms !important;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  /* Header: a positioning context on phones too (sm:sticky takes over from sm up), for its hairline. */
+  body > header {
+    position: relative;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 }
 
 body {
-  background:
-    radial-gradient(1200px 500px at 10% -10%, var(--accent-soft), transparent),
-    radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent), var(--background);
-  background-attachment: fixed;
-  color: var(--foreground);
+  isolation: isolate;
+  color: var(--ink);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  /* Two soft glows, accent and gold, fixed behind the page. */
+  background:
+    radial-gradient(1100px 520px at 8% -14%, var(--gold-tint), transparent 70%),
+    radial-gradient(1000px 560px at 96% -18%, var(--accent-tint), transparent 70%), var(--bg);
+  background-attachment: fixed;
+}
+
+/* Paper grain over the glows, under the content (body isolates it); ignores the pointer. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 ::selection {
-  background: var(--accent);
-  color: white;
+  background: var(--gold-tint);
+  color: inherit;
 }
 
-dialog::backdrop {
-  background: rgb(9 9 11 / 0.5);
+table,
+dl dd,
+[role="progressbar"],
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
+
+/* ==========================================================================
+   Component classes (shared across every pipeline page)
+   --------------------------------------------------------------------------
+   Buttons and inputs are at least 44px tall on touch-sized screens (WCAG
+   2.5.5 target size) and compact from the sm breakpoint up. Muted text uses
+   --ink-2/--ink-3, which keep 4.5:1 contrast on every surface in both themes.
+   ========================================================================== */
 
 /* Base shapes the component classes below build on. */
 @utility btn {
-  @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:min-h-9;
+  @apply inline-flex min-h-11 items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium sm:min-h-9;
+  border-radius: var(--radius-pill);
+  letter-spacing: -0.005em;
+  transition:
+    transform 180ms var(--ease),
+    box-shadow 240ms var(--ease),
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease),
+    color 180ms var(--ease),
+    filter 180ms var(--ease);
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 80ms;
+  }
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    filter: saturate(0.25);
+  }
 }
 @utility notice {
-  @apply rounded-lg border px-3 py-2 text-sm;
+  @apply border px-3.5 py-2.5 text-sm leading-relaxed;
+  border-radius: var(--radius-md);
 }
 
-/* --- Shared component classes, used across every pipeline page --- */
-/*
- * Buttons and inputs are at least 44px tall on touch-sized screens (WCAG
- * 2.5.5 target size) and compact from the sm breakpoint up. Muted text uses
- * zinc-600/zinc-400 or darker so it keeps 4.5:1 contrast on the card and
- * page backgrounds in both themes.
- */
 @layer components {
   .card {
-    @apply rounded-xl border border-zinc-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition dark:border-zinc-800 dark:bg-zinc-900/80;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    box-shadow: var(--highlight), var(--shadow-sm);
+    transition:
+      translate 320ms var(--ease),
+      box-shadow 320ms var(--ease),
+      border-color 320ms var(--ease);
   }
   .card-hover {
-    @apply hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg dark:hover:border-indigo-900/60;
+    @apply hover:-translate-y-1;
+  }
+  .card-hover:hover {
+    border-color: var(--line-strong);
+    box-shadow: var(--highlight), var(--shadow-md);
   }
 
   .btn-primary {
-    @apply btn bg-gradient-to-b from-indigo-500 to-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:from-indigo-400 hover:to-indigo-500 hover:shadow-md hover:shadow-indigo-600/30;
+    @apply btn;
+    color: var(--on-accent);
+    background-image: linear-gradient(180deg, var(--accent-fill-from), var(--accent-fill-to));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      inset 0 0 0 1px rgb(0 0 0 / 0.08),
+      0 8px 20px -10px var(--accent-glow);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.28),
+      inset 0 0 0 1px rgb(0 0 0 / 0.08),
+      0 14px 28px -12px var(--accent-glow);
   }
   .btn-secondary {
-    @apply btn border border-zinc-300 bg-white text-zinc-800 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800;
+    @apply btn;
+    color: var(--ink);
+    background-color: var(--surface);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--highlight), var(--shadow-sm);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--gold-line);
+    box-shadow: var(--highlight), var(--shadow-md);
   }
   .btn-ghost {
-    @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100;
+    @apply btn;
+    color: var(--ink-2);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--ink);
+    background-color: var(--surface-2);
   }
   /* Destructive or irreversible actions (opt out, mark lost, bounce). */
   .btn-danger {
-    @apply btn border border-red-300 bg-white text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-300 dark:hover:bg-red-950;
+    @apply btn;
+    color: var(--danger);
+    background-color: var(--surface);
+    border: 1px solid color-mix(in oklab, var(--danger) 45%, transparent);
+    box-shadow: var(--highlight), var(--shadow-sm);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--danger-tint);
+    border-color: var(--danger);
   }
   .btn-danger-solid {
-    @apply btn bg-red-600 text-white hover:bg-red-500;
+    @apply btn;
+    color: var(--on-danger);
+    background-image: linear-gradient(180deg, var(--danger-fill-from), var(--danger-fill-to));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.2),
+      0 8px 20px -10px var(--danger-fill-to);
   }
 
   .input {
-    @apply min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 shadow-sm transition placeholder:text-zinc-500 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-1 focus:ring-offset-white dark:focus:border-indigo-400 dark:focus:ring-indigo-400 dark:focus:ring-offset-zinc-950 disabled:opacity-60 aria-[invalid=true]:border-red-500 aria-[invalid=true]:focus:ring-red-600 dark:aria-[invalid=true]:focus:ring-red-400 sm:min-h-9 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-400;
+    @apply min-h-11 w-full px-3 py-1.5 text-sm sm:min-h-10;
+    color: var(--ink);
+    background-color: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.04);
+    transition:
+      border-color 180ms var(--ease),
+      box-shadow 240ms var(--ease),
+      background-color 180ms var(--ease);
+    &::placeholder {
+      color: var(--ink-3);
+    }
+    &:hover {
+      border-color: color-mix(in oklab, var(--line-strong) 60%, var(--ink-3));
+    }
+    &:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow:
+        inset 0 1px 2px rgb(0 0 0 / 0.04),
+        0 0 0 4px var(--accent-ring);
+    }
+    &:disabled {
+      opacity: 0.6;
+      background-color: var(--surface-2);
+    }
+    &[aria-invalid="true"] {
+      border-color: var(--danger);
+      background-color: color-mix(in oklab, var(--surface) 92%, var(--danger));
+    }
+    &[aria-invalid="true"]:focus {
+      box-shadow: 0 0 0 4px var(--danger-tint);
+    }
+  }
+  /* A drawn chevron in place of the system arrow. */
+  select.input {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+    background-position:
+      calc(100% - 17px) 52%,
+      calc(100% - 12px) 52%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
   }
 
   .field-label {
-    @apply flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300;
+    @apply flex flex-col gap-1.5 text-sm font-medium;
+    color: var(--ink-2);
   }
   .field-error {
-    @apply text-xs font-normal text-red-700 dark:text-red-300;
+    @apply text-xs font-normal;
+    color: var(--danger);
   }
   .muted {
-    @apply text-zinc-600 dark:text-zinc-400;
+    color: var(--ink-2);
   }
 
+  .tab-active,
+  .tab-inactive {
+    @apply inline-flex min-h-11 items-center px-3.5 py-1 text-xs font-medium sm:min-h-8;
+    border-radius: var(--radius-pill);
+    transition:
+      background-color 180ms var(--ease),
+      border-color 180ms var(--ease),
+      color 180ms var(--ease),
+      box-shadow 240ms var(--ease);
+  }
   .tab-active {
-    @apply inline-flex min-h-11 items-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 px-3 py-1 text-xs font-medium text-white shadow-sm shadow-indigo-600/30 transition sm:min-h-7;
+    color: var(--on-accent);
+    background-image: linear-gradient(180deg, var(--accent-fill-from), var(--accent-fill-to));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.2),
+      0 6px 14px -8px var(--accent-glow);
   }
   .tab-inactive {
-    @apply inline-flex min-h-11 items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-200 sm:min-h-7 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700;
+    color: var(--ink-2);
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--highlight);
+  }
+  .tab-inactive:hover {
+    color: var(--ink);
+    border-color: var(--gold-line);
   }
 
   .notice-info {
-    @apply notice border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200;
+    @apply notice;
+    color: var(--info);
+    background-color: var(--info-tint);
+    border-color: color-mix(in oklab, var(--info) 28%, transparent);
   }
   .notice-success {
-    @apply notice border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200;
+    @apply notice;
+    color: var(--success);
+    background-color: var(--success-tint);
+    border-color: color-mix(in oklab, var(--success) 28%, transparent);
   }
   .notice-warning {
-    @apply notice border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200;
+    @apply notice;
+    color: var(--warning);
+    background-color: var(--warning-tint);
+    border-color: color-mix(in oklab, var(--warning) 32%, transparent);
   }
   .notice-error {
-    @apply notice border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200;
+    @apply notice;
+    color: var(--danger);
+    background-color: var(--danger-tint);
+    border-color: color-mix(in oklab, var(--danger) 28%, transparent);
   }
 
   /* Gradient headings, for fixed wording only: the gradient fills every
      glyph, so an emoji in user-entered text would render as a solid blob. */
   .accent-text {
-    @apply bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-300;
+    @apply w-fit max-w-full bg-clip-text text-transparent;
+    background-image: linear-gradient(100deg, var(--ink) 30%, var(--accent) 75%, var(--gold) 105%);
   }
-  /* The same accent as a solid colour, for headings that show user-entered
-     text (a lead's name), so emoji keep their own colours. */
+  /* The same heading as a solid colour, for user-entered text (a lead's
+     name), so emoji keep their own colours. */
   .accent-text-solid {
-    @apply text-indigo-700 dark:text-indigo-300;
+    color: var(--ink);
+  }
+}
+
+/* ==========================================================================
+   Page-level styling of the existing markup
+   --------------------------------------------------------------------------
+   Unlayered on purpose: these rules restyle elements whose markup carries
+   utility classes, so they must win over those utilities. They change
+   paint only, never what is on the page or where.
+   ========================================================================== */
+
+/* --- Header: frosted glass, a gold hairline, the mark ---------------------------------------- */
+body > header {
+  background-color: var(--surface-glass);
+  backdrop-filter: saturate(1.6) blur(18px);
+  -webkit-backdrop-filter: saturate(1.6) blur(18px);
+  border-bottom-color: transparent;
+}
+body > header::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--gold-line) 30%, var(--gold-line) 70%, transparent);
+}
+/* The "O" tile: brand indigo, a gold edge, a serif O. */
+body > header a[href="/"] > span:first-child {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--on-mark);
+  border-radius: 9px;
+  background-image: linear-gradient(145deg, var(--color-indigo-500), var(--color-indigo-900));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(214 177 106 / 0.5),
+    0 6px 14px -6px var(--accent-glow);
+}
+body > header a[href="/"] > span:nth-child(2) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+/* Header tooltips: an ink chip. */
+body > header [role="tooltip"] {
+  color: var(--ink-inverse);
+  background-color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  box-shadow: var(--shadow-md);
+}
+
+/* --- Main nav: the current page as a raised pill with a tiny accent bar --------------------- */
+nav[aria-label="Main"] a {
+  position: relative;
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+}
+nav[aria-label="Main"] a:hover {
+  color: var(--ink);
+  background-color: var(--surface-2);
+}
+nav[aria-label="Main"] a[aria-current="page"] {
+  color: var(--ink);
+  background-color: var(--surface);
+  box-shadow:
+    var(--highlight),
+    0 0 0 1px var(--line),
+    var(--shadow-sm);
+}
+nav[aria-label="Main"] a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 14px;
+  height: 2px;
+  translate: -50% 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--accent-fill-from), var(--gold));
+}
+
+/* The theme picker (and any other bare select): a pill with a drawn chevron. */
+select:not(.input) {
+  appearance: none;
+  border-radius: var(--radius-pill);
+  border-color: var(--line-strong);
+  background-color: var(--surface);
+  color: var(--ink);
+  padding-left: 0.7rem;
+  padding-right: 1.6rem;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 52%,
+    calc(100% - 9px) 52%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  box-shadow: var(--highlight);
+}
+
+/* --- Footer --------------------------------------------------------------------------------- */
+body > footer {
+  border-top-color: var(--line);
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+/* --- Type ----------------------------------------------------------------------------------- */
+/* Page titles: the display serif, tight, with a short accent-to-gold rule beneath. */
+main h1 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: clamp(1.9rem, 1.35rem + 1.7vw, 2.75rem);
+  font-weight: 500;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  font-variant-numeric: lining-nums;
+  padding-bottom: 0.06em;
+}
+main h1::after {
+  content: "";
+  display: block;
+  width: 64px;
+  height: 2px;
+  margin-top: 0.55rem;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--accent-fill-from), var(--gold));
+}
+/* A centred title keeps its centring and its rule. */
+main h1.text-center {
+  margin-inline: auto;
+}
+main h1.text-center::after {
+  margin-inline: auto;
+}
+/* The big "404" and "Oops" on the error pages. */
+main span.accent-text.text-5xl {
+  font-family: var(--font-display);
+  font-size: 4.5rem;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+/* Card and section titles, and dialog titles, in the serif too. */
+main h2,
+dialog h2 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+}
+main .card h2.text-sm {
+  font-size: 1rem;
+}
+/* Small spaced capitals for detail labels. */
+main .card dl dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* Big numbers: the dashboard tiles and the stats cards. */
+main .card dl dd > a.text-lg,
+main .card > .accent-text.text-2xl {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+/* The dashboard's number tiles. */
+main .card dl > div.rounded-lg {
+  border: 1px solid var(--line);
+  background-color: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+/* Text links: accent ink with a gold underline. */
+a.underline {
+  color: var(--accent);
+  text-decoration-color: var(--gold-line);
+  text-underline-offset: 3px;
+}
+a.underline:hover {
+  text-decoration-color: var(--accent);
+}
+code {
+  border-radius: 6px;
+  background-color: var(--surface-2);
+  color: var(--ink-2);
+}
+/* Quoted replies: serif italic with a gold bar. */
+blockquote {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.02em;
+  line-height: 1.55;
+  color: var(--ink-2);
+  border-left: 2px solid var(--gold);
+  padding-left: 0.9rem;
+}
+details > summary {
+  color: var(--ink-2);
+}
+details > summary:hover {
+  color: var(--ink);
+}
+
+/* --- The hero card: the dashboard's first pipeline --------------------------------------------- */
+main > div > .grid > .card-hover:first-child {
+  border-color: transparent;
+  background:
+    radial-gradient(260px 160px at 0% 0%, var(--accent-tint), transparent 70%) padding-box,
+    radial-gradient(260px 160px at 100% 100%, var(--gold-tint), transparent 70%) padding-box,
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(135deg, var(--accent-ring), var(--line) 40%, var(--line) 60%, var(--gold-line)) border-box;
+  box-shadow: var(--highlight), var(--shadow-md);
+}
+
+/* Pipeline letter tiles on the dashboard: the mark's indigo and gold. */
+main .card span.bg-gradient-to-br {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.05rem;
+  color: var(--on-mark);
+  background-image: linear-gradient(145deg, var(--color-indigo-500), var(--color-indigo-900));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(214 177 106 / 0.45),
+    0 6px 14px -6px var(--accent-glow);
+}
+
+/* --- Tables --------------------------------------------------------------------------------- */
+main .card table thead {
+  border-bottom-color: var(--line);
+}
+main .card table thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  background-color: var(--surface-2);
+}
+main .card table thead th:first-child {
+  border-top-left-radius: calc(var(--radius-lg) - 1px);
+}
+main .card table thead th:last-child {
+  border-top-right-radius: calc(var(--radius-lg) - 1px);
+}
+main .card table thead th a:hover {
+  color: var(--ink);
+}
+main .card table th[aria-sort="ascending"] span[aria-hidden],
+main .card table th[aria-sort="descending"] span[aria-hidden] {
+  color: var(--accent);
+}
+main .card table tbody tr {
+  border-color: var(--line);
+}
+main .card table tbody tr:hover {
+  background-color: var(--gold-tint);
+}
+/* Each lead's name, in the serif. */
+main .card table tbody td > a.font-medium,
+main ul.card li a.font-medium {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+main .card table tbody td > a.font-medium:hover,
+main ul.card li a.font-medium:hover {
+  color: var(--accent);
+}
+/* The page footer under a list, tinted. */
+nav[aria-label="Pages"] {
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-2);
+}
+
+/* --- Empty states: a small conic-gradient ring ornament --------------------------------------- */
+main .card.items-center.text-center::before {
+  content: "";
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(from 210deg, var(--accent-fill-from), var(--gold), var(--accent-fill-to), var(--accent-fill-from));
+  mask: radial-gradient(circle, transparent 9px, #000 10px);
+  -webkit-mask: radial-gradient(circle, transparent 9px, #000 10px);
+  opacity: 0.85;
+}
+
+/* --- Checkboxes as chips ----------------------------------------------------------------------- */
+label:has(> input[type="checkbox"]) {
+  padding: 0 0.85rem 0 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--highlight);
+  transition:
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease);
+}
+label:has(> input[type="checkbox"]:checked) {
+  background-color: var(--accent-tint);
+  border-color: var(--accent-ring);
+}
+label:has(> input[type="checkbox"]:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 6px;
+  background-color: var(--surface);
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease);
+}
+input[type="checkbox"]::after {
+  content: "";
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--on-accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.3 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.3 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  scale: 0;
+  transition: scale 180ms var(--ease);
+}
+input[type="checkbox"]:checked {
+  border-color: transparent;
+  background-image: linear-gradient(180deg, var(--accent-fill-from), var(--accent-fill-to));
+}
+input[type="checkbox"]:checked::after {
+  scale: 1;
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Progress: bars, and native progress/meter ------------------------------------------------- */
+[role="progressbar"] {
+  background-color: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  border-radius: var(--radius-pill);
+}
+[role="progressbar"] > div {
+  background-image: linear-gradient(90deg, var(--accent-fill-to), var(--accent-fill-from) 70%, var(--gold));
+  border-radius: var(--radius-pill);
+}
+progress,
+meter {
+  appearance: none;
+  height: 0.5rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-3);
+  overflow: hidden;
+}
+progress::-webkit-progress-bar,
+meter::-webkit-meter-bar {
+  background-color: var(--surface-3);
+  border-radius: var(--radius-pill);
+}
+progress::-webkit-progress-value,
+meter::-webkit-meter-optimum-value {
+  background-image: linear-gradient(90deg, var(--accent-fill-to), var(--accent-fill-from) 70%, var(--gold));
+  border-radius: var(--radius-pill);
+}
+progress::-moz-progress-bar {
+  background-image: linear-gradient(90deg, var(--accent-fill-to), var(--accent-fill-from) 70%, var(--gold));
+}
+
+/* --- Dialogs ------------------------------------------------------------------------------- */
+dialog {
+  color: var(--ink);
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--highlight), var(--shadow-lg);
+}
+dialog::backdrop {
+  background: rgb(12 11 15 / 0.48);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+}
+dialog > h2 {
+  font-size: 1.3rem;
+}
+/* A fading gold hairline under the title. */
+dialog > h2::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 0.75rem;
+  background: linear-gradient(90deg, var(--gold-line), transparent);
+}
+/* The summary of what will happen, as a tinted panel. */
+dialog > div > ul,
+dialog > div > dl {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-2);
+}
+
+/* --- Motion: entrances move content, never fade it --------------------------------------------- */
+@keyframes rise {
+  from {
+    transform: translateY(12px);
+  }
+}
+/*
+ * Cards rise into place together as a page arrives. Transform only, so text
+ * has full contrast from the first frame. A card holding a table is left
+ * still, so its pinned column headers line up with the site header at once.
+ */
+main .card:not(:has(table)) {
+  animation: rise 380ms var(--ease) both;
+}
+dialog[open] {
+  animation: rise 320ms var(--ease) both;
+}
+
+/* --- High-contrast mode: keep the edges ---------------------------------------------------------- */
+@media (forced-colors: active) {
+  .card,
+  dialog,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .btn-danger-solid,
+  .tab-active,
+  .tab-inactive,
+  .input,
+  nav[aria-label="Main"] a[aria-current="page"],
+  label:has(> input[type="checkbox"]),
+  [role="progressbar"] {
+    border: 1px solid CanvasText;
+  }
+  .accent-text {
+    color: CanvasText;
+    background: none;
+  }
+  input[type="checkbox"] {
+    appearance: auto;
   }
 }

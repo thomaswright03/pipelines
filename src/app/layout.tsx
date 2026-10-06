@@ -15,6 +15,9 @@ import { countUnmatchedInterested, countUnmatchedReplies } from "@/lib/outreach/
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import { databaseReachable } from "@/lib/db-health";
 import DatabaseUnavailable from "@/components/DatabaseUnavailable";
+// The display serif, bundled with the app (no font CDN): titles, names and big numbers (globals.css).
+import "@fontsource-variable/fraunces/opsz.css";
+import "@fontsource-variable/fraunces/opsz-italic.css";
 import "./globals.css";
 
 const geistSans = Geist({

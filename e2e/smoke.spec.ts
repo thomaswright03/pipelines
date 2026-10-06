@@ -688,9 +688,9 @@ test("the browser tab and home-screen icons are the header's O mark, not the fra
     .evaluateAll((links) => links.map((l) => `${l.getAttribute("rel")} ${l.getAttribute("href")?.split("?")[0]}`));
   expect(icons).toEqual(expect.arrayContaining(["icon /favicon.ico", "icon /icon.svg", "apple-touch-icon /apple-icon.png"]));
   const svg = await (await request.get("/icon.svg")).text();
-  // The header mark's gradient (indigo-500 to violet-600).
-  expect(svg).toContain("#6366f1");
-  expect(svg).toContain("#7c3aed");
+  // The header mark's gradient (the themed indigo-500 to indigo-900).
+  expect(svg).toContain("#5b60d7");
+  expect(svg).toContain("#1f2156");
   const ico = await request.get("/favicon.ico");
   expect(ico.ok()).toBe(true);
   // create-next-app's favicon is 25,931 bytes; ours holds 16, 32 and 48 px renders of icon.svg.
@@ -713,7 +713,7 @@ for (const theme of ["light", "dark"] as const) {
     expect(await page.evaluate(() => document.fonts.check("16px Geist"))).toBe(true);
     expect(await page.locator("body").evaluate((b) => getComputedStyle(b).fontFamily)).toMatch(/^Geist/);
     const background = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--background").trim());
-    expect(background).toBe(theme === "dark" ? "#0a0a0c" : "#f7f7fb");
+    expect(background).toBe(theme === "dark" ? "#0c0b0f" : "#f6f2ea");
     for (const selector of ["h1", ".card p", "a.btn"]) {
       expect(await textContrast(page, selector), `${selector} in the ${theme} theme`).toBeGreaterThanOrEqual(4.5);
     }
@@ -726,7 +726,7 @@ test("the database-down page follows a theme picked in the header over the syste
   await page.emulateMedia({ colorScheme: "light" });
   await page.addInitScript(() => localStorage.setItem("theme", "dark"));
   await page.goto("/outage-preview");
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--background").trim())).toBe("#0a0a0c");
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--background").trim())).toBe("#0c0b0f");
 });
 
 test("each dashboard card's buttons are named after its pipeline", async ({ page }) => {
