@@ -123,48 +123,61 @@ model PipelineRun {
 // transaction as its effects (reply time, status, opt-out). A re-delivery
 // of the same reply finds its row here and changes nothing again.
 model InboundReply {
-  id              String    @id @default(cuid())
+  id                 String    @id @default(cuid())
   // "mid:<Message-ID>" when the Worker sends one, otherwise
   // "hash:<sha256 of sender, subject and body>" (matched within a window).
-  dedupeKey       String
-  fromEmail       String
-  subject         String?
-  optedOut        Boolean
+  dedupeKey          String
+  fromEmail          String
+  subject            String?
+  optedOut           Boolean
   // "pipeline:leadId" for each lead the reply was recorded on.
-  matched         String[]
+  matched            String[]
   // The replier's own words (quoted history and signature removed), so an
   // unmatched reply can be read and attached to the right lead.
-  text            String?
-  receivedAt      DateTime  @default(now())
+  text               String?
+  receivedAt         DateTime  @default(now())
   // Set when the operator attached an unmatched reply to a lead
   // ("attached:<pipeline>:<leadId>"), marked its address opted out
   // ("opted_out") or dismissed it ("dismissed").
-  resolvedAt      DateTime?
-  resolution      String?
+  resolvedAt         DateTime?
+  resolution         String?
   // Set when the reply "needs a look": the rules weren't confident it is a
   // positive reply or an opt-out (reply-classifier.ts). Its leads are
   // flagged, and nothing is emailed to the address until the operator
   // resolves it; the reason is one sentence for the lead page.
-  reviewReason    String?
+  reviewReason       String?
   // What kind of message this was: "reply" (a person wrote it),
   // "auto_reply" (out-of-office/autoresponder — recorded in the lead's
   // history only) or "bounce" (a delivery-failure notice — marks the
   // failed recipient's send bounced). See src/lib/outreach/auto-mail.ts.
-  kind            String    @default("reply")
+  kind               String    @default("reply")
   // Why it was read as an automatic reply or a bounce (header, subject,
   // SMTP diagnostic), shown on the Replies page.
-  kindReason      String?
+  kindReason         String?
   // For a bounce: the address that couldn't be delivered to, if named.
-  failedRecipient String?
+  failedRecipient    String?
   // Which version of the reply and automatic-mail rules made the kind,
   // opt-out and review verdicts above (see src/lib/outreach/rules-version.ts).
-  rulesVersion    String?
+  rulesVersion       String?
   // For a reply a person wrote: the classifier's verdict — "opt_out",
   // "positive", "declined", "acknowledged" or "needs_look". A "declined" or
   // "acknowledged" reply holds every further email to fromEmail (send.ts)
   // without asking the operator to look. Null for automatic replies and
   // bounces.
-  verdict         String?
+  verdict            String?
+  // Interest alerts (src/lib/outreach/interest-alert.ts): the urgent Hitta
+  // report built for a reply that shows interest (JSON: project, title,
+  // summary, urgency), when Hitta confirmed it (201), and why the last try
+  // failed. The CSO job resends any report that has no interestAlertedAt.
+  interestReport     String?
+  interestAlertedAt  DateTime?
+  interestAlertError String?
+  // The CSO's own reading of a reply the rules flagged "needs a look":
+  // "interested", "not_interested" or "unclear", and one sentence why. An
+  // "interested" reading also gets an interestReport.
+  csoReviewedAt      DateTime?
+  csoReading         String?
+  csoNote            String?
 
   @@index([dedupeKey, receivedAt])
   @@index([receivedAt])

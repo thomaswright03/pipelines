@@ -96,6 +96,8 @@ type InboundResult = {
   needsReview: string[];
   /** True when this reply was already recorded; nothing was changed. */
   duplicate: boolean;
+  /** The InboundReply row this reply is stored as. */
+  replyId: string;
 };
 
 /** Without a Message-ID, an identical reply within this window is treated as a re-delivery. */
@@ -184,6 +186,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
           review: earlier.reviewReason,
           needsReview: [],
           duplicate: true,
+          replyId: earlier.id,
         };
       }
 
@@ -228,7 +231,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
         }
       }
 
-      await tx.inboundReply.create({
+      const stored = await tx.inboundReply.create({
         data: {
           dedupeKey,
           fromEmail,
@@ -256,6 +259,7 @@ export async function handleInboundReply(message: InboundEmail, now: Date = new 
         review: kind === "reply" ? classification.review : null,
         needsReview,
         duplicate: false,
+        replyId: stored.id,
       };
     },
     { timeout: 20_000 },
