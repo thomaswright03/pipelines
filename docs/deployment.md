@@ -189,9 +189,10 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
    `20260929100000_connection_checks`, `20260929110000_lead_status_check`, `20260930090000_send_attempts`,
    `20260930100000_send_log_lead_index`, `20261001090000_send_log_template_version` (the subject and
    template version of each send), `20261002090000_inbound_verdict` (each reply's verdict, backfilled from
-   the stored fields, and the rules version on each correction) and `20261003090000_garbage_ai_pipeline`
+   the stored fields, and the rules version on each correction), `20261003090000_garbage_ai_pipeline`
    (the Garbage AI tables: `HaulerLead` with its status check, its activity and send log, and
-   `ScrapedHaulerCity` — new and empty, so nothing existing changes). All are additive.
+   `ScrapedHaulerCity` — new and empty, so nothing existing changes) and `20261015090000_interest_alerts`
+   (interest-alert and CSO-reading columns on `InboundReply`, all empty to start). All are additive.
    `20260929110000_lead_status_check` adds its status checks `NOT VALID`, so they can't fail on existing rows. Afterwards, check for rows it
    would reject and fix them (for example with the lead page's status control), then validate it:
 
@@ -259,3 +260,9 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 15. **Know the emergency stop.** Add `OUTBOUND_EMAIL_DISABLED` only when you need it (steps in "Emergency
     stop" above); it is not set in normal operation. Consider saving the steps somewhere you can reach
     without the app.
+16. **Turn on interest calls.** Add `HITTA_API_KEY` (the Chief Sales Officer's Hitta key) to the Production
+    environment in Vercel and redeploy. From then on every reply the rules read as interested sends Hitta an
+    urgent report, so Hitta calls you right away with who replied, about which product, what they said and
+    their number (`src/lib/outreach/interest-alert.ts`). Without the key the report is still stored on the
+    reply, and the CSO job (thomaswright03/Chief-Sales-Officer) sends it, along with interested replies it
+    finds among the flagged ones.

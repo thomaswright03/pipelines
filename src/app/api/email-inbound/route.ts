@@ -4,6 +4,7 @@ import { isAuthorizedBearer } from "@/lib/auth-header";
 import { logError, logWarn } from "@/lib/log";
 import { isDatabaseUnavailable } from "@/lib/db-health";
 import { extractEmailAddress, handleInboundReply } from "@/lib/outreach/inbound";
+import { alertInterest } from "@/lib/outreach/interest-alert";
 
 // Receives a parsed inbound email from the Cloudflare Email Worker that
 // catches replies to the outreach sender addresses (its source is in
@@ -88,7 +89,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return Response.json({ ...(await handleInboundReply(parsed.data)), retry: false });
+    const result = await handleInboundReply(parsed.data);
+    // Anyone interested gets Thomas an urgent call from Hitta. Sent after the
+    // reply is safely recorded; a failure is kept on the reply for the CSO
+    // job to resend and never fails the delivery.
+    if (!result.duplicate && result.kind === "reply" && result.verdict === "positive") {
+      await alertInterest(result.replyId);
+    }
+    return Response.json({ ...result, retry: false });
   } catch (err) {
     const code = isDatabaseUnavailable(err) ? "db_unavailable" : "internal";
     logError("api.email-inbound", err, { from: parsed.data.from, code });
