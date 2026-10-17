@@ -45,6 +45,12 @@ const NO_LOOKUP: EmailLookup = { website: null, email: null, evidence: null, unv
 const LOOKUP_TIME_LIMIT_MS = 15_000;
 /** A lookup isn't started with less time than this left before the deadline. */
 const MIN_LOOKUP_MS = 2_000;
+/**
+ * How many lookups run at once. One at a time, a 25-second daily run only
+ * got through 5–10 businesses (each lookup takes a few seconds), so it
+ * found an address for one or two of them.
+ */
+const LOOKUP_CONCURRENCY = 8;
 
 function safeHostname(url: string): string {
   try {
@@ -249,54 +255,37 @@ export async function createLeadsFromCandidates(
   );
   const emailsThisRun = new Set<string>();
 
-  for (const candidate of named) {
-    if (result.created.length >= ctx.maxCreate) break;
-    const facts = {
-      name: candidate.name,
-      phone: normalizePhone(candidate.phone),
-      address: candidate.address,
-      city: candidate.city ?? ctx.city,
-    };
+  // The lookups (website guesses and page fetches) run a few at a time, so
+  // one run checks the whole batch inside its time budget instead of a
+  // handful; the database checks and writes still go one at a time, in the
+  // order the lookups finish.
+  let saving: Promise<void> = Promise.resolve();
+  const oneAtATime = (save: () => Promise<void>): Promise<void> => {
+    const next = saving.then(save);
+    saving = next.catch(() => {});
+    return next;
+  };
+  let failed = false;
+
+  const save = async (
+    candidate: DiscoveryCandidate,
+    facts: { name: string; phone: string | null; address: string | null; city: string | null },
+    lookup: EmailLookup,
+    email: string,
+  ) => {
+    // A same-named candidate earlier in this batch may have just been saved.
     if (known.some((lead) => isSameLead(lead, facts))) {
       result.skipped.existingName++;
-      continue;
+      return;
     }
-    const remaining = ctx.deadline - now();
-    if (remaining < MIN_LOOKUP_MS) {
-      result.stoppedEarly = true;
-      break;
-    }
-    // Cut the lookup off at the deadline, not just at its own limit.
-    const cappedByDeadline = remaining < LOOKUP_TIME_LIMIT_MS;
-    const signal = AbortSignal.timeout(Math.min(LOOKUP_TIME_LIMIT_MS, remaining));
-
-    let lookup: EmailLookup;
-    try {
-      lookup = await lookupEmail(pipelineId, { ...candidate, ...facts }, signal);
-    } catch (err) {
-      logError("discovery.lookup", err, { pipeline: pipelineId, candidate: candidate.name });
-      lookup = NO_LOOKUP;
-    }
-    if (signal.aborted && cappedByDeadline && !lookup.email) {
-      // Ran out of batch time mid-lookup: not a verdict on this candidate.
-      result.stoppedEarly = true;
-      break;
-    }
-    result.examined++;
-    if (!lookup.email) {
-      if (lookup.unverified) result.skipped.unverifiedSite++;
-      else if (lookup.unreachable) result.skipped.unreachable++;
-      else result.skipped.noEmail++;
-      continue;
-    }
-    const email = lookup.email;
+    if (result.created.length >= ctx.maxCreate) return;
     if (emailsThisRun.has(email) || (await describeAddressConflict(pipelineId, email))) {
       result.skipped.addressInUse++;
-      continue;
+      return;
     }
     if (await prisma.suppressedEmail.findUnique({ where: { email } })) {
       result.skipped.optedOut++;
-      continue;
+      return;
     }
 
     emailsThisRun.add(email);
@@ -319,7 +308,61 @@ export async function createLeadsFromCandidates(
     });
     known.push({ id: lead.id, name: lead.name, phone: lead.phone, address: lead.address, city: lead.city });
     result.created.push({ id: lead.id, name: lead.name, email });
-  }
+  };
+
+  let next = 0;
+  const worker = async () => {
+    while (next < named.length && !failed) {
+      if (result.created.length >= ctx.maxCreate) return;
+      const candidate = named[next++]!;
+      const facts = {
+        name: candidate.name,
+        phone: normalizePhone(candidate.phone),
+        address: candidate.address,
+        city: candidate.city ?? ctx.city,
+      };
+      if (known.some((lead) => isSameLead(lead, facts))) {
+        result.skipped.existingName++;
+        continue;
+      }
+      const remaining = ctx.deadline - now();
+      if (remaining < MIN_LOOKUP_MS) {
+        result.stoppedEarly = true;
+        return;
+      }
+      // Cut the lookup off at the deadline, not just at its own limit.
+      const cappedByDeadline = remaining < LOOKUP_TIME_LIMIT_MS;
+      const signal = AbortSignal.timeout(Math.min(LOOKUP_TIME_LIMIT_MS, remaining));
+
+      let lookup: EmailLookup;
+      try {
+        lookup = await lookupEmail(pipelineId, { ...candidate, ...facts }, signal);
+      } catch (err) {
+        logError("discovery.lookup", err, { pipeline: pipelineId, candidate: candidate.name });
+        lookup = NO_LOOKUP;
+      }
+      if (signal.aborted && cappedByDeadline && !lookup.email) {
+        // Ran out of batch time mid-lookup: not a verdict on this candidate.
+        result.stoppedEarly = true;
+        return;
+      }
+      result.examined++;
+      if (!lookup.email) {
+        if (lookup.unverified) result.skipped.unverifiedSite++;
+        else if (lookup.unreachable) result.skipped.unreachable++;
+        else result.skipped.noEmail++;
+        continue;
+      }
+      const email = lookup.email;
+      try {
+        await oneAtATime(() => save(candidate, facts, lookup, email));
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, named.length) }, worker));
   return result;
 }
 

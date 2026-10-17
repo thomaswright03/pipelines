@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { createLeadsFromCandidates, findEmailForLead, type DiscoveryCandidate } from "@/lib/outreach/discovery";
 import { getPipeline } from "@/lib/outreach/pipelines";
@@ -95,5 +95,54 @@ describe("email lookup for an existing lead", () => {
     expect(outcome).toMatchObject({ kind: "found", email: "team@acmerealty.test" });
     const after = await prisma.agentLead.findUniqueOrThrow({ where: { id: second.id } });
     expect(after.sendBlockedReason).toMatch(/^Duplicate address/);
+  });
+});
+
+describe("lookups in a batch", () => {
+  it("runs several at once, so a short budget still checks the whole batch, and saves each address once", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = new URL(input instanceof URL ? input.toString() : typeof input === "string" ? input : (input as Request).url);
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        inFlight--;
+        if (url.pathname !== "/") return new Response("", { status: 404 });
+        // biz0 and biz1 share one address: only the first saved keeps it.
+        const host = url.hostname === "biz1.test" ? "biz0.test" : url.hostname;
+        return new Response(`<html><body>Email us: hello@${host}</body></html>`, { headers: { "content-type": "text/html" } });
+      }),
+    );
+    const candidates: DiscoveryCandidate[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `Business ${i}`,
+      phone: null,
+      address: null,
+      website: `https://biz${i}.test`,
+    }));
+
+    const result = await createLeadsFromCandidates("cold-outreach", candidates, { ...ctx, maxCreate: 50, deadline: Date.now() + 10_000 });
+
+    expect(result.examined).toBe(16);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(result.created).toHaveLength(15);
+    expect(result.skipped.addressInUse).toBe(1);
+    expect(new Set(result.created.map((l) => l.email)).size).toBe(15);
+  });
+
+  it("stops at maxCreate", async () => {
+    stubFetch(Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`https://biz${i}.test`, page(`hello@biz${i}.test`)])));
+    const candidates: DiscoveryCandidate[] = Array.from({ length: 6 }, (_, i) => ({
+      name: `Shop ${i}`,
+      phone: null,
+      address: null,
+      website: `https://biz${i}.test`,
+    }));
+
+    const result = await createLeadsFromCandidates("cold-outreach", candidates, { ...ctx, maxCreate: 2 });
+
+    expect(result.created).toHaveLength(2);
   });
 });
