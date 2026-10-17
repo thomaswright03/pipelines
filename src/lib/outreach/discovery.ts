@@ -266,6 +266,8 @@ export async function createLeadsFromCandidates(
     return next;
   };
   let failed = false;
+  // Addresses found but not yet through the checks: they may still make the batch full.
+  let pendingSaves = 0;
 
   const save = async (
     candidate: DiscoveryCandidate,
@@ -313,7 +315,13 @@ export async function createLeadsFromCandidates(
   let next = 0;
   const worker = async () => {
     while (next < named.length && !failed) {
-      if (result.created.length >= ctx.maxCreate) return;
+      // No more lookups once the addresses already found would fill the
+      // batch; if some of them turn out unusable, carry on looking.
+      while (result.created.length + pendingSaves >= ctx.maxCreate) {
+        if (pendingSaves === 0) return;
+        await saving;
+      }
+      if (next >= named.length || failed) return;
       const candidate = named[next++]!;
       const facts = {
         name: candidate.name,
@@ -354,11 +362,14 @@ export async function createLeadsFromCandidates(
         continue;
       }
       const email = lookup.email;
+      pendingSaves++;
       try {
         await oneAtATime(() => save(candidate, facts, lookup, email));
       } catch (err) {
         failed = true;
         throw err;
+      } finally {
+        pendingSaves--;
       }
     }
   };

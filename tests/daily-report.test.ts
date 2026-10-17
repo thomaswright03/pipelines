@@ -98,8 +98,8 @@ async function seedDay() {
 
 describe("daily report contents", () => {
   it("has a section per pipeline with the last 24 hours' numbers", async () => {
-    await savePipelineSchedule(VAULT_SCHEDULE_ID, { enabled: true, businessesPerRun: 50 });
-    await savePipelineSchedule(GARBAGE_AI_SCHEDULE_ID, { enabled: true, businessesPerRun: 30 });
+    await savePipelineSchedule(VAULT_SCHEDULE_ID, { enabled: true, emailsPerDay: 50 });
+    await savePipelineSchedule(GARBAGE_AI_SCHEDULE_ID, { enabled: true, emailsPerDay: 30 });
     await seedDay();
 
     const report = await buildDailyReport();
@@ -124,15 +124,15 @@ describe("daily report contents", () => {
 
     const { subject, text } = renderDailyReport(report);
     expect(subject).toMatch(/3 emails sent, 1 reply, \d+ things need attention/);
-    expect(text).toMatch(/COLD OUTREACH \(daily run 8:33 AM Arizona time\)/);
-    expect(text).toMatch(/GARBAGE AI \(daily run 8:00 AM Arizona time\)/);
+    expect(text).toMatch(/COLD OUTREACH \(runs every hour from 8:33 AM to 3:33 PM Arizona time\)/);
+    expect(text).toMatch(/GARBAGE AI \(runs every hour from 8:00 AM to 3:00 PM Arizona time\)/);
     expect(text).toMatch(/DATALEADSELL\.COM: daily run is turned off\./);
     expect(text).toMatch(/Acme Hauling: Couldn't reach the email service/);
     expect(text).toMatch(/1 reply came in that couldn't be matched/);
   });
 
   it("flags a turned-on pipeline whose run didn't happen, and a paused outbox", async () => {
-    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, businessesPerRun: 10 });
+    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, emailsPerDay: 10 });
     await setOutboundPaused(true);
 
     const report = await buildDailyReport();

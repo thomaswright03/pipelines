@@ -18,7 +18,7 @@ import { runDailyDiscoveryAndSend, type DailyRunOptions } from "@/lib/outreach/d
 import type { RunOutcome } from "@/lib/outreach/runs";
 
 export const GARBAGE_AI_DAILY_SOURCE = "Yelp search (daily Garbage AI run)";
-const DEFAULT_BUSINESSES_PER_RUN = 30;
+const DEFAULT_EMAILS_PER_DAY = 30;
 
 const LEFT_OUT_WHY = "current clients, national haulers, city departments, or in Mountain High's area";
 
@@ -74,10 +74,7 @@ export function countUnsentDailyHaulers(): Promise<number> {
   return prisma.haulerLead.count({ where: UNSENT_DAILY });
 }
 
-export function runDailyGarbageAi(
-  businessesPerRun: number = DEFAULT_BUSINESSES_PER_RUN,
-  options: DailyRunOptions = {},
-): Promise<RunOutcome> {
+export function runDailyGarbageAi(emailsPerDay: number = DEFAULT_EMAILS_PER_DAY, options: DailyRunOptions = {}): Promise<RunOutcome> {
   return runDailyDiscoveryAndSend(
     {
       pipeline: "garbage-ai",
@@ -95,7 +92,7 @@ export function runDailyGarbageAi(
         return { kept, leftOut: excluded ? `left out ${excluded} that Garbage AI never pitches (${LEFT_OUT_WHY})` : null };
       },
     },
-    businessesPerRun,
+    emailsPerDay,
     options,
   );
 }

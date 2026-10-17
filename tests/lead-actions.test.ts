@@ -8,10 +8,10 @@ import { addSuppressionAction, removeSuppressionByEmailAction } from "@/lib/acti
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { makeAgentLead, makeColdLead, makeHaulerLead } from "./helpers";
 
-function scheduleForm(enabled: boolean, businessesPerRun: string) {
+function scheduleForm(enabled: boolean, emailsPerDay: string) {
   const data = new FormData();
   if (enabled) data.set("enabled", "on");
-  data.set("businessesPerRun", businessesPerRun);
+  data.set("emailsPerDay", emailsPerDay);
   return data;
 }
 
@@ -107,19 +107,19 @@ describe("cold-call deck", () => {
 describe("daily automation settings", () => {
   it("explains an out-of-range count and keeps the old value", async () => {
     const result = await updateVaultScheduleAction({}, scheduleForm(true, "500"));
-    expect(result.error).toBe("Businesses to check per run must be a whole number between 1 and 50");
-    expect(result.values).toEqual({ enabled: true, businessesPerRun: "500" });
-    expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: true, businessesPerRun: 30 });
+    expect(result.error).toBe("Emails to send per day must be a whole number between 1 and 50");
+    expect(result.values).toEqual({ enabled: true, emailsPerDay: "500" });
+    expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: true, emailsPerDay: 30 });
   });
 
   it("caps a count saved before the 50-business limit at what Yelp can return", async () => {
     await prisma.pipelineSchedule.create({ data: { id: VAULT_SCHEDULE_ID, enabled: true, leadCount: 100 } });
-    expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: true, businessesPerRun: 50 });
+    expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: true, emailsPerDay: 50 });
   });
 
   it("saves enabled and businesses-per-run", async () => {
     expect(await updateVaultScheduleAction({}, scheduleForm(false, "12"))).toMatchObject({ saved: true });
-    expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: false, businessesPerRun: 12 });
+    expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: false, emailsPerDay: 12 });
   });
 });
 

@@ -141,20 +141,21 @@ export default function HelpPage() {
             link on each pipeline page). Record each call&apos;s outcome; the deck remembers your place if you refresh.
           </li>
           <li>
-            <strong>Glance at the daily runs.</strong> Each pipeline searches one new city and emails what it found once a day:{" "}
+            <strong>Glance at the daily runs.</strong> Each pipeline runs several times a day and sends until its emails-per-day number is
+            reached:{" "}
             <Link href="/garbage-ai" className={link}>
               Garbage AI
             </Link>{" "}
-            at {GARBAGE_AI_DAILY_RUN_TIME_LABEL},{" "}
+            {GARBAGE_AI_DAILY_RUN_TIME_LABEL},{" "}
             <Link href="/vault-pipeline" className={link}>
               Cold Outreach
             </Link>{" "}
-            at {VAULT_DAILY_RUN_TIME_LABEL} and{" "}
+            {VAULT_DAILY_RUN_TIME_LABEL} and{" "}
             <Link href="/dataleadsell" className={link}>
               dataleadsell.com
             </Link>{" "}
-            at {DATALEADSELL_DAILY_RUN_TIME_LABEL} (once its daily run is turned on). On each page, <em>Recent runs</em> says what the last
-            run found and emailed. A red line under a run says why it failed.
+            {DATALEADSELL_DAILY_RUN_TIME_LABEL} (once its daily run is turned on). On each page, <em>Recent runs</em> says what the last run
+            found and emailed. A red line under a run says why it failed.
           </li>
         </ol>
       </Section>
@@ -187,9 +188,9 @@ export default function HelpPage() {
             Garbage AI
           </Link>{" "}
           pitches trash, recycling and dumpster-rental <strong>haulers</strong> an AI that texts back every online lead they get, day or
-          night, and offers a 15-minute demo with {GARBAGE_AI_DEMO_HOST}. Its daily run, at {GARBAGE_AI_DAILY_RUN_TIME_LABEL}, searches Yelp
-          in one new US city, finds each hauler&apos;s address on its own website and emails the ones it found. It follows every rule the
-          other pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the emergency stop.
+          night, and offers a 15-minute demo with {GARBAGE_AI_DEMO_HOST}. Its runs, {GARBAGE_AI_DAILY_RUN_TIME_LABEL}, search Yelp in a new
+          US city each, find each hauler&apos;s address on its own website and email the ones they found. It follows every rule the other
+          pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the emergency stop.
         </p>
         <p>
           <strong>Who it never emails.</strong> These haulers are left out of every search, and if one is added by hand its page shows{" "}

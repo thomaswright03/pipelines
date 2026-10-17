@@ -61,7 +61,7 @@ type CronJob = {
   /** How its runs are recorded in PipelineRun. */
   pipeline: PipelineId | "all";
   kind: "daily" | "stale-contacts" | "daily-report";
-  /** vercel.json's UTC schedule as Arizona time (MST all year); a test checks the two agree. */
+  /** vercel.json's UTC schedule as Arizona time (MST all year), e.g. "daily at 6:00 AM Arizona time"; a test checks the two agree. */
   schedule: string;
   /** For a pipeline's daily run: its on/off switch (PipelineSchedule). */
   scheduleId?: string;
@@ -115,7 +115,7 @@ export const CRON_JOBS: readonly CronJob[] = [
     path: "/api/cron/stale-contacts",
     pipeline: "all",
     kind: "stale-contacts",
-    schedule: "6:00 AM Arizona time",
+    schedule: "daily at 6:00 AM Arizona time",
     page: { href: "/", label: "Open the dashboard" },
     failedNext:
       "Leads that went a week without a reply may be missing from the call decks until the next run, which tries again automatically. Each pipeline's call deck is linked from the dashboard.",
@@ -126,7 +126,7 @@ export const CRON_JOBS: readonly CronJob[] = [
     path: "/api/cron/daily-report",
     pipeline: "all",
     kind: "daily-report",
-    schedule: "10:00 AM Arizona time",
+    schedule: "daily at 10:00 AM Arizona time",
     page: { href: "#connection-mail", label: "Go to Sending email" },
     failedNext:
       "The report goes out through the same email service as the pitches: check Sending email above and press Test connection. Tomorrow's report tries again automatically.",
@@ -279,7 +279,7 @@ async function cronStatus(job: CronJob, env: Env, now: Date): Promise<Connection
       ...base,
       tone: "off",
       badge: "Off",
-      summary: `Switched off, so it neither searches nor sends. It would run daily at ${job.schedule}.${lastRun}`,
+      summary: `Switched off, so it neither searches nor sends. It would run ${job.schedule}.${lastRun}`,
       next: `Turn it on under Daily automation on the ${PIPELINE_LABEL[job.pipeline as PipelineId]} page when it should run.`,
       link: job.page,
     };
@@ -288,7 +288,7 @@ async function cronStatus(job: CronJob, env: Env, now: Date): Promise<Connection
     return {
       ...base,
       tone: "warn",
-      summary: `Has never run. It is scheduled daily at ${job.schedule}.`,
+      summary: `Has never run. It is scheduled ${job.schedule}.`,
       next: env.VERCEL
         ? "If it still hasn't run after that time, tell your developer the scheduled job isn't firing."
         : "Scheduled jobs only run on the live site.",
@@ -304,7 +304,7 @@ async function cronStatus(job: CronJob, env: Env, now: Date): Promise<Connection
     return {
       ...base,
       tone: "warn",
-      summary: `${summary}. That was over a day ago; it runs daily at ${job.schedule}.`,
+      summary: `${summary}. That was over a day ago; it runs ${job.schedule}.`,
       next: "Tell your developer the scheduled job has stopped running.",
     };
   }

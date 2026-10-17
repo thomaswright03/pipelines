@@ -74,7 +74,7 @@ describe("OutreachControls", () => {
 });
 
 describe("VaultScheduleSettings: the last run", () => {
-  const schedule = { enabled: true, businessesPerRun: 30 };
+  const schedule = { enabled: true, emailsPerDay: 30 };
   const base = { runTimeLabel: "8:33 AM Arizona time", paused: false, staleWarning: null };
 
   it("leads with a failed run's outcome and its first problem", () => {

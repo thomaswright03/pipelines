@@ -9,9 +9,9 @@ access is gated by Vercel Deployment Protection (SSO). Three pipelines live here
   counties via Yelp and Arizona's ADRE license roster, finds each agent's own email address and pitches a
   Probate Property Leads subscription.
 - **Cold Outreach** (`/vault-pipeline`) finds local businesses via Yelp and emails each one a single pitch,
-  automatically once a day.
-- **Garbage AI** (`/garbage-ai`) finds trash, recycling and dumpster-rental haulers via Yelp, one new US city
-  a day, and pitches them a demo of an AI that texts back their online leads. It never emails current
+  automatically, up to its "emails to send per day" number.
+- **Garbage AI** (`/garbage-ai`) finds trash, recycling and dumpster-rental haulers via Yelp, a new US city
+  each run, and pitches them a demo of an AI that texts back their online leads. It never emails current
   clients, national haulers, city/county departments or any hauler in Mountain High Disposal's Colorado
   service area (`src/lib/garbage-ai-targeting.ts`).
 

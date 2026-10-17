@@ -384,7 +384,7 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     // All three pipelines, with the Garbage AI rules and its daily run time.
     expect(help.getByRole("heading", { name: "Garbage AI" })).toBeTruthy();
     expect(help.text).toContain("Mountain High Disposal's service area (Denver metro and Northern Colorado)");
-    expect(help.text).toContain("Garbage AI at 8:00 AM Arizona time");
+    expect(help.text).toContain("Garbage AI every hour from 8:00 AM to 3:00 PM Arizona time");
     expect(help.text).toMatch(/Demo booked \/ Signed up/);
     expect(help.text).not.toMatch(/both pipelines|neither pipeline|either pipeline/i);
     expect((await renderPage(<NotFound />)).getByRole("link", { name: "Back to dashboard" })).toBeTruthy();

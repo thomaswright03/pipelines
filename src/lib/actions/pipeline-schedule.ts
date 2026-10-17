@@ -10,12 +10,11 @@ import {
   scheduleSchema,
   VAULT_SCHEDULE_ID,
 } from "@/lib/pipeline-schedule";
-import { AGENTS_PER_RUN_LABEL, HAULERS_PER_RUN_LABEL, scheduleSchemaFor } from "@/lib/pipeline-schedule-rules";
 
 export type UpdateScheduleState = {
   error?: string;
   saved?: boolean;
-  values?: { enabled: boolean; businessesPerRun: string };
+  values?: { enabled: boolean; emailsPerDay: string };
 };
 
 type ScheduleTarget = {
@@ -29,11 +28,11 @@ type ScheduleTarget = {
 async function updateSchedule(target: ScheduleTarget, formData: FormData): Promise<UpdateScheduleState> {
   const values = {
     enabled: formData.get("enabled") === "on",
-    businessesPerRun: String(formData.get("businessesPerRun") ?? ""),
+    emailsPerDay: String(formData.get("emailsPerDay") ?? ""),
   };
   const parsed = target.schema.safeParse({
     enabled: values.enabled,
-    businessesPerRun: values.businessesPerRun.trim() === "" ? Number.NaN : Number(values.businessesPerRun),
+    emailsPerDay: values.emailsPerDay.trim() === "" ? Number.NaN : Number(values.emailsPerDay),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message, values };
@@ -59,7 +58,7 @@ export async function updateDataleadsellScheduleAction(_prevState: UpdateSchedul
   return updateSchedule(
     {
       scheduleId: DATALEADSELL_SCHEDULE_ID,
-      schema: scheduleSchemaFor(AGENTS_PER_RUN_LABEL),
+      schema: scheduleSchema,
       path: "/dataleadsell",
       logScope: "action.updateDataleadsellSchedule",
     },
@@ -71,7 +70,7 @@ export async function updateGarbageAiScheduleAction(_prevState: UpdateScheduleSt
   return updateSchedule(
     {
       scheduleId: GARBAGE_AI_SCHEDULE_ID,
-      schema: scheduleSchemaFor(HAULERS_PER_RUN_LABEL),
+      schema: scheduleSchema,
       path: "/garbage-ai",
       logScope: "action.updateGarbageAiSchedule",
     },

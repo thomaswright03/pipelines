@@ -39,8 +39,8 @@ describe("the dataleadsell page's daily automation", () => {
     const page = await renderPage(AgentList(pageProps()));
     expect(page.getByRole("heading", { name: "Daily automation" })).toBeTruthy();
     expect(page.text).toContain("Off: the daily run is skipped until you turn it back on.");
-    expect(page.text).toContain("9:03 AM Arizona time");
-    expect((page.getByLabelText("Agents to check per run (1–50)") as HTMLInputElement).value).toBe("10");
+    expect(page.text).toContain("every hour from 9:03 AM to 4:03 PM Arizona time");
+    expect((page.getByLabelText("Emails to send per day (1–50)") as HTMLInputElement).value).toBe("10");
     expect(page.text).toContain("No daily run has happened yet");
     expect(page.text).not.toContain("Cold run");
   });
@@ -54,7 +54,7 @@ describe("the dataleadsell page's daily automation", () => {
   });
 
   it("when on, lists its runs, tells daily-run agents apart, and warns when the last run is over a day old", async () => {
-    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, businessesPerRun: 10 });
+    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, emailsPerDay: 10 });
     await makeAgentLead({ source: DAILY_RUN_SOURCE });
     await makeAgentLead({ source: "Manual entry" });
     await prisma.pipelineRun.create({
@@ -70,7 +70,9 @@ describe("the dataleadsell page's daily automation", () => {
       },
     });
     const page = await renderPage(AgentList(pageProps()));
-    expect(page.text).toMatch(/On: runs every day at 9:03 AM Arizona time\. It searches the next city on Yelp for real estate agents/);
+    expect(page.text).toMatch(
+      /On: runs every hour from 9:03 AM to 4:03 PM Arizona time\. Each run sends first pitches until 10 have gone out today, searching the next city on Yelp for real estate agents/,
+    );
     expect(page.text).toMatch(/checked 10 agents, found 1 address, emailed 1 agent\./);
     expect(page.text).toContain("Searched Provo (Utah County, UT)");
     expect(page.text).toMatch(/The next daily run will email the 1 it found; the other 1/);

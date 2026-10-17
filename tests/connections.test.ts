@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { CRON_JOBS } from "@/lib/integration-status";
 import { savePipelineSchedule } from "@/lib/pipeline-schedule";
-import { DATALEADSELL_SCHEDULE_ID } from "@/lib/pipeline-schedule-rules";
+import { DAILY_RUNS, DATALEADSELL_SCHEDULE_ID } from "@/lib/pipeline-schedule-rules";
 import { captureMail, makeColdLead, smtpError, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
 
 const DAY_MS = 86_400_000;
@@ -207,14 +207,27 @@ describe("Settings → Connections", () => {
     const arizona = (cron: string) => {
       const [minute, hourUtc] = cron.split(" ").map(Number) as [number, number];
       const hour = (hourUtc - 7 + 24) % 24; // Arizona is UTC-7 all year (no daylight saving).
-      return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"} Arizona time`;
+      return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
     };
-    for (const cron of vercel.crons) {
-      const job = CRON_JOBS.find((j) => j.path === cron.path);
-      expect(job, `Settings → Connections has no row for ${cron.path}`).toBeDefined();
-      expect(job!.schedule, cron.path).toBe(arizona(cron.schedule));
+    const byPath = new Map<string, string[]>();
+    for (const cron of vercel.crons) byPath.set(cron.path, [...(byPath.get(cron.path) ?? []), cron.schedule]);
+    for (const [cronPath, schedules] of byPath) {
+      const job = CRON_JOBS.find((j) => j.path === cronPath);
+      expect(job, `Settings → Connections has no row for ${cronPath}`).toBeDefined();
+      const hours = schedules.map((c) => Number(c.split(" ")[1]));
+      const expected =
+        schedules.length === 1
+          ? `daily at ${arizona(schedules[0]!)} Arizona time`
+          : `every hour from ${arizona(schedules[0]!)} to ${arizona(schedules.at(-1)!)} Arizona time`;
+      if (schedules.length > 1) {
+        // An hour apart, all at the same minute.
+        expect(hours, cronPath).toEqual(hours.map((_, i) => hours[0]! + i));
+        expect(new Set(schedules.map((c) => c.split(" ")[0])).size, cronPath).toBe(1);
+        expect(schedules.length, cronPath).toBe(DAILY_RUNS);
+      }
+      expect(job!.schedule, cronPath).toBe(expected);
     }
-    expect(CRON_JOBS.map((j) => j.path).sort()).toEqual(vercel.crons.map((c) => c.path).sort());
+    expect(CRON_JOBS.map((j) => j.path).sort()).toEqual([...byPath.keys()].sort());
   });
 
   it("shows the dataleadsell run and the daily report on a fresh install, the dataleadsell run as switched off", async () => {
@@ -223,7 +236,7 @@ describe("Settings → Connections", () => {
       label: "Daily dataleadsell run",
       tone: "off",
       badge: "Off",
-      summary: expect.stringMatching(/Switched off.*9:03 AM Arizona time/),
+      summary: expect.stringMatching(/Switched off.*every hour from 9:03 AM to 4:03 PM Arizona time/),
       link: { href: "/dataleadsell" },
     });
     expect(s["daily-report"]).toMatchObject({ tone: "warn", summary: expect.stringMatching(/Has never run.*10:00 AM Arizona time/) });
@@ -241,7 +254,7 @@ describe("Settings → Connections", () => {
     expect((await statusOf())["dataleadsell-daily"]).toMatchObject({ tone: "off", summary: expect.stringMatching(/skipped/) });
 
     // Switched on: monitored like the other daily runs.
-    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, businessesPerRun: 10 });
+    await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: true, emailsPerDay: 10 });
     await prisma.pipelineRun.create({
       data: { pipeline: "dataleadsell", kind: "daily", status: "failed", summary: "Yelp failed.", finishedAt: new Date() },
     });

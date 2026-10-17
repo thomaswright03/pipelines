@@ -250,7 +250,7 @@ function renderSection(s: PipelineSection): string[] {
         : "";
     return [`${title}: daily run is turned off${extra}.`];
   }
-  const lines = [`${title} (daily run ${s.runTime})`, "-".repeat(title.length)];
+  const lines = [`${title} (runs ${s.runTime})`, "-".repeat(title.length)];
   lines.push(s.problems.length ? `Needs attention: ${s.problems.join(" ")}` : "All good.");
   lines.push("");
   if (s.runs.length === 0) lines.push("Run: none in the last 24 hours.");

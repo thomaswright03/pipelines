@@ -12,17 +12,14 @@ import type { RunOutcome } from "@/lib/outreach/runs";
 
 export { DAILY_RUN_SOURCE };
 
-const DEFAULT_BUSINESSES_PER_RUN = 30;
+const DEFAULT_EMAILS_PER_DAY = 30;
 
 /** How many sendable leads the next daily run will email (it only sends the ones daily runs found). */
 export function countUnsentDailyLeads(): Promise<number> {
   return prisma.lead.count({ where: UNSENT_DAILY });
 }
 
-export function runDailyColdOutreach(
-  businessesPerRun: number = DEFAULT_BUSINESSES_PER_RUN,
-  options: DailyRunOptions = {},
-): Promise<RunOutcome> {
+export function runDailyColdOutreach(emailsPerDay: number = DEFAULT_EMAILS_PER_DAY, options: DailyRunOptions = {}): Promise<RunOutcome> {
   return runDailyDiscoveryAndSend(
     {
       pipeline: "cold-outreach",
@@ -35,7 +32,7 @@ export function runDailyColdOutreach(
       listUnsent: (take) =>
         prisma.lead.findMany({ where: UNSENT_DAILY, orderBy: { createdAt: "asc" }, select: { id: true, name: true }, take }),
     },
-    businessesPerRun,
+    emailsPerDay,
     options,
   );
 }
