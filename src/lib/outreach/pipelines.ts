@@ -152,6 +152,8 @@ export type PipelineAdapter = {
   ): Promise<void>;
   markLatestSendBounced(db: Db, leadId: string, at: Date): Promise<boolean>;
   hasBeenEmailed(db: Db, leadId: string): Promise<boolean>;
+  /** How many emails this pipeline has sent since `since` (every send, by hand or by a daily run). */
+  countSendsSince(db: Db, since: Date): Promise<number>;
   /** Leads the bulk send may pitch: new, with an address, not flagged, no reply waiting for a look. */
   /** New leads with an address that aren't held back, oldest first (all of them without `limit`). */
   listSendable(db: Db, limit?: number): Promise<OutreachLead[]>;
@@ -416,6 +418,7 @@ function makeAdapter(spec: PipelineSpec): PipelineAdapter {
     async hasBeenEmailed(db, leadId) {
       return (await sendLogs(db).count({ where: { leadId } })) > 0;
     },
+    countSendsSince: (db, since) => sendLogs(db).count({ where: { sentAt: { gte: since } } }),
     async listSendable(db, limit) {
       const rows = await leads(db).findMany({ where: SENDABLE, orderBy: { createdAt: "asc" }, take: limit });
       return rows.map(toOutreach);

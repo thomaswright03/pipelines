@@ -127,8 +127,8 @@ To stop sending:
    switched off on the server (OUTBOUND_EMAIL_DISABLED is set) — nothing was sent."
 
 **What can still go out during those minutes.** A bulk send runs from the operator's browser one email at
-a time: closing that tab stops it at once. The daily runs fire at the times in `vercel.json` (15:00, 15:33
-and 16:03 UTC); if one is due within the next few minutes, also do step 5.
+a time: closing that tab stops it at once. The daily runs fire at the times in `vercel.json` (hourly from
+15:00 to 23:03 UTC); if one is due within the next few minutes, also do step 5.
 
 5. **Optional, immediate, no redeploy:** Vercel → the project → **Settings → Cron Jobs** → **Disable Cron
    Jobs**. This takes effect at once and stops the daily runs (and the stale-contacts move) until they are

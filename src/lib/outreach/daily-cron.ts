@@ -16,7 +16,7 @@ type DailyCronJob = {
   scheduleId: string;
   /** The server-log scope for a run that couldn't even start. */
   logScope: string;
-  run: (businessesPerRun: number) => Promise<RunOutcome>;
+  run: (emailsPerDay: number) => Promise<RunOutcome>;
 };
 
 export async function handleDailyCron(request: Request, job: DailyCronJob): Promise<Response> {
@@ -30,7 +30,7 @@ export async function handleDailyCron(request: Request, job: DailyCronJob): Prom
       if (!schedule.enabled) {
         return { status: "skipped", summary: `Daily automation is turned off on the ${PIPELINE_LABEL[job.pipeline]} page.` };
       }
-      return job.run(schedule.businessesPerRun);
+      return job.run(schedule.emailsPerDay);
     });
     const failed = run.status === "failed";
     return Response.json({ ok: !failed, ...run }, { status: failed ? 500 : 200 });

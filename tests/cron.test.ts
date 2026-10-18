@@ -69,7 +69,7 @@ describe("daily Cold Outreach run", () => {
   it("is skipped (and says so) when automation is turned off", async () => {
     mail = captureMail();
     const fetchStub = stubYelpCity();
-    await savePipelineSchedule(VAULT_SCHEDULE_ID, { enabled: false, businessesPerRun: 30 });
+    await savePipelineSchedule(VAULT_SCHEDULE_ID, { enabled: false, emailsPerDay: 30 });
 
     const json = await (await cron(dailyGET)).json();
 

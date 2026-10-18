@@ -172,18 +172,18 @@ describe("dashboard card and schedule actions", () => {
   });
 
   it("validates and saves the daily-run settings", async () => {
-    const bad = await updateVaultScheduleAction({}, form({ enabled: "on", businessesPerRun: "" }));
+    const bad = await updateVaultScheduleAction({}, form({ enabled: "on", emailsPerDay: "" }));
     expect(bad.error).toBeTruthy();
-    expect(bad.values).toEqual({ enabled: true, businessesPerRun: "" });
+    expect(bad.values).toEqual({ enabled: true, emailsPerDay: "" });
 
-    expect(await updateVaultScheduleAction({}, form({ businessesPerRun: "20" }))).toEqual({
+    expect(await updateVaultScheduleAction({}, form({ emailsPerDay: "20" }))).toEqual({
       saved: true,
-      values: { enabled: false, businessesPerRun: "20" },
+      values: { enabled: false, emailsPerDay: "20" },
     });
     expect(await prisma.pipelineSchedule.findFirstOrThrow()).toMatchObject({ enabled: false, leadCount: 20 });
 
     dbFails("pipelineSchedule", "upsert");
-    expect((await updateVaultScheduleAction({}, form({ enabled: "on", businessesPerRun: "10" }))).error).toBe(DATABASE_UNAVAILABLE_MESSAGE);
+    expect((await updateVaultScheduleAction({}, form({ enabled: "on", emailsPerDay: "10" }))).error).toBe(DATABASE_UNAVAILABLE_MESSAGE);
   });
 });
 

@@ -3,11 +3,9 @@
 import { useActionState, useState } from "react";
 import type { UpdateScheduleState } from "@/lib/actions/pipeline-schedule";
 import {
-  AGENTS_PER_RUN_LABEL,
-  BUSINESSES_PER_RUN_LABEL,
-  BUSINESSES_PER_RUN_MAX,
-  BUSINESSES_PER_RUN_MIN,
-  HAULERS_PER_RUN_LABEL,
+  EMAILS_PER_DAY_LABEL,
+  EMAILS_PER_DAY_MAX,
+  EMAILS_PER_DAY_MIN,
   rangeMessage,
   type PipelineScheduleData,
 } from "@/lib/pipeline-schedule-rules";
@@ -41,45 +39,45 @@ const RUN_STATUS: Record<string, { label: string; className: string }> = {
 const WORDING: Record<
   PipelineId,
   {
-    perRunLabel: string;
+    perDayLabel: string;
     /** What the run checks for an address. */
     checked: { one: string; many: string };
     /** What the run emails. */
     emailed: { one: string; many: string };
-    /** What one run does, after "On: runs every day at <time>." */
-    describe: (perRun: number) => string;
-    /** Why far fewer are emailed than checked. */
+    /** What the runs do, after "On: runs <times>." */
+    describe: (perDay: number) => string;
+    /** Why a day can fall short of the number. */
     yieldNote: string;
   }
 > = {
   "cold-outreach": {
-    perRunLabel: BUSINESSES_PER_RUN_LABEL,
+    perDayLabel: EMAILS_PER_DAY_LABEL,
     checked: { one: "business", many: "businesses" },
     emailed: { one: "lead", many: "leads" },
     describe: (n) =>
-      `It searches one new city on Yelp, checks up to ${n} of those businesses for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`,
+      `Each run sends first pitches until ${n} have gone out today, searching a new city on Yelp for business email addresses when the leads already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
-      "Not every business has a findable email address — usually only about 1 in 5 do — and each run stops looking after about 25 seconds, so expect far fewer emails than businesses checked.",
+      "Only about 1 in 5 businesses has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
   },
   dataleadsell: {
-    perRunLabel: AGENTS_PER_RUN_LABEL,
+    perDayLabel: EMAILS_PER_DAY_LABEL,
     checked: { one: "agent", many: "agents" },
     emailed: { one: "agent", many: "agents" },
     describe: (n) =>
-      `It searches the next city on Yelp for real estate agents, checks up to ${n} of those agents for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`,
+      `Each run sends first pitches until ${n} have gone out today, searching the next city on Yelp for real estate agents when the agents already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
-      "Not every agent has a findable email address, and each run stops looking after about 25 seconds, so expect far fewer emails than agents checked.",
+      "Not every agent has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
   },
   "garbage-ai": {
-    perRunLabel: HAULERS_PER_RUN_LABEL,
+    perDayLabel: EMAILS_PER_DAY_LABEL,
     checked: { one: "hauler", many: "haulers" },
     emailed: { one: "hauler", many: "haulers" },
     describe: (n) =>
       GARBAGE_AI_SENDING_HELD
-        ? `It searches one new city on Yelp for garbage collection, checks up to ${n} of those haulers for an email address, and saves the ones it finds. Sending is on hold, so it emails nobody.`
-        : `It searches one new city on Yelp for garbage collection, checks up to ${n} of those haulers for an email address, and sends the first pitch to each one it finds — plus any found earlier that haven't been emailed yet.`,
+        ? `Each run searches a new city on Yelp for garbage collection and saves the haulers it finds an email address for, until ${n} are waiting. Sending is on hold, so it emails nobody.`
+        : `Each run sends first pitches until ${n} have gone out today, searching a new city on Yelp for garbage collection when the haulers already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
-      "Not every hauler has a findable email address, and each run stops looking after about 25 seconds, so expect far fewer addresses than haulers checked.",
+      "Not every hauler has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
   },
 };
 
@@ -107,7 +105,7 @@ export default function DailyRunSettings({
 }) {
   const wording = WORDING[pipeline];
   const [enabled, setEnabled] = useState(schedule.enabled);
-  const [businessesPerRun, setLeadCount] = useState(String(schedule.businessesPerRun));
+  const [emailsPerDay, setEmailsPerDay] = useState(String(schedule.emailsPerDay));
   const [clientError, setClientError] = useState<string | null>(null);
   const [state, formAction, isPending] = useActionState((prev: UpdateScheduleState, formData: FormData) => action(prev, formData), {});
 
@@ -118,14 +116,14 @@ export default function DailyRunSettings({
   const stateLine = paused
     ? "On hold: outbound email is paused, so the daily run skips itself (see Settings)."
     : schedule.enabled
-      ? `On: runs every day at ${runTimeLabel}. ${wording.describe(schedule.businessesPerRun)}`
+      ? `On: runs ${runTimeLabel}. ${wording.describe(schedule.emailsPerDay)}`
       : "Off: the daily run is skipped until you turn it back on.";
 
   function validate(e: React.FormEvent<HTMLFormElement>) {
-    const n = Number(businessesPerRun);
-    if (!Number.isInteger(n) || n < BUSINESSES_PER_RUN_MIN || n > BUSINESSES_PER_RUN_MAX) {
+    const n = Number(emailsPerDay);
+    if (!Number.isInteger(n) || n < EMAILS_PER_DAY_MIN || n > EMAILS_PER_DAY_MAX) {
       e.preventDefault();
-      setClientError(rangeMessage(wording.perRunLabel));
+      setClientError(rangeMessage(wording.perDayLabel));
       return;
     }
     setClientError(null);
@@ -154,16 +152,16 @@ export default function DailyRunSettings({
           Run daily
         </label>
         <label className="field-label">
-          {wording.perRunLabel} ({BUSINESSES_PER_RUN_MIN}–{BUSINESSES_PER_RUN_MAX})
+          {wording.perDayLabel} ({EMAILS_PER_DAY_MIN}–{EMAILS_PER_DAY_MAX})
           <input
             type="number"
-            name="businessesPerRun"
+            name="emailsPerDay"
             inputMode="numeric"
-            min={BUSINESSES_PER_RUN_MIN}
-            max={BUSINESSES_PER_RUN_MAX}
+            min={EMAILS_PER_DAY_MIN}
+            max={EMAILS_PER_DAY_MAX}
             step={1}
-            value={businessesPerRun}
-            onChange={(e) => setLeadCount(e.target.value)}
+            value={emailsPerDay}
+            onChange={(e) => setEmailsPerDay(e.target.value)}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "schedule-error schedule-yield" : "schedule-yield"}
             className="input w-32"
@@ -204,8 +202,8 @@ export default function DailyRunSettings({
         )}
       </div>
       <p className="text-sm muted">
-        When it&apos;s on, it runs at {runTimeLabel} every day. That time is fixed in the app&apos;s schedule; ask your developer if it
-        should change.
+        When it&apos;s on, it runs {runTimeLabel}. Those times are fixed in the app&apos;s schedule; ask your developer if they should
+        change.
       </p>
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">

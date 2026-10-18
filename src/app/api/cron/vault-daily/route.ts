@@ -12,6 +12,6 @@ export function GET(request: NextRequest) {
     pipeline: "cold-outreach",
     scheduleId: VAULT_SCHEDULE_ID,
     logScope: "api.cron.vault-daily",
-    run: (businessesPerRun) => runDailyColdOutreach(businessesPerRun),
+    run: (emailsPerDay) => runDailyColdOutreach(emailsPerDay),
   });
 }

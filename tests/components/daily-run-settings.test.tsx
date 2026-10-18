@@ -9,7 +9,7 @@ vi.mock("@/lib/actions/pipeline-schedule", () => ({ updateVaultScheduleAction: v
 
 const { default: DailyRunSettings } = await import("@/components/DailyRunSettings");
 
-const base = { runTimeLabel: "9:03 AM Arizona time", paused: false, staleWarning: null };
+const base = { runTimeLabel: "every hour from 9:03 AM to 4:03 PM Arizona time", paused: false, staleWarning: null };
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -20,16 +20,16 @@ describe("DailyRunSettings for dataleadsell", () => {
         {...base}
         pipeline="dataleadsell"
         action={vi.fn(async () => ({}))}
-        schedule={{ enabled: false, businessesPerRun: 10 }}
+        schedule={{ enabled: false, emailsPerDay: 10 }}
         runs={[]}
       />,
     );
     expect(screen.getByText("Off: the daily run is skipped until you turn it back on.")).toBeTruthy();
-    expect((screen.getByLabelText("Agents to check per run (1–50)") as HTMLInputElement).value).toBe("10");
+    expect((screen.getByLabelText("Emails to send per day (1–50)") as HTMLInputElement).value).toBe("10");
     expect(screen.getByRole("checkbox", { name: "Run daily" })).toHaveProperty("checked", false);
     expect(screen.getByText(/Not every agent has a findable email address/)).toBeTruthy();
     // Off, the run time is still said, in words.
-    expect(screen.getByText(/runs at 9:03 AM Arizona time every day/)).toBeTruthy();
+    expect(screen.getByText(/runs every hour from 9:03 AM to 4:03 PM Arizona time\./)).toBeTruthy();
   });
 
   it("describes a run in agents when on, and shows the last run's numbers in agents", () => {
@@ -38,7 +38,7 @@ describe("DailyRunSettings for dataleadsell", () => {
         {...base}
         pipeline="dataleadsell"
         action={vi.fn(async () => ({}))}
-        schedule={{ enabled: true, businessesPerRun: 10 }}
+        schedule={{ enabled: true, emailsPerDay: 10 }}
         runs={[
           {
             id: "r1",
@@ -53,7 +53,7 @@ describe("DailyRunSettings for dataleadsell", () => {
     );
     expect(
       screen.getByText(
-        /^On: runs every day at 9:03 AM Arizona time\. It searches the next city on Yelp for real estate agents, checks up to 10 of those agents/,
+        /^On: runs every hour from 9:03 AM to 4:03 PM Arizona time\. Each run sends first pitches until 10 have gone out today, searching the next city on Yelp for real estate agents/,
       ),
     ).toBeTruthy();
     const line = screen.getByText(/Last run \(Sep 27\)/).closest("p")!;
@@ -61,18 +61,18 @@ describe("DailyRunSettings for dataleadsell", () => {
   });
 
   it("checks the number in agents before saving, then saves through the action it was given", async () => {
-    const action = vi.fn(async () => ({ saved: true, values: { enabled: true, businessesPerRun: "5" } }));
+    const action = vi.fn(async () => ({ saved: true, values: { enabled: true, emailsPerDay: "5" } }));
     render(
-      <DailyRunSettings {...base} pipeline="dataleadsell" action={action} schedule={{ enabled: false, businessesPerRun: 10 }} runs={[]} />,
+      <DailyRunSettings {...base} pipeline="dataleadsell" action={action} schedule={{ enabled: false, emailsPerDay: 10 }} runs={[]} />,
     );
-    const count = screen.getByLabelText("Agents to check per run (1–50)");
+    const count = screen.getByLabelText("Emails to send per day (1–50)");
     // The fixed run time is a sentence, not something that looks like a form field.
-    expect(screen.getByText(/^When it's on, it runs at 9:03 AM Arizona time every day\. That time is fixed/)).toBeTruthy();
+    expect(screen.getByText(/^When it's on, it runs every hour from 9:03 AM to 4:03 PM Arizona time\. Those times are fixed/)).toBeTruthy();
     expect(count.closest("form")!.textContent).not.toMatch(/Arizona time|Time/);
 
     fireEvent.change(count, { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("Agents to check per run must be a whole number between 1 and 50")).toBeTruthy();
+    expect(await screen.findByText("Emails to send per day must be a whole number between 1 and 50")).toBeTruthy();
     expect(action).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Run daily" }));
@@ -82,6 +82,6 @@ describe("DailyRunSettings for dataleadsell", () => {
     expect(action).toHaveBeenCalledTimes(1);
     const form = (action.mock.calls[0] as unknown as [unknown, FormData])[1];
     expect(form.get("enabled")).toBe("on");
-    expect(form.get("businessesPerRun")).toBe("5");
+    expect(form.get("emailsPerDay")).toBe("5");
   });
 });

@@ -183,7 +183,7 @@ describe("the daily Garbage AI run", () => {
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     expect(outcome.status).toBe("failed");
     expect(outcome.errors?.[0]).toMatch(/^Search of .+ failed:/);
-    expect(outcome.summary).toMatch(/^Couldn't search .+ on Yelp, so no new haulers were found, emailed 0\.$/);
+    expect(outcome.summary).toMatch(/^Couldn't search .+ on Yelp, so no new haulers were found, emailed 0, 0 of today's \d+ sent\.$/);
     expect(await prisma.scrapedHaulerCity.count()).toBe(0);
   });
 
@@ -198,14 +198,16 @@ describe("the daily Garbage AI run", () => {
     const refused = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     // A refused address is that lead's problem, not a failed run.
     expect(refused.status).toBe("succeeded");
-    expect(refused.summary).toMatch(/2 left over from earlier runs, emailed 1, 1 address refused by the recipient's mail server\.$/);
+    expect(refused.summary).toMatch(
+      /2 left over from earlier runs, emailed 1, 1 address refused by the recipient's mail server, \d+ of today's \d+ sent\.$/,
+    );
 
     await makeHaulerLead({ name: "Down Hauling", email: "office@down.test", source: GARBAGE_AI_DAILY_SOURCE });
     mail.fail(smtpError("connect ECONNREFUSED 127.0.0.1:587", { code: "ESOCKET", syscall: "connect" }));
     const failed = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     // Nothing went out: failed, as for Cold Outreach and dataleadsell.
     expect(failed.status).toBe("failed");
-    expect(failed.summary).toMatch(/emailed 0, 1 failed to send\.$/);
+    expect(failed.summary).toMatch(/emailed 0, 1 failed to send, \d+ of today's \d+ sent\.$/);
   });
 
   it("runs from the cron route, and is skipped when turned off on the page", async () => {
@@ -222,9 +224,9 @@ describe("the daily Garbage AI run", () => {
     expect(run.leadsFound).toBe(2);
 
     const form = new FormData();
-    form.set("businessesPerRun", "20"); // "enabled" unchecked
+    form.set("emailsPerDay", "20"); // "enabled" unchecked
     expect(await updateGarbageAiScheduleAction({}, form)).toMatchObject({ saved: true });
-    expect(await getPipelineSchedule(GARBAGE_AI_SCHEDULE_ID)).toEqual({ enabled: false, businessesPerRun: 20 });
+    expect(await getPipelineSchedule(GARBAGE_AI_SCHEDULE_ID)).toEqual({ enabled: false, emailsPerDay: 20 });
     const skipped = await (await garbageDailyGET(request())).json();
     expect(skipped).toMatchObject({ ok: true, status: "skipped", summary: "Daily automation is turned off on the Garbage AI page." });
   });

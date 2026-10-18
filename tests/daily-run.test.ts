@@ -1,6 +1,6 @@
-// What the daily Cold Outreach run actually does with its "businesses to
-// check per run" setting, and that leads it didn't get to are emailed by
-// the next run.
+// What the daily Cold Outreach runs actually do with the "emails to send
+// per day" setting, and that leads a run didn't get to are emailed by the
+// next run.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { countUnsentDailyLeads, runDailyColdOutreach } from "@/lib/vault-daily-run";
@@ -30,22 +30,56 @@ let mail: ReturnType<typeof captureMail>;
 afterEach(() => mail?.restore());
 
 describe("daily run yield", () => {
-  it("checks exactly the configured number of businesses and reports what it found and emailed", async () => {
+  it("checks businesses until it has found the day's number, and emails them", async () => {
     mail = captureMail();
     stubYelpFifty();
 
-    const outcome = await runDailyColdOutreach(30, { sendDelayMs: 0 });
+    const outcome = await runDailyColdOutreach(6, { sendDelayMs: 0 });
 
-    expect(outcome.numbers).toEqual({ businessesChecked: 30, leadsFound: 6, emailsSent: 6 });
+    expect(outcome.numbers).toMatchObject({ leadsFound: 6, emailsSent: 6 });
+    // Every fifth business has an address: the sixth is the 30th. A few lookups already under way may finish too.
+    expect(outcome.numbers!.businessesChecked).toBeGreaterThanOrEqual(30);
+    expect(outcome.numbers!.businessesChecked).toBeLessThan(40);
     expect(mail.messages).toHaveLength(6);
-    expect(outcome.summary).toMatch(/Yelp listed 50 businesses, checked 30 for an email, found 6 new addresses, emailed 6\./);
+    expect(outcome.summary).toMatch(
+      /Yelp listed 50 businesses, checked \d+ for an email, found 6 new addresses, emailed 6, 6 of today's 6 sent\./,
+    );
   });
 
-  it("checks all 50 at the maximum setting", async () => {
+  it("checks the whole city when the day needs more than it has", async () => {
     mail = captureMail();
     stubYelpFifty();
-    const outcome = await runDailyColdOutreach(50, { sendDelayMs: 0 });
+    const outcome = await runDailyColdOutreach(30, { sendDelayMs: 0 });
     expect(outcome.numbers).toEqual({ businessesChecked: 50, leadsFound: 10, emailsSent: 10 });
+    expect(outcome.summary).toContain("10 of today's 30 sent.");
+  });
+
+  it("does nothing once the day's number is sent, counting emails sent by hand", async () => {
+    mail = captureMail();
+    const { calls } = stubYelpFifty();
+    for (let i = 0; i < 3; i++) {
+      const lead = await makeColdLead({ name: `By hand ${i}`, email: `hand${i}@shop.test` });
+      await prisma.leadEmailSendLog.create({ data: { leadId: lead.id, email: lead.email! } });
+    }
+
+    const outcome = await runDailyColdOutreach(3, { sendDelayMs: 0 });
+
+    expect(outcome.status).toBe("skipped");
+    expect(outcome.summary).toMatch(/^Already sent 3 emails today, which meets the daily number \(3\)/);
+    expect(calls).toHaveLength(0);
+    expect(mail.messages).toHaveLength(0);
+  });
+
+  it("only sends what the day still needs", async () => {
+    mail = captureMail();
+    stubYelpFifty();
+    const lead = await makeColdLead({ name: "Earlier today", email: "earlier@shop.test" });
+    await prisma.leadEmailSendLog.create({ data: { leadId: lead.id, email: lead.email! } });
+
+    const outcome = await runDailyColdOutreach(4, { sendDelayMs: 0 });
+
+    expect(outcome.numbers).toMatchObject({ leadsFound: 3, emailsSent: 3 });
+    expect(outcome.summary).toContain("4 of today's 4 sent.");
   });
 });
 
@@ -56,18 +90,21 @@ describe("leads a daily run didn't get to", () => {
     const manual = await makeColdLead({ source: "Added by hand" }); // not the daily run's to send
 
     // Run 1 runs out of time before sending anything.
-    const first = await runDailyColdOutreach(30, { sendDelayMs: 0, sendBudgetMs: -1 });
-    expect(first.numbers).toEqual({ businessesChecked: 30, leadsFound: 6, emailsSent: 0 });
+    const first = await runDailyColdOutreach(6, { sendDelayMs: 0, sendBudgetMs: -1 });
+    expect(first.numbers).toMatchObject({ leadsFound: 6, emailsSent: 0 });
     expect(first.summary).toContain("6 left for the next run (out of time)");
     expect(mail.messages).toHaveLength(0);
     expect(await getPipeline("cold-outreach").countSendable(prisma)).toBe(7);
     // The page tells the hand-added one apart: only the six are the daily run's to send.
     expect(await countUnsentDailyLeads()).toBe(6);
 
-    // Run 2 finds nothing new in its city but emails the six left over.
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
-    const second = await runDailyColdOutreach(30, { sendDelayMs: 0 });
-    expect(second.summary).toContain("6 left over from earlier runs, emailed 6");
+    // Run 2 has enough waiting, so it searches no city and emails the six left over.
+    const { calls } = stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    const second = await runDailyColdOutreach(6, { sendDelayMs: 0 });
+    expect(second.summary).toBe(
+      "Enough leads were already waiting, so no city was searched, 6 left over from earlier runs, emailed 6, 6 of today's 6 sent.",
+    );
+    expect(calls).toHaveLength(0);
     expect(second.numbers).toEqual({ businessesChecked: 0, leadsFound: 0, emailsSent: 6 });
     expect(mail.messages).toHaveLength(6);
     expect(await getPipeline("cold-outreach").countSendable(prisma)).toBe(1);
@@ -78,14 +115,14 @@ describe("leads a daily run didn't get to", () => {
     mail = captureMail();
     mail.fail(Object.assign(new Error("connect ECONNREFUSED"), { code: "ESOCKET", syscall: "connect" }));
     stubYelpFifty();
-    const first = await runDailyColdOutreach(10, { sendDelayMs: 0 });
+    const first = await runDailyColdOutreach(2, { sendDelayMs: 0 });
     expect(first.status).toBe("failed");
     expect(await prisma.lead.count({ where: { status: "new" } })).toBe(2);
 
     mail.restore();
     mail = captureMail();
     stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
-    const second = await runDailyColdOutreach(10, { sendDelayMs: 0 });
+    const second = await runDailyColdOutreach(2, { sendDelayMs: 0 });
     expect(second.numbers?.emailsSent).toBe(2);
     expect(await prisma.lead.count({ where: { status: "contacted" } })).toBe(2);
   });
@@ -109,7 +146,9 @@ describe("a daily run whose Yelp search fails", () => {
     expect(mail.messages).toHaveLength(1);
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: leftover.id } })).status).toBe("contacted");
     expect(json.status).toBe("partial");
-    expect(json.summary).toMatch(/^Couldn't search .+, so no new leads were found, 1 left over from earlier runs, emailed 1\.$/);
+    expect(json.summary).toMatch(
+      /^Couldn't search .+, so no new leads were found, 1 left over from earlier runs, emailed 1, 1 of today's 30 sent\.$/,
+    );
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
     expect(run.status).toBe("partial");
     expect(run.errors).toMatch(/^Search of .+ failed: Yelp wasn't responding, so no new leads were found/);
