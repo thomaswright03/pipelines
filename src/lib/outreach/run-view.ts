@@ -22,8 +22,13 @@ export function toRunViews(runs: PipelineRun[]): RunView[] {
 }
 
 /** A warning when the daily run is on and should be running, but the last one was over a day ago. */
-export function staleRunWarning(schedule: PipelineScheduleData, paused: boolean, lastRun: PipelineRun | undefined): string | null {
-  return schedule.enabled && !paused && lastRun && isRunOverdue(lastRun.startedAt)
-    ? `The last daily run was ${formatDateTime(lastRun.startedAt)} — more than a day ago. The automatic schedule may have stopped — ask your developer to check it.`
+export function staleRunWarning(
+  schedule: PipelineScheduleData,
+  paused: boolean,
+  lastRun: PipelineRun | undefined,
+  weekdaysOnly = false,
+): string | null {
+  return schedule.enabled && !paused && lastRun && isRunOverdue(lastRun.startedAt, new Date(), weekdaysOnly)
+    ? `The last daily run was ${formatDateTime(lastRun.startedAt)} — ${weekdaysOnly ? "longer ago than a weekend" : "more than a day ago"}. The automatic schedule may have stopped — ask your developer to check it.`
     : null;
 }

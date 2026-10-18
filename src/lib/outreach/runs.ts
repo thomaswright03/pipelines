@@ -74,8 +74,10 @@ export function displayRunStatus(run: { status: string; startedAt: Date }, now: 
 
 /** A daily run that hasn't happened for this long is worth a warning. */
 const STALE_RUN_HOURS = 26;
+/** A weekdays-only job's longest normal gap is Friday afternoon to Monday morning (about 65 hours). */
+const STALE_WEEKDAY_RUN_HOURS = 74;
 
-/** True when the latest run started more than a day (plus slack) ago. */
-export function isRunOverdue(lastStartedAt: Date, now: Date = new Date()): boolean {
-  return now.getTime() - lastStartedAt.getTime() > STALE_RUN_HOURS * 3_600_000;
+/** True when the latest run started more than a day (plus slack) ago, or for a weekdays-only job, longer than a weekend. */
+export function isRunOverdue(lastStartedAt: Date, now: Date = new Date(), weekdaysOnly = false): boolean {
+  return now.getTime() - lastStartedAt.getTime() > (weekdaysOnly ? STALE_WEEKDAY_RUN_HOURS : STALE_RUN_HOURS) * 3_600_000;
 }

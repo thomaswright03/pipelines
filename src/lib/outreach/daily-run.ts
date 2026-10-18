@@ -2,8 +2,9 @@
 // Garbage AI), several times a day: work out how many of the day's emails
 // are still to send (the "emails to send per day" setting minus what this
 // pipeline already sent today), and if the leads waiting from earlier runs
-// don't cover it, search one new city on Yelp and check its results for
-// email addresses until enough are found. Then pitch the waiting leads, up
+// don't cover it, search a new city on Yelp (and another, while time and
+// the day's number allow) and check the results for email addresses until
+// enough are found. Then pitch the waiting leads, up
 // to the day's remaining number. Once the day's number is sent, later runs
 // that day do nothing. A failed search is
 // recorded and doesn't stop the leftover leads from being emailed. While
@@ -42,17 +43,31 @@ export const DAILY_RUN_SOURCE = "Yelp search (daily automated run)";
 // - a send starts only if its worst case (SMTP connect 5 s + greeting 5 s +
 //   socket 10 s) still ends by 55 s;
 // which leaves ~5 s to record the run. Leads found but not sent in time are
-// picked up by the next daily run.
+// picked up by the next daily run. Cold Outreach runs once a day in a
+// 300 s function instead and passes LONG_RUN_BUDGETS.
 const DISCOVERY_BUDGET_MS = 25_000;
 const RUN_LIMIT_MS = 55_000;
 const SEND_WORST_CASE_MS = 20_000;
 const SEND_DELAY_MS = 500;
+// With `maxCities` above 1, another city is searched only if its Yelp call
+// (≤10 s) still leaves time to check some of its results.
+const NEXT_CITY_MIN_MS = 15_000;
+
+/**
+ * For a pipeline that runs once a day and must send the whole day's number
+ * in one go (maxDuration 300 on its route, Fluid compute): discovery ends by
+ * 170 s, which leaves 30 sends (~1-3 s each plus the 0.5 s pause) time to
+ * go out before 285 s.
+ */
+export const LONG_RUN_BUDGETS = { discoveryBudgetMs: 170_000, sendBudgetMs: 285_000, maxCities: 6 } as const satisfies DailyRunOptions;
 
 export type DailyRunOptions = {
   sendDelayMs?: number;
-  /** Overrides the 55 s limit that sends must finish within (tests). */
+  /** Overrides the 55 s limit that sends must finish within. */
   sendBudgetMs?: number;
   discoveryBudgetMs?: number;
+  /** How many cities a run may search when one doesn't turn up enough addresses (default 1). */
+  maxCities?: number;
   /** The clock (tests pass a fake one). */
   now?: () => number;
 };
@@ -133,40 +148,60 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
 
   // Discovery failing (Yelp down, rate-limited, key revoked) must not stop
   // the leads earlier runs already found from being emailed: the error is
-  // recorded and the run goes on to the send queue. The city is only marked
+  // recorded and the run goes on to the send queue. A city is only marked
   // as used when its search actually came back. When enough leads are
-  // already waiting, no city is searched.
-  let where: string | null = null;
-  let listed: number | null = null;
-  let leftOut: string | null = null;
-  let discovery: DiscoveryResult | null = null;
+  // already waiting, no city is searched; when one city doesn't turn up
+  // enough addresses, a run allowed several (maxCities) searches the next
+  // one while there's time.
+  const searched: string[] = [];
+  const leftOut: string[] = [];
+  const created: DiscoveryResult["created"] = [];
+  let listed = 0;
+  let examined = 0;
+  let stoppedEarly = false;
+  let failedWhere: string | null = null;
+  let failedAtYelp = false;
   let discoveryError: string | null = null;
-  if (needed > 0) {
+  const discoveryEndsBy = startedAt + (options.discoveryBudgetMs ?? DISCOVERY_BUDGET_MS);
+  while (
+    created.length < needed &&
+    searched.length < (options.maxCities ?? 1) &&
+    (searched.length === 0 || now() + NEXT_CITY_MIN_MS < discoveryEndsBy)
+  ) {
     const target = await withRetry(() => spec.pickTarget());
-    where = spec.describeTarget(target);
+    const where = spec.describeTarget(target);
+    let results: YelpCandidate[] | null = null;
     try {
-      const results = await findBusinessesViaYelp(spec.searchTerm, `${target.city}, ${target.state}`);
-      listed = results.length;
+      results = await findBusinessesViaYelp(spec.searchTerm, `${target.city}, ${target.state}`);
       await withRetry(() => spec.markTargetUsed(target));
       const screened = spec.screen ? spec.screen(results) : { kept: results, leftOut: null };
-      leftOut = screened.leftOut;
-      discovery = await createLeadsFromCandidates(spec.pipeline, screened.kept, {
+      const discovery = await createLeadsFromCandidates(spec.pipeline, screened.kept, {
         city: target.city,
         county: target.county ?? null,
         state: target.state,
         source: spec.source ?? DAILY_RUN_SOURCE,
-        maxCreate: needed,
-        deadline: startedAt + (options.discoveryBudgetMs ?? DISCOVERY_BUDGET_MS),
+        maxCreate: needed - created.length,
+        deadline: discoveryEndsBy,
         now,
       });
+      searched.push(where);
+      listed += results.length;
+      if (screened.leftOut) leftOut.push(screened.leftOut);
+      examined += discovery.examined;
+      created.push(...discovery.created);
+      if (discovery.stoppedEarly) {
+        stoppedEarly = true;
+        break;
+      }
     } catch (err) {
       logError("run.daily.discovery", err, { pipeline: spec.pipeline, city: target.city, county: target.county, state: target.state });
+      failedWhere = where;
+      failedAtYelp = results === null;
       discoveryError = err instanceof YelpError ? err.unattended : describeError(err);
+      break;
     }
   }
 
-  const created = discovery?.created ?? [];
-  const examined = discovery?.examined ?? 0;
   const createdIds = new Set(created.map((l) => l.id));
   const queue = hold ? [] : await spec.listUnsent(remaining);
   const carriedOver = queue.filter((l) => !createdIds.has(l.id)).length;
@@ -177,7 +212,7 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   let refused = 0;
   let skipped = 0;
   let deferred = 0;
-  const errors: string[] = discoveryError ? [`Search of ${where} failed: ${discoveryError}`] : [];
+  const errors: string[] = discoveryError ? [`Search of ${failedWhere} failed: ${discoveryError}`] : [];
   for (const [index, lead] of queue.entries()) {
     if (now() + SEND_WORST_CASE_MS > sendsEndBy) {
       deferred = queue.length - index;
@@ -207,17 +242,19 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
+  const couldNotSearch = `${failedWhere}${failedAtYelp ? " on Yelp" : " for email addresses"}`;
   const parts =
-    where === null
+    searched.length === 0 && failedWhere === null
       ? ["Enough leads were already waiting, so no city was searched"]
-      : discovery && listed !== null
-        ? [
-            `Searched ${where}: Yelp listed ${listed} ${listed === 1 ? spec.listedNoun.one : spec.listedNoun.many}`,
-            ...(leftOut ? [leftOut] : []),
-            `checked ${examined} for an email${discovery.stoppedEarly ? " (stopped early: out of time)" : ""}`,
+      : searched.length === 0
+        ? [`Couldn't search ${couldNotSearch}, so no new ${spec.foundNoun} were found`]
+        : [
+            `Searched ${searched.join("; ")}: Yelp listed ${listed} ${listed === 1 ? spec.listedNoun.one : spec.listedNoun.many}`,
+            ...leftOut,
+            `checked ${examined} for an email${stoppedEarly ? " (stopped early: out of time)" : ""}`,
             `found ${created.length} new ${created.length === 1 ? "address" : "addresses"}`,
-          ]
-        : [`Couldn't search ${where}${listed === null ? " on Yelp" : " for email addresses"}, so no new ${spec.foundNoun} were found`];
+            ...(failedWhere ? [`couldn't search ${couldNotSearch}`] : []),
+          ];
   if (carriedOver) parts.push(`${carriedOver} left over from earlier runs`);
   parts.push(hold ? "sending is on hold, so nobody was emailed" : `emailed ${sent}`);
   if (skipped) parts.push(`${skipped} skipped by the send rules`);

@@ -49,7 +49,7 @@ describe("daily run yield", () => {
   it("checks the whole city when the day needs more than it has", async () => {
     mail = captureMail();
     stubYelpFifty();
-    const outcome = await runDailyColdOutreach(30, { sendDelayMs: 0 });
+    const outcome = await runDailyColdOutreach(30, { sendDelayMs: 0, maxCities: 1 });
     expect(outcome.numbers).toEqual({ businessesChecked: 50, leadsFound: 10, emailsSent: 10 });
     expect(outcome.summary).toContain("10 of today's 30 sent.");
   });
@@ -224,7 +224,8 @@ describe("the daily run's time budget", () => {
       await makeColdLead({ source: "Yelp search (daily automated run)", createdAt: new Date(Date.now() - 86_400_000) });
     }
 
-    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0, now });
+    // The 60 s budgets dataleadsell and Garbage AI run with.
+    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0, now, discoveryBudgetMs: 25_000, sendBudgetMs: 55_000, maxCities: 1 });
 
     expect(clock).toBeLessThanOrEqual(55_000);
     expect(outcome.status).toBe("succeeded");
@@ -233,6 +234,47 @@ describe("the daily run's time budget", () => {
     expect(outcome.summary).toMatch(/stopped early: out of time/);
     expect(outcome.summary).toMatch(/left for the next run \(out of time\)/);
     expect(mail.messages.length).toBe(outcome.numbers!.emailsSent);
+  });
+});
+
+describe("Cold Outreach's once-a-day run", () => {
+  it("searches more cities until the day's number is found, and sends it all within its 300 s", async () => {
+    // Every Yelp search lists the same 4 businesses, but the phone numbers
+    // differ per search so each city's are new; each page fetch takes 5 s
+    // and each send 3 s.
+    let clock = 0;
+    const now = () => clock;
+    let search = 0;
+    const routes: Parameters<typeof stubFetch>[0] = {
+      [YELP_PREFIX]: () => {
+        search++;
+        return yelpResponse(
+          Array.from({ length: 4 }, (_, i) => ({ name: `Town${search} ${pad(i + 1)}`, phone: `+1480556${search}${i}00` })),
+        );
+      },
+    };
+    for (let c = 1; c <= 6; c++) {
+      for (let n = 1; n <= 4; n++) {
+        routes[`https://www.town${c}${pad(n)}.com`] = () => {
+          clock += 5_000;
+          return page(`Town${c} ${pad(n)} — 480-556-${c}${n - 1}00 — hi@town${c}${pad(n)}.test`);
+        };
+      }
+    }
+    stubFetch(routes);
+    mail = captureMail();
+    const original = mail.messages.push.bind(mail.messages);
+    mail.messages.push = (...items) => {
+      clock += 3_000;
+      return original(...items);
+    };
+
+    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0, now });
+
+    expect(search).toBeGreaterThan(1);
+    expect(outcome.numbers!.emailsSent).toBe(10);
+    expect(outcome.summary).toMatch(/10 of today's 10 sent/);
+    expect(clock).toBeLessThanOrEqual(285_000);
   });
 });
 
