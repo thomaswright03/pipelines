@@ -9,17 +9,22 @@ import { z } from "zod";
  */
 export const DAILY_RUNS = 8;
 
-/** "every hour from 8:33 AM to 3:33 PM Arizona time" for a first run at 8:33 AM. */
-export function runTimesLabel(firstHour: number, minute: number): string {
+/**
+ * "every hour from 8:33 AM to 3:33 PM Arizona time" for a first run at 8:33
+ * AM, with ", Monday to Friday" for a pipeline that runs on weekdays only.
+ */
+export function runTimesLabel(firstHour: number, minute: number, weekdaysOnly = false): string {
   const at = (hour: number) => `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
-  return `every hour from ${at(firstHour)} to ${at(firstHour + DAILY_RUNS - 1)} Arizona time`;
+  return `every hour from ${at(firstHour)} to ${at(firstHour + DAILY_RUNS - 1)} Arizona time${weekdaysOnly ? ", Monday to Friday" : ""}`;
 }
 
 export const VAULT_SCHEDULE_ID = "vault-pipeline";
 export const DATALEADSELL_SCHEDULE_ID = "dataleadsell";
 
-/** The cron times in vercel.json ("33 15 * * *" UTC and hourly after), as Arizona wall-clock time (MST, no DST). */
-export const VAULT_DAILY_RUN_TIME_LABEL = runTimesLabel(8, 33);
+/** Cold Outreach runs Monday to Friday only (vercel.json: "2 16 * * 1-5" UTC and hourly after; every run is the same day in Arizona). */
+export const VAULT_RUNS_WEEKDAYS_ONLY = true;
+/** The cron times in vercel.json, as Arizona wall-clock time (MST, no DST). */
+export const VAULT_DAILY_RUN_TIME_LABEL = runTimesLabel(9, 2, VAULT_RUNS_WEEKDAYS_ONLY);
 /** The dataleadsell cron times in vercel.json ("3 16 * * *" UTC and hourly after): 30 minutes after Cold Outreach's. */
 export const DATALEADSELL_DAILY_RUN_TIME_LABEL = runTimesLabel(9, 3);
 

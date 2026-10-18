@@ -23,6 +23,7 @@ import {
   GARBAGE_AI_DAILY_RUN_TIME_LABEL,
   GARBAGE_AI_SCHEDULE_ID,
   VAULT_DAILY_RUN_TIME_LABEL,
+  VAULT_RUNS_WEEKDAYS_ONLY,
   VAULT_SCHEDULE_ID,
 } from "@/lib/pipeline-schedule-rules";
 import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
@@ -63,6 +64,8 @@ type CronJob = {
   kind: "daily" | "stale-contacts" | "daily-report";
   /** vercel.json's UTC schedule as Arizona time (MST all year), e.g. "daily at 6:00 AM Arizona time"; a test checks the two agree. */
   schedule: string;
+  /** Runs Monday to Friday only, so a weekend without runs is normal. */
+  weekdaysOnly?: boolean;
   /** For a pipeline's daily run: its on/off switch (PipelineSchedule). */
   scheduleId?: string;
   /** Where the operator sees the job's runs or acts on a failure. */
@@ -83,6 +86,7 @@ export const CRON_JOBS: readonly CronJob[] = [
     pipeline: "cold-outreach",
     kind: "daily",
     schedule: VAULT_DAILY_RUN_TIME_LABEL,
+    weekdaysOnly: VAULT_RUNS_WEEKDAYS_ONLY,
     scheduleId: VAULT_SCHEDULE_ID,
     page: pipelinePage("cold-outreach"),
     failedNext: dailyRunFailedNext("cold-outreach"),
@@ -300,11 +304,11 @@ async function cronStatus(job: CronJob, env: Env, now: Date): Promise<Connection
   if (status === "failed" || status === "interrupted") {
     return { ...base, tone: "error", summary, next: job.failedNext, link: job.page };
   }
-  if (isRunOverdue(run.startedAt, now)) {
+  if (isRunOverdue(run.startedAt, now, job.weekdaysOnly)) {
     return {
       ...base,
       tone: "warn",
-      summary: `${summary}. That was over a day ago; it runs ${job.schedule}.`,
+      summary: `${summary}. That was ${job.weekdaysOnly ? "longer ago than a weekend" : "over a day ago"}; it runs ${job.schedule}.`,
       next: "Tell your developer the scheduled job has stopped running.",
     };
   }

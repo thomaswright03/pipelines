@@ -215,10 +215,17 @@ describe("Settings → Connections", () => {
       const job = CRON_JOBS.find((j) => j.path === cronPath);
       expect(job, `Settings → Connections has no row for ${cronPath}`).toBeDefined();
       const hours = schedules.map((c) => Number(c.split(" ")[1]));
+      // Every entry of a job runs on the same days: every day, or Monday to Friday ("1-5").
+      const days = new Set(schedules.map((c) => c.split(" ").slice(2).join(" ")));
+      expect(days.size, cronPath).toBe(1);
+      const weekdays = [...days][0] === "* * 1-5";
+      if (!weekdays) expect([...days][0], cronPath).toBe("* * *");
+      expect(Boolean(job!.weekdaysOnly), cronPath).toBe(weekdays);
       const expected =
-        schedules.length === 1
+        (schedules.length === 1
           ? `daily at ${arizona(schedules[0]!)} Arizona time`
-          : `every hour from ${arizona(schedules[0]!)} to ${arizona(schedules.at(-1)!)} Arizona time`;
+          : `every hour from ${arizona(schedules[0]!)} to ${arizona(schedules.at(-1)!)} Arizona time`) +
+        (weekdays ? ", Monday to Friday" : "");
       if (schedules.length > 1) {
         // An hour apart, all at the same minute.
         expect(hours, cronPath).toEqual(hours.map((_, i) => hours[0]! + i));

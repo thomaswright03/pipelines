@@ -18,12 +18,13 @@ import {
   VAULT_DAILY_RUN_TIME_LABEL,
   VAULT_SCHEDULE_ID,
 } from "@/lib/pipeline-schedule";
+import { VAULT_RUNS_WEEKDAYS_ONLY } from "@/lib/pipeline-schedule-rules";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { PIPELINE_IDS, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { displayRunStatus } from "@/lib/outreach/runs";
 import { getAppSettings } from "@/lib/outreach/settings";
-import { formatDate, formatDateTime } from "@/lib/time";
+import { dayKey, formatDate, formatDateTime } from "@/lib/time";
 
 /** Who gets the report, and who it comes from (a sender verified in ZeptoMail). */
 export const DAILY_REPORT_TO = process.env.DAILY_REPORT_TO || "t@thomasewright.com";
@@ -46,6 +47,8 @@ const WINDOW_MS = 24 * 60 * 60 * 1000;
 type ReportSource = {
   scheduleId: string;
   runTime: string;
+  /** Runs Monday to Friday only: a weekend day without a run is normal. */
+  weekdaysOnly?: boolean;
   /** Table names for the counts done in SQL (fixed strings, never user input). */
   leadTable: string;
   logTable: string;
@@ -56,6 +59,7 @@ const REPORT_SOURCES: Record<PipelineId, ReportSource> = {
   "cold-outreach": {
     scheduleId: VAULT_SCHEDULE_ID,
     runTime: VAULT_DAILY_RUN_TIME_LABEL,
+    weekdaysOnly: VAULT_RUNS_WEEKDAYS_ONLY,
     leadTable: "Lead",
     logTable: "LeadEmailSendLog",
     activityTable: "LeadActivity",
@@ -176,7 +180,10 @@ async function buildSection(id: PipelineId, since: Date, now: Date, outboundPaus
   });
 
   const problems: string[] = [];
-  if (schedule.enabled && !outboundPaused && runs.length === 0) problems.push("The daily run didn't happen in the last 24 hours.");
+  // A weekdays-only pipeline doesn't run on Saturday or Sunday (Arizona time), so a report then may cover no run.
+  const restDay = source.weekdaysOnly && [0, 6].includes(new Date(`${dayKey(now)}T12:00:00Z`).getUTCDay());
+  if (schedule.enabled && !outboundPaused && runs.length === 0 && !restDay)
+    problems.push("The daily run didn't happen in the last 24 hours.");
   for (const run of runs) {
     if (run.status === "failed") problems.push("The daily run failed.");
     else if (run.status === "partial") problems.push("The daily run only partly worked.");

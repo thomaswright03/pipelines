@@ -44,7 +44,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * A Yelp failure, with a message written for the operator. `message` is for
- * a search someone just pressed a button for; `unattended` is for the 8:33
+ * a search someone just pressed a button for; `unattended` is for the 9:02
  * AM daily run, where there's nothing to "try again" — it says what happens
  * next on its own and when to tell the developer.
  */

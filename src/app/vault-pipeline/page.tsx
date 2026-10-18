@@ -12,6 +12,7 @@ import LeadTable from "@/components/LeadTable";
 import PipelineTotals from "@/components/PipelineTotals";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { getPipelineSchedule, VAULT_DAILY_RUN_TIME_LABEL, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
+import { VAULT_RUNS_WEEKDAYS_ONLY } from "@/lib/pipeline-schedule-rules";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { recentRuns } from "@/lib/outreach/runs";
 import { staleRunWarning, toRunViews } from "@/lib/outreach/run-view";
@@ -56,7 +57,7 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
     take: PAGE_SIZE,
   });
 
-  const staleWarning = staleRunWarning(schedule, settings.outboundPaused, runs[0]);
+  const staleWarning = staleRunWarning(schedule, settings.outboundPaused, runs[0], VAULT_RUNS_WEEKDAYS_ONLY);
 
   return (
     <div className="flex flex-col gap-6">

@@ -124,7 +124,7 @@ describe("daily report contents", () => {
 
     const { subject, text } = renderDailyReport(report);
     expect(subject).toMatch(/3 emails sent, 1 reply, \d+ things need attention/);
-    expect(text).toMatch(/COLD OUTREACH \(runs every hour from 8:33 AM to 3:33 PM Arizona time\)/);
+    expect(text).toMatch(/COLD OUTREACH \(runs every hour from 9:02 AM to 4:02 PM Arizona time, Monday to Friday\)/);
     expect(text).toMatch(/GARBAGE AI \(runs every hour from 8:00 AM to 3:00 PM Arizona time\)/);
     expect(text).toMatch(/DATALEADSELL\.COM: daily run is turned off\./);
     expect(text).toMatch(/Acme Hauling: Couldn't reach the email service/);
