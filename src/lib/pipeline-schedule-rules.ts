@@ -3,9 +3,9 @@
 import { z } from "zod";
 
 /**
- * How many times a day each pipeline runs, an hour apart from its first
- * time (vercel.json has one cron entry per run: Vercel Hobby crons run at
- * most once a day each).
+ * How many times a day dataleadsell and Garbage AI run, an hour apart from
+ * their first time (vercel.json has one cron entry per run: Vercel Hobby
+ * crons run at most once a day each). Cold Outreach runs once.
  */
 export const DAILY_RUNS = 8;
 
@@ -18,13 +18,19 @@ export function runTimesLabel(firstHour: number, minute: number, weekdaysOnly = 
   return `every hour from ${at(firstHour)} to ${at(firstHour + DAILY_RUNS - 1)} Arizona time${weekdaysOnly ? ", Monday to Friday" : ""}`;
 }
 
+/** "daily at 9:02 AM Arizona time", with ", Monday to Friday" for a pipeline that runs on weekdays only. */
+export function dailyAtLabel(hour: number, minute: number, weekdaysOnly = false): string {
+  const at = `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+  return `daily at ${at} Arizona time${weekdaysOnly ? ", Monday to Friday" : ""}`;
+}
+
 export const VAULT_SCHEDULE_ID = "vault-pipeline";
 export const DATALEADSELL_SCHEDULE_ID = "dataleadsell";
 
-/** Cold Outreach runs Monday to Friday only (vercel.json: "2 16 * * 1-5" UTC and hourly after; every run is the same day in Arizona). */
+/** Cold Outreach runs once a day, Monday to Friday only (vercel.json: "2 16 * * 1-5" UTC), and sends the whole day's number in that run. */
 export const VAULT_RUNS_WEEKDAYS_ONLY = true;
-/** The cron times in vercel.json, as Arizona wall-clock time (MST, no DST). */
-export const VAULT_DAILY_RUN_TIME_LABEL = runTimesLabel(9, 2, VAULT_RUNS_WEEKDAYS_ONLY);
+/** The cron time in vercel.json, as Arizona wall-clock time (MST, no DST). */
+export const VAULT_DAILY_RUN_TIME_LABEL = dailyAtLabel(9, 2, VAULT_RUNS_WEEKDAYS_ONLY);
 /** The dataleadsell cron times in vercel.json ("3 16 * * *" UTC and hourly after): 30 minutes after Cold Outreach's. */
 export const DATALEADSELL_DAILY_RUN_TIME_LABEL = runTimesLabel(9, 3);
 
@@ -35,10 +41,11 @@ export const GARBAGE_AI_DAILY_RUN_TIME_LABEL = runTimesLabel(8, 0);
 
 /**
  * `emailsPerDay` is how many first pitches a pipeline sends a day (its
- * daily runs plus anything sent by hand that day). The pipeline runs
- * several times a day (DAILY_RUN_HOURS) and each run searches and sends
- * only what the day still needs, stopping once the number is reached; a run
- * fits about 10 sends in its 60 seconds. (Stored in PipelineSchedule.leadCount.)
+ * daily runs plus anything sent by hand that day). Cold Outreach runs once
+ * a day with up to 300 seconds, enough for the whole number; the others run
+ * several times a day (DAILY_RUNS) and each run searches and sends only what
+ * the day still needs, stopping once the number is reached (a 60-second run
+ * fits about 10 sends). (Stored in PipelineSchedule.leadCount.)
  */
 export type PipelineScheduleData = { enabled: boolean; emailsPerDay: number };
 

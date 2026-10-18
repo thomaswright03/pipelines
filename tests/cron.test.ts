@@ -62,8 +62,11 @@ describe("daily Cold Outreach run", () => {
     expect((await prisma.lead.findFirstOrThrow({ where: { name: "Zeta Roofing" } })).phone).toBe("(480) 555-0103");
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
     expect(run).toMatchObject({ status: "succeeded", pipeline: "cold-outreach" });
-    expect(run.summary).toMatch(/Yelp listed 3 businesses, checked 3 for an email, found 2 new addresses, emailed 2/);
-    expect(run).toMatchObject({ businessesChecked: 3, leadsFound: 2, emailsSent: 2 });
+    // The day needs 30, so it searched more cities (the stub lists the same 3 businesses for each).
+    expect(run.summary).toMatch(
+      /^Searched [^:]+; [^:]+: Yelp listed 18 businesses, checked \d+ for an email, found 2 new addresses, emailed 2/,
+    );
+    expect(run).toMatchObject({ leadsFound: 2, emailsSent: 2 });
   });
 
   it("is skipped (and says so) when automation is turned off", async () => {
