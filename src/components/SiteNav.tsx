@@ -42,7 +42,15 @@ export default function SiteNav({
                 : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             }`}
           >
-            {label}
+            {href === "/replies" ? (
+              // "Replies" where the one-row header is tight (lg up to 2xl); "Unmatched replies" from 2xl and below lg.
+              <span>
+                <span className="lg:max-2xl:hidden">Unmatched </span>
+                <span className="lg:max-2xl:capitalize">replies</span>
+              </span>
+            ) : (
+              label
+            )}
             {href === "/replies" && unmatchedReplies > 0 && (
               <span
                 title={
