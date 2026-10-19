@@ -188,9 +188,9 @@ export default function HelpPage() {
             Garbage AI
           </Link>{" "}
           pitches trash, recycling and dumpster-rental <strong>haulers</strong> an AI that texts back every online lead they get, day or
-          night, and offers a 15-minute demo with {GARBAGE_AI_DEMO_HOST}. Its runs, {GARBAGE_AI_DAILY_RUN_TIME_LABEL}, search Yelp in a new
-          US city each, find each hauler&apos;s address on its own website and email the ones they found. It follows every rule the other
-          pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the emergency stop.
+          night, and points them to a short video and signup form or a 15-minute walkthrough. Its runs, {GARBAGE_AI_DAILY_RUN_TIME_LABEL},
+          search Yelp in a new US city each, find each hauler&apos;s address on its own website and email the ones they found. It follows
+          every rule the other pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the emergency stop.
         </p>
         <p>
           <strong>Who it never emails.</strong> These haulers are left out of every search, and if one is added by hand its page shows{" "}

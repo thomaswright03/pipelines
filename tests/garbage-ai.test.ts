@@ -61,36 +61,35 @@ let mail: ReturnType<typeof captureMail> | undefined;
 afterEach(() => mail?.restore());
 
 describe("the Garbage AI pitch", () => {
-  it("greets a hauler known only by its business name with 'Hi there,' and has no link while the signup site isn't live", () => {
+  it("is Thomas's pitch: 'Hey there,' for a hauler known only by its business name, which fills in the company", () => {
     const { subject, body } = buildHaulerOutreachEmail({ name: "Desert Roll Off", company: "Desert Roll Off" });
-    expect(subject).toBe("Who's texting back your 9pm leads?");
-    expect(body.startsWith("Hi there,\n\nA homeowner fills out your form at 9pm.")).toBe(true);
-    expect(body).toContain("A hauler in Colorado runs it today.");
+    expect(subject).toBe("quick question about your leads");
+    expect(body.startsWith("Hey there,\n\nThomas here. I'll keep this short.\n\n")).toBe(true);
+    expect(body).toContain("wanted to see if it'd be useful to you guys at Desert Roll Off.");
+    expect(body).toContain("there's a short video and a signup form here: https://hauler-signup.vercel.app\n\nOr just reply");
     expect(body).not.toContain("Mountain High");
-    expect(body).toContain("Max Garrett, who runs it with them, will walk you through it.");
-    expect(body).not.toContain("Or take a look first");
-    expect(body).not.toMatch(/\$|\d+ new customers/);
-    expect(body).toContain("Thomas Wright\n(385) 306-8041\nWright AI Solutions, LLC\n28 E 14 Street, Tempe, AZ 85281\n\n");
-    expect(body.endsWith("Don't want to hear from us again? Reply STOP and we won't email you again.")).toBe(true);
+    expect(body).not.toMatch(/\$/);
+    expect(body).toContain("Thanks,\nThomas Wright\n(385) 306-8041\nWright AI Solutions, LLC\n28 E 14 Street, Tempe, AZ 85281\n");
+    expect(body.endsWith(`If this isn't for you, just reply "no thanks" and I won't email again.`)).toBe(true);
+    expect(buildHaulerOutreachEmail({ name: "Saguaro Hauling", company: null }).body).toContain("you guys at Saguaro Hauling.");
   });
 
   it("uses a person's first name only when the lead has a separate company", () => {
     expect(haulerGreetingName("Jane Doe", "Desert Roll Off")).toBe("Jane");
     expect(haulerGreetingName("Desert Roll Off", "Desert Roll Off")).toBeNull();
     expect(haulerGreetingName("Desert Roll Off", null)).toBeNull();
-    expect(buildHaulerOutreachEmail({ name: "Jane Doe", company: "Desert Roll Off" }).body.startsWith("Hi Jane,")).toBe(true);
+    const { body } = buildHaulerOutreachEmail({ name: "Jane Doe", company: "Desert Roll Off" });
+    expect(body.startsWith("Hey Jane,")).toBe(true);
+    expect(body).toContain("you guys at Desert Roll Off.");
   });
 
-  it("drops Mountain High's name, and adds the signup link, brand and phone, when those are set", () => {
+  it("uses the signup link, brand and phone it is given", () => {
     const { body } = buildHaulerOutreachEmail(
       { name: "X", company: null },
-      { nameReferenceCustomer: false, signupUrl: "https://example.test", brand: "Kaizen Marketing", phone: "(555) 000-1111" },
+      { signupUrl: "https://example.test", brand: "Kaizen Marketing", phone: "(555) 000-1111" },
     );
-    expect(body).toContain("A hauler in Colorado runs it today.");
-    expect(body).toContain("who runs it with them, will walk you through it.");
-    expect(body).not.toContain("Mountain High");
-    expect(body).toContain("Just reply with a time that works.\n\nOr take a look first: https://example.test\n\nThomas Wright");
-    expect(body).toContain("(555) 000-1111\nKaizen Marketing\n28 E 14 Street, Tempe, AZ 85281\nhttps://example.test\n");
+    expect(body).toContain("a signup form here: https://example.test\n");
+    expect(body).toContain("(555) 000-1111\nKaizen Marketing\n28 E 14 Street, Tempe, AZ 85281\n");
   });
 
   it("is what the adapter sends, versioned", () => {
@@ -154,7 +153,7 @@ describe("the daily Garbage AI run", () => {
     expect(outcome.summary).toMatch(/Yelp listed 6 businesses, left out 4 that Garbage AI never pitches/);
     expect(outcome.summary).toMatch(/emailed 2/);
     expect(mail.messages).toHaveLength(2);
-    expect(mail.messages[0]!.subject).toBe("Who's texting back your 9pm leads?");
+    expect(mail.messages[0]!.subject).toBe("quick question about your leads");
     expect(calls.calls.find((u) => u.startsWith(YELP_PREFIX))).toContain("term=garbage+collection");
 
     const haulers = await prisma.haulerLead.findMany({ orderBy: { name: "asc" } });

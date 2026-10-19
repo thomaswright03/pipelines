@@ -11,6 +11,7 @@ export const RULE_EXAMPLES: { group: string; verdict: ReplyVerdict; examples: st
       "Interested! Can you call me Thursday?\n\nThis email and any attachments are confidential. If you received this in error, please notify the sender and delete it. To unsubscribe from our newsletter click here.",
       "Yes, send it over.\n\nBest,\nJane Doe\nDesert Realty | Unsubscribe from our listings alerts",
       "Sounds good.\n\nDon't want to hear from us again? Reply STOP and we won't email you again.",
+      "Sounds good, what times work?\n\nIf this isn't for you, just reply \"no thanks\" and I won't email again.",
       "Sounds good, show me Tuesday.\n\nNot interested? Just reply “unsubscribe” and I’ll take you off.",
     ],
   },

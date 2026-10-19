@@ -3,9 +3,10 @@
 // template's footer are cut before any rule reads a reply.
 
 // Our own footers, in case a client quotes one without ">" markers (the
-// dataleadsell one's "unsubscribe" would otherwise read as an opt-out).
+// Garbage AI one's "no thanks" would otherwise read as a decline, and the
+// dataleadsell one's "unsubscribe" as an opt-out).
 export const TEMPLATE_FOOTER_RE =
-  /don['’]?t want to hear from us again\?\s*reply stop and we won['’]?t email you again\.?|not interested\?\s*just reply\s*["“]?unsubscribe["”]?\s*and i['’]?ll take you off\.?/gi;
+  /don['’]?t want to hear from us again\?\s*reply stop and we won['’]?t email you again\.?|if this isn['’]?t for you,\s*just reply\s*["“]?no thanks["”]?\s*and i won['’]?t email again\.?|not interested\?\s*just reply\s*["“]?unsubscribe["”]?\s*and i['’]?ll take you off\.?/gi;
 
 // Where quoted history starts: everything from here down is cut.
 export const QUOTE_HEADER_PATTERNS: RegExp[] = [
