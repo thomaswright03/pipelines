@@ -29,7 +29,9 @@ export default function SiteNav({
   return (
     <nav aria-label="Main" className="flex flex-wrap gap-1 text-sm lg:flex-nowrap">
       {LINKS.map(({ href, label }) => {
-        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        // The Inbox is a tab of the Unmatched replies section.
+        const active =
+          href === "/" ? pathname === "/" : pathname.startsWith(href) || (href === "/replies" && pathname.startsWith("/inbox"));
         return (
           <Link
             key={href}

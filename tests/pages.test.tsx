@@ -51,6 +51,7 @@ const { default: AgentLayout } = await import("@/app/dataleadsell/layout");
 const { default: VaultInbox } = await import("@/app/vault-pipeline/inbox/page");
 const { default: AgentInbox } = await import("@/app/dataleadsell/inbox/page");
 const { default: Replies } = await import("@/app/replies/page");
+const { default: Inbox } = await import("@/app/inbox/page");
 const { default: Settings } = await import("@/app/settings/page");
 const { default: Help } = await import("@/app/help/page");
 const { default: NotFound } = await import("@/app/not-found");
@@ -427,6 +428,55 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect(repliesLink?.textContent).toBe("Unmatched replies2 waiting to be matched, 1 interested");
     const pipeline = await renderPage(AgentList(pageProps()));
     expect(pipeline.text).toContain("2 replies came from an address that isn't on any lead — 1 read as interested.");
+  });
+
+  it("list every inbound message on Inbox, automatic and unmatched ones included, with filters", async () => {
+    const lead = await makeColdLead({ email: "pat@shop.test", status: "contacted", lastEmailedAt: new Date() });
+    const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "mid:a",
+        fromEmail: "pat@shop.test",
+        subject: "Re: hi",
+        text: "Yes, call me",
+        optedOut: false,
+        matched: [`cold-outreach:${lead.id}`],
+        verdict: "positive",
+        receivedAt: at(3),
+      },
+    });
+    await prisma.inboundReply.create({
+      data: {
+        dedupeKey: "mid:b",
+        fromEmail: "no-reply@mail.instagram.com",
+        subject: "123456 is your Instagram code",
+        text: "Use 123456 to verify your account.",
+        optedOut: false,
+        matched: [],
+        kind: "auto_reply",
+        kindReason: "Auto-Submitted: auto-generated header",
+        resolvedAt: new Date(),
+        resolution: "auto_reply",
+        receivedAt: at(1),
+      },
+    });
+
+    const page = await renderPage(Inbox(pageProps()));
+    expect(page.text).toContain("thomas@wright-ai-solutions.com");
+    expect(page.text).toContain("All (2)");
+    const items = page.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(items[0]).toMatch(
+      /^no-reply@mail\.instagram\.comNot on any lead.*Automatic.*123456 is your Instagram code.*Use 123456 to verify/,
+    );
+    expect(items[1]).toMatch(/^pat@shop\.testCold Outreach lead.*Interested.*Yes, call me/);
+    expect(page.getByRole("link", { name: "Cold Outreach lead" }).getAttribute("href")).toBe(`/vault-pipeline/${lead.id}`);
+
+    const people = await renderPage(Inbox(pageProps({}, { filter: "people" })));
+    expect(people.getAllByRole("listitem")).toHaveLength(1);
+    expect(people.text).not.toContain("Instagram");
+
+    const replies = await renderPage(Replies());
+    expect(replies.getByRole("link", { name: "Inbox" }).getAttribute("href")).toBe("/inbox");
   });
 
   it("show the reply-loop check on Settings, with what came back", async () => {
