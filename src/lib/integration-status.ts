@@ -22,6 +22,9 @@ import {
   DATALEADSELL_SCHEDULE_ID,
   GARBAGE_AI_DAILY_RUN_TIME_LABEL,
   GARBAGE_AI_SCHEDULE_ID,
+  ROOM_DESIGNER_DAILY_RUN_TIME_LABEL,
+  ROOM_DESIGNER_RUNS_WEEKDAYS_ONLY,
+  ROOM_DESIGNER_SCHEDULE_ID,
   VAULT_DAILY_RUN_TIME_LABEL,
   VAULT_RUNS_WEEKDAYS_ONLY,
   VAULT_SCHEDULE_ID,
@@ -55,7 +58,7 @@ export type ConnectionStatus = {
 const NOT_CONFIRMED = "Not confirmed yet";
 
 type CronJob = {
-  key: "daily-run" | "dataleadsell-daily" | "garbage-ai-daily" | "stale-contacts" | "daily-report";
+  key: "daily-run" | "dataleadsell-daily" | "garbage-ai-daily" | "room-designer-daily" | "stale-contacts" | "daily-report";
   label: string;
   /** The route Vercel calls (vercel.json "crons"); a test checks every one there has a row here. */
   path: string;
@@ -112,6 +115,18 @@ export const CRON_JOBS: readonly CronJob[] = [
     scheduleId: GARBAGE_AI_SCHEDULE_ID,
     page: pipelinePage("garbage-ai"),
     failedNext: dailyRunFailedNext("garbage-ai"),
+  },
+  {
+    key: "room-designer-daily",
+    label: "Daily Room Designer 3D run",
+    path: "/api/cron/room-designer-daily",
+    pipeline: "room-designer",
+    kind: "daily",
+    schedule: ROOM_DESIGNER_DAILY_RUN_TIME_LABEL,
+    weekdaysOnly: ROOM_DESIGNER_RUNS_WEEKDAYS_ONLY,
+    scheduleId: ROOM_DESIGNER_SCHEDULE_ID,
+    page: pipelinePage("room-designer"),
+    failedNext: dailyRunFailedNext("room-designer"),
   },
   {
     key: "stale-contacts",

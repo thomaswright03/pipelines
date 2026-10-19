@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createLeadAction, updateLeadAction } from "@/lib/actions/vault-pipeline";
 import { createAgentAction, updateAgentAction } from "@/lib/actions/dataleadsell";
 import { createHaulerAction, updateHaulerAction } from "@/lib/actions/garbage-ai";
+import { createRemodelerAction, updateRemodelerAction } from "@/lib/actions/room-designer";
 import {
   agentLeadEditSchema,
   agentLeadSchema,
@@ -57,22 +58,29 @@ function EmailLockedNote({ email }: { email: string }) {
   );
 }
 
-/** The Cold Outreach form; Garbage AI haulers (`haulers`) have the same fields. */
+// The pipelines whose leads are businesses with the Cold Outreach form's fields.
+const BUSINESS_FORM = {
+  "cold-outreach": { actions: [createLeadAction, updateLeadAction], path: "/vault-pipeline" },
+  "garbage-ai": { actions: [createHaulerAction, updateHaulerAction], path: "/garbage-ai" },
+  "room-designer": { actions: [createRemodelerAction, updateRemodelerAction], path: "/room-designer" },
+} as const;
+
+/** The Cold Outreach form; Garbage AI haulers and Room Designer 3D remodelers have the same fields. */
 export function ColdOutreachLeadForm({
   mode,
   initial,
-  haulers = false,
+  pipeline = "cold-outreach",
 }: {
   mode: Mode;
   initial: Required<ColdOutreachLeadInput>;
-  haulers?: boolean;
+  pipeline?: keyof typeof BUSINESS_FORM;
 }) {
   const router = useRouter();
-  const [create, update] = haulers ? [createHaulerAction, updateHaulerAction] : [createLeadAction, updateLeadAction];
+  const [create, update] = BUSINESS_FORM[pipeline].actions;
   const submit = mode.kind === "edit" ? (values: ColdOutreachLeadInput) => update(mode.leadId, values) : create;
   const schema = mode.kind === "edit" ? coldOutreachLeadEditSchema(initial.notes) : coldOutreachLeadSchema;
   const form = useLeadForm(schema, initial, submit, (id) => {
-    router.push(`${haulers ? "/garbage-ai" : "/vault-pipeline"}/${id}`);
+    router.push(`${BUSINESS_FORM[pipeline].path}/${id}`);
     router.refresh();
   });
   const state = form.field("state");

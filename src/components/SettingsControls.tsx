@@ -58,8 +58,9 @@ export default function SettingsControls({
         title: "Let each pipeline pitch the same address?",
         body: (
           <p>
-            An address that already got one pipeline&apos;s pitch (Cold Outreach, dataleadsell.com or Garbage AI) could also get each of the
-            others&apos;. Every pipeline still sends at most once per address, and the do-not-email list still blocks all of them.
+            An address that already got one pipeline&apos;s pitch (Cold Outreach, dataleadsell.com, Garbage AI or Room Designer 3D) could
+            also get each of the others&apos;. Every pipeline still sends at most once per address, and the do-not-email list still blocks
+            all of them.
           </p>
         ),
         confirmLabel: "Allow",

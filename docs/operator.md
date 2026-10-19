@@ -85,6 +85,29 @@ the signature, since he makes the follow-up calls). Its leads are `HaulerLead`s;
 - Every shared rule applies: one pitch per address across pipelines (an address Cold Outreach already pitched
   isn't pitched again), the do-not-email list, reply holds and both kill switches.
 
+## Room Designer 3D
+
+Room Designer 3D (`/room-designer`) pitches independent bathroom **remodelers** Room Designer 3D, a 3D
+bathroom designer and estimator, with a free first week (Starter is $49.99 a month after it). Thomas handles
+replies and calls; his number is in the signature. Its leads are `RemodelerLead`s; the pitch is Thomas's
+wording, word for word, in `src/lib/room-designer-email-template.ts`, and its switches are in
+`src/lib/room-designer-config.ts`. The prices in the email must match the live site (`site-config.json`
+"plans" in thomaswright03/Restoration-AI-Website); if they change, change the wording (the email version
+changes with it).
+
+- **Sending is held** (`ROOM_DESIGNER_SENDING_HELD`, true until Thomas says go): every send path refuses and
+  the daily run only finds remodelers. Set it to false to start sending.
+- **Who it never emails** (`src/lib/room-designer-targeting.ts`): Eddys Remodeling (by name, company or email
+  domain), national franchises and big-box installers (Bath Fitter, Re-Bath, Five Star Bath Solutions, Kitchen
+  Tune-Up, Home Depot, Lowe's and the like), names that say supply house or showroom, and Yelp listings whose
+  categories are all plumbing, supply or showroom ones. Whether a remodeler already has a Room Designer 3D
+  account can't be checked from here.
+- **Daily run**: 9:00 AM Arizona time, Monday to Friday (`/api/cron/room-designer-daily`), once a day with up
+  to 5 minutes like Cold Outreach; on by default at 10 emails a day.
+- **Stages**: New → Contacted → Responded → **Demo booked** (a 15-minute walkthrough is on the calendar) →
+  **Free week started** → **Paying customer**; a no goes to **Not interested**. After a walkthrough, send the
+  free-week sign-up link (https://restoration-ai-website-nu.vercel.app/signup.html).
+
 ## What a reply does
 
 What a reply does, in every pipeline (`src/lib/outreach/inbound.ts`):
@@ -171,12 +194,13 @@ Vercel sends automatically when `CRON_SECRET` is set.
 | `/api/cron/vault-daily` | `2 16 * * 1-5` | 9:02 AM, Monday to Friday | Cold Outreach, once a day with up to 5 minutes (Fluid compute, `maxDuration` 300): searches new cities until enough businesses with a findable email are saved for the day's number, then pitches them, so the whole day's number goes out in this one run |
 | `/api/cron/dataleadsell-daily` | `3 16-23 * * *` (8 entries) | 9:03 AM–4:03 PM, hourly | dataleadsell: the same run for real estate agents (the next agent city, Yelp term "real estate agent"), saving `AgentLead`s. **Off until turned on** on the dataleadsell page, with 10 emails a day by default so volume grows gradually. 30 minutes after Cold Outreach's, so the two never overlap |
 | `/api/cron/garbage-ai-daily` | `0 15-22 * * *` (8 entries) | 8:00 AM–3:00 PM, hourly | Garbage AI: the same run for haulers (Yelp term "garbage collection", never a city in Mountain High Disposal's service area). It leaves out haulers it never pitches before any lookup, saves `HaulerLead`s with a findable email and pitches them and any earlier daily runs found. If sending is ever held in code (`GARBAGE_AI_SENDING_HELD` in `src/lib/garbage-ai-config.ts`, currently off) it still finds haulers (until a day's number is waiting) but emails nobody |
+| `/api/cron/room-designer-daily` | `0 16 * * 1-5` | 9:00 AM, Monday to Friday | Room Designer 3D: the same run as Cold Outreach's (once a day, up to 5 minutes) for bathroom remodelers (Yelp term "bathroom remodeling"), saving `RemodelerLead`s and leaving out the ones it never pitches. While `ROOM_DESIGNER_SENDING_HELD` is true (it ships held) it finds remodelers until a day's number is waiting but emails nobody |
 | `/api/cron/stale-contacts` | `0 13 * * *` | 6:00 AM | Every pipeline: contacted leads with no reply after 7 days move to the call deck (or the contactless list if there's no phone), each with a History entry; leads with an unresolved "needs a look" reply stay in Contacted |
 | `/api/cron/daily-report` | `0 17 * * *` | 10:00 AM | Emails the owner one report (to `DAILY_REPORT_TO`, default t@thomasewright.com, from `DAILY_REPORT_FROM`, default the Cold Outreach sender) with a section per pipeline for the last 24 hours: the daily run's outcome and time-limit hits, leads added, sends, failed sends, bounces, replies, opt-outs, call-deck moves and the send backlog; turned-off pipelines get one line. Recorded as a `PipelineRun` (`all`/`daily-report`); a second call within 20 hours is skipped. Ignores the Settings pause (it says so in the report) but not `OUTBOUND_EMAIL_DISABLED` |
 
-- **Settings.** Each pipeline page has its own **Daily automation** panel (stored in `PipelineSchedule` under `vault-pipeline`, `dataleadsell` and `garbage-ai`). With no saved row, Cold Outreach and Garbage AI run daily with 30 businesses per run and dataleadsell is off with 10 agents per run. The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
+- **Settings.** Each pipeline page has its own **Daily automation** panel (stored in `PipelineSchedule` under `vault-pipeline`, `dataleadsell`, `garbage-ai` and `room-designer`). With no saved row, Cold Outreach and Garbage AI run daily with 30 businesses per run, Room Designer 3D runs weekdays with 10, and dataleadsell is off with 10 agents per run. The Cold Outreach page controls whether the daily run happens and how many **businesses it checks** for an address (1–50; one Yelp search returns at most 50). That is not the number emailed: typically only 15–25% of businesses yield a usable address, and discovery stops after 25 s. The panel shows the last run's actual numbers (businesses checked, addresses found, leads emailed), which are stored on the `PipelineRun` row. Changes apply to the next run.
 - **Run time.** The time is fixed in `vercel.json`, so changing it needs a code change and a redeploy.
-- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach`, `dataleadsell` or `garbage-ai`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections watches all three daily runs (a run switched off on its page shows as Off), the call-deck move and the daily report.
+- **Run log.** Every run is recorded in `PipelineRun` (`pipeline` = `cold-outreach`, `dataleadsell`, `garbage-ai` or `room-designer`), whether it succeeded, partly failed, failed or was skipped, along with the reasons. The last five runs appear on that pipeline's page. Settings → Connections watches all four daily runs (a run switched off on its page shows as Off), the call-deck move and the daily report.
   - While outbound email is paused (Settings) or switched off on the server (`OUTBOUND_EMAIL_DISABLED`), every daily run is recorded as **skipped** without searching Yelp, looking up addresses or sending.
   - The page warns when the last run is more than 26 hours old.
   - Every daily route returns JSON: `{ status, summary, errors }`. A failed run returns HTTP 500. If the run can't

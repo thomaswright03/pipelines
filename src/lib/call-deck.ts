@@ -73,7 +73,12 @@ type DeckTable = {
 };
 
 function table(pipelineId: PipelineId): DeckTable {
-  const tables = { "cold-outreach": prisma.lead, "garbage-ai": prisma.haulerLead, dataleadsell: prisma.agentLead };
+  const tables = {
+    "cold-outreach": prisma.lead,
+    "garbage-ai": prisma.haulerLead,
+    "room-designer": prisma.remodelerLead,
+    dataleadsell: prisma.agentLead,
+  };
   return tables[pipelineId] as unknown as DeckTable;
 }
 

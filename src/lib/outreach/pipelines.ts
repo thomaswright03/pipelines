@@ -8,7 +8,7 @@
 // for every column the shared rules touch, so the only per-pipeline
 // differences are data — which tables, which pitch, which sender, and the
 // one pipeline-specific column (company vs brokerage/county).
-import { Prisma, type AgentLead, type HaulerLead, type Lead, type PrismaClient } from "@/generated/prisma/client";
+import { Prisma, type AgentLead, type HaulerLead, type Lead, type PrismaClient, type RemodelerLead } from "@/generated/prisma/client";
 import { buildAgentOutreachEmail, DATALEADSELL_TEMPLATE_VERSION } from "@/lib/dataleadsell-email-template";
 import { buildOutreachEmail, COLD_OUTREACH_TEMPLATE_VERSION } from "@/lib/vault-email-template";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
@@ -16,6 +16,9 @@ import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { buildHaulerOutreachEmail, GARBAGE_AI_TEMPLATE_VERSION } from "@/lib/garbage-ai-email-template";
 import { pitchExclusion } from "@/lib/garbage-ai-targeting";
 import { GARBAGE_AI_HOLD_MESSAGE, GARBAGE_AI_SENDER_EMAIL, GARBAGE_AI_SENDING_HELD } from "@/lib/garbage-ai-config";
+import { buildRemodelerOutreachEmail, ROOM_DESIGNER_TEMPLATE_VERSION } from "@/lib/room-designer-email-template";
+import { remodelerPitchExclusion } from "@/lib/room-designer-targeting";
+import { ROOM_DESIGNER_HOLD_MESSAGE, ROOM_DESIGNER_SENDER_EMAIL, ROOM_DESIGNER_SENDING_HELD } from "@/lib/room-designer-config";
 import { PIPELINE_BASE_PATH, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { APP_TIME_ZONE } from "@/lib/time";
 
@@ -47,7 +50,7 @@ export type OutreachLead = {
   emailRulesVersion: string | null;
   /** A reply from this lead is waiting for the operator ("Reply needs a look"); nothing is sent to it until resolved. */
   replyNeedsReview: boolean;
-  company: string | null; // Cold Outreach and Garbage AI
+  company: string | null; // Cold Outreach, Garbage AI and Room Designer 3D
   brokerage: string | null; // dataleadsell only
   county: string | null; // dataleadsell only
 };
@@ -235,9 +238,9 @@ function needsLookup(retryBefore?: Date): Prisma.LeadWhereInput & Prisma.AgentLe
 // minimal structural views. Prisma's delegate types can't be unified across
 // models (hence the casts where each view is made), but every argument is
 // typed as valid for Lead and AgentLead at once — see LeadTable below.
-// HaulerLead has every Lead column (plus "services"), so Garbage AI goes
-// through the same views; rowColumnsExist checks what is read back against
-// all three models.
+// HaulerLead and RemodelerLead have every Lead column (plus "services"), so
+// Garbage AI and Room Designer 3D go through the same views; rowColumnsExist
+// checks what is read back against every model.
 type Row = Omit<OutreachLead, "company" | "brokerage" | "county"> & {
   company?: string | null;
   brokerage?: string | null;
@@ -267,11 +270,12 @@ type SendLogTable = {
 type SharedRow = Omit<Row, "company" | "brokerage" | "county">;
 type HasColumns<Model, Columns> =
   Model extends Pick<Columns, keyof Columns & keyof Model> ? (keyof Columns extends keyof Model ? true : false) : false;
-const rowColumnsExist: [HasColumns<Lead, SharedRow>, HasColumns<AgentLead, SharedRow>, HasColumns<HaulerLead, SharedRow>] = [
-  true,
-  true,
-  true,
-];
+const rowColumnsExist: [
+  HasColumns<Lead, SharedRow>,
+  HasColumns<AgentLead, SharedRow>,
+  HasColumns<HaulerLead, SharedRow>,
+  HasColumns<RemodelerLead, SharedRow>,
+] = [true, true, true, true];
 void rowColumnsExist;
 
 type PipelineSpec = {
@@ -535,10 +539,31 @@ const garbageAi = makeAdapter({
   searchColumns: ["company", "city"],
 });
 
-const ADAPTERS: Record<PipelineId, PipelineAdapter> = { dataleadsell, "cold-outreach": coldOutreach, "garbage-ai": garbageAi };
+// RemodelerLead has the same columns as HaulerLead.
+const roomDesigner = makeAdapter({
+  id: "room-designer",
+  tables: { leads: "RemodelerLead", activities: "RemodelerLeadActivity" },
+  hasCompanyColumn: true,
+  senderEmail: ROOM_DESIGNER_SENDER_EMAIL,
+  sendHold: ROOM_DESIGNER_SENDING_HELD ? ROOM_DESIGNER_HOLD_MESSAGE : null,
+  neverPitch: remodelerPitchExclusion,
+  buildEmail: (lead) => ({ ...buildRemodelerOutreachEmail(lead), templateVersion: ROOM_DESIGNER_TEMPLATE_VERSION }),
+  leads: (db) => db.remodelerLead as unknown as LeadTable,
+  sendLogs: (db) => db.remodelerEmailSendLog as unknown as SendLogTable,
+  activities: (db) => db.remodelerLeadActivity as unknown as ActivityTable,
+  ownColumns: (data) => ({ company: data.company ?? data.name, services: data.services ?? null }),
+  searchColumns: ["company", "city"],
+});
+
+const ADAPTERS: Record<PipelineId, PipelineAdapter> = {
+  dataleadsell,
+  "cold-outreach": coldOutreach,
+  "garbage-ai": garbageAi,
+  "room-designer": roomDesigner,
+};
 
 export function getPipeline(id: PipelineId): PipelineAdapter {
   return ADAPTERS[id];
 }
 
-export const ALL_PIPELINES: PipelineAdapter[] = [dataleadsell, coldOutreach, garbageAi];
+export const ALL_PIPELINES: PipelineAdapter[] = [dataleadsell, coldOutreach, garbageAi, roomDesigner];

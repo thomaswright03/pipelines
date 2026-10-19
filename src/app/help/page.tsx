@@ -3,9 +3,11 @@ import Link from "next/link";
 import {
   DATALEADSELL_DAILY_RUN_TIME_LABEL,
   GARBAGE_AI_DAILY_RUN_TIME_LABEL,
+  ROOM_DESIGNER_DAILY_RUN_TIME_LABEL,
   VAULT_DAILY_RUN_TIME_LABEL,
 } from "@/lib/pipeline-schedule-rules";
 import { GARBAGE_AI_DEMO_HOST, GARBAGE_AI_REFERENCE_CUSTOMER } from "@/lib/garbage-ai-config";
+import { ROOM_DESIGNER_SIGNUP_URL } from "@/lib/room-designer-config";
 
 export const metadata: Metadata = { title: "Operator guide" };
 
@@ -30,8 +32,8 @@ const link = "text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
 const GLOSSARY: [string, string][] = [
   ["Pitch", "The one outreach email each address gets. An address is never pitched twice."],
   [
-    "Lead / agent / hauler",
-    "Who a pipeline may email: a local business (Cold Outreach), a real-estate agent (dataleadsell.com) or a waste hauler (Garbage AI).",
+    "Lead / agent / hauler / remodeler",
+    "Who a pipeline may email: a local business (Cold Outreach), a real-estate agent (dataleadsell.com), a waste hauler (Garbage AI) or a bathroom remodeler (Room Designer 3D).",
   ],
   [
     "Hauler",
@@ -45,6 +47,7 @@ const GLOSSARY: [string, string][] = [
     "Demo booked / Signed up",
     `Garbage AI stages: a demo with ${GARBAGE_AI_DEMO_HOST} is booked; the hauler filled out the signup form after it.`,
   ],
+  ["Free week started / Paying customer", "Room Designer 3D stages: the remodeler started the free Starter week; they pay for a plan."],
   ["Call deck", "Leads that didn't reply within a week of their pitch and have a phone number, shown one card at a time to call."],
   ["No phone number", "Leads that didn't reply within a week and have no number to call (also called contactless)."],
   ["Reply needs a look", "The app couldn't be sure what a reply means. Nothing is emailed to that address until you decide."],
@@ -147,6 +150,10 @@ export default function HelpPage() {
               Garbage AI
             </Link>{" "}
             {GARBAGE_AI_DAILY_RUN_TIME_LABEL},{" "}
+            <Link href="/room-designer" className={link}>
+              Room Designer 3D
+            </Link>{" "}
+            {ROOM_DESIGNER_DAILY_RUN_TIME_LABEL},{" "}
             <Link href="/vault-pipeline" className={link}>
               Cold Outreach
             </Link>{" "}
@@ -209,6 +216,26 @@ export default function HelpPage() {
           <strong>Stages.</strong> After <em>Responded</em>, move a hauler to <em>Demo booked</em> when a demo is on the calendar, then{" "}
           <em>Signed up</em> once they fill out the signup form, and <em>Paying client</em> when they pay. A &ldquo;no&rdquo; goes to{" "}
           <em>Not interested</em>. Haulers who don&apos;t reply within a week go to its call deck, like the other pipelines.
+        </p>
+      </Section>
+
+      <Section id="room-designer" title="Room Designer 3D">
+        <p>
+          <Link href="/room-designer" className={link}>
+            Room Designer 3D
+          </Link>{" "}
+          pitches independent bathroom <strong>remodelers</strong> the 3D bathroom designer and estimator, with a free first week. Its run,{" "}
+          {ROOM_DESIGNER_DAILY_RUN_TIME_LABEL}, searches Yelp for bathroom remodeling in new US cities, finds each remodeler&apos;s address
+          on its own website and emails the ones it found. It follows every rule the other pipelines do.
+        </p>
+        <p>
+          <strong>Who it never emails.</strong> Eddys Remodeling; national franchises and big-box installers (Bath Fitter, Re-Bath, Five
+          Star Bath Solutions, Kitchen Tune-Up, home-improvement store installers); and plumbing-only, supply-house and showroom listings.
+        </p>
+        <p>
+          <strong>Stages.</strong> When someone replies, offer a 15-minute walkthrough on a call or screen share, then the free-week sign-up
+          ({ROOM_DESIGNER_SIGNUP_URL}). Move them to <em>Demo booked</em>, then <em>Free week started</em>, then <em>Paying customer</em>. A
+          &ldquo;no&rdquo; goes to <em>Not interested</em>.
         </p>
       </Section>
 

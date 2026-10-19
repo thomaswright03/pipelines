@@ -94,6 +94,16 @@ function tables(pipelineId: PipelineId) {
         prisma.haulerLead.findMany({ where, select: { ...select, repliedAt: true }, orderBy: { repliedAt: "desc" }, take }),
     };
   }
+  if (pipelineId === "room-designer") {
+    return {
+      countLogs: (where: Prisma.RemodelerEmailSendLogWhereInput) => prisma.remodelerEmailSendLog.count({ where }),
+      findLogs: (where: Prisma.RemodelerEmailSendLogWhereInput, orderBy: Prisma.RemodelerEmailSendLogOrderByWithRelationInput) =>
+        prisma.remodelerEmailSendLog.findMany({ where, orderBy, take: INBOX_LIMIT, include: { lead: { select: { name: true } } } }),
+      findLeads: (where: Prisma.RemodelerLeadWhereInput): Promise<LeadRow[]> => prisma.remodelerLead.findMany({ where, select }),
+      findLeadsFor: (where: Prisma.RemodelerLeadWhereInput, take: number) =>
+        prisma.remodelerLead.findMany({ where, select: { ...select, repliedAt: true }, orderBy: { repliedAt: "desc" }, take }),
+    };
+  }
   return {
     countLogs: (where: Prisma.LeadEmailSendLogWhereInput) => prisma.leadEmailSendLog.count({ where }),
     findLogs: (where: Prisma.LeadEmailSendLogWhereInput, orderBy: Prisma.LeadEmailSendLogOrderByWithRelationInput) =>

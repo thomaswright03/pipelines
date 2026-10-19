@@ -17,7 +17,9 @@ export async function templateVersionHistory(pipeline: PipelineId): Promise<Vers
       ? await prisma.emailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } })
       : pipeline === "garbage-ai"
         ? await prisma.haulerEmailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } })
-        : await prisma.leadEmailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } });
+        : pipeline === "room-designer"
+          ? await prisma.remodelerEmailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } })
+          : await prisma.leadEmailSendLog.groupBy({ by: ["templateVersion"], where, _min: { sentAt: true } });
   return numberVersions(rows.map((r) => ({ version: r.templateVersion, firstSent: r._min.sentAt })));
 }
 

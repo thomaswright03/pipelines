@@ -40,10 +40,24 @@ export const GARBAGE_AI_STATUSES = [
   "lost",
 ] as const;
 
+export const ROOM_DESIGNER_STATUSES = [
+  "new",
+  "contacted",
+  "responded",
+  "demo_booked",
+  "free_week",
+  "paying_customer",
+  "not_interested",
+  "cold_call_list",
+  "contactless_list",
+  "lost",
+] as const;
+
 type ColdOutreachStatus = (typeof COLD_OUTREACH_STATUSES)[number];
 type DataleadsellStatus = (typeof DATALEADSELL_STATUSES)[number];
 type GarbageAiStatus = (typeof GARBAGE_AI_STATUSES)[number];
-export type LeadStatus = ColdOutreachStatus | DataleadsellStatus | GarbageAiStatus;
+type RoomDesignerStatus = (typeof ROOM_DESIGNER_STATUSES)[number];
+export type LeadStatus = ColdOutreachStatus | DataleadsellStatus | GarbageAiStatus | RoomDesignerStatus;
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
   new: "New",
@@ -55,6 +69,8 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   subscribed: "Subscribed",
   demo_booked: "Demo booked",
   signed_up: "Signed up",
+  free_week: "Free week started",
+  paying_customer: "Paying customer",
   not_interested: "Not interested",
   cold_call_list: "Cold call list",
   contactless_list: "No phone number",
@@ -70,9 +86,11 @@ export const STATUS_HELP: Record<LeadStatus, string> = {
   working_for: "Doing work for them.",
   paying_client: "Pays for the service.",
   subscribed: "Subscribed to dataleadsell.com.",
-  demo_booked: "A demo with Max is booked.",
+  demo_booked: "A demo or walkthrough is booked.",
   signed_up: "Filled out the hauler signup form after the demo.",
-  not_interested: "Said no, by reply or on a call (dataleadsell and Garbage AI).",
+  free_week: "Started the free Room Designer 3D week.",
+  paying_customer: "Pays for a Room Designer 3D plan.",
+  not_interested: "Said no, by reply or on a call (every pipeline but Cold Outreach).",
   cold_call_list: "Didn't reply within a week and has a phone number: on the call deck.",
   contactless_list: "Didn't reply within a week and has no phone number to call.",
   lost: "Closed: opted out, the email bounced, couldn't be reached, or you marked it lost. In Cold Outreach a plain no lands here too.",
@@ -88,6 +106,8 @@ export const STATUS_COLOR: Record<LeadStatus, string> = {
   subscribed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   demo_booked: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
   signed_up: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
+  free_week: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
+  paying_customer: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   not_interested: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
   cold_call_list: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
   contactless_list: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
@@ -104,6 +124,8 @@ export const STATUS_DOT: Record<LeadStatus, string> = {
   subscribed: "bg-emerald-500",
   demo_booked: "bg-purple-500",
   signed_up: "bg-cyan-500",
+  free_week: "bg-cyan-500",
+  paying_customer: "bg-emerald-500",
   not_interested: "bg-zinc-400",
   cold_call_list: "bg-orange-500",
   contactless_list: "bg-zinc-400",
@@ -114,6 +136,7 @@ const STATUSES: Record<PipelineId, readonly LeadStatus[]> = {
   dataleadsell: DATALEADSELL_STATUSES,
   "cold-outreach": COLD_OUTREACH_STATUSES,
   "garbage-ai": GARBAGE_AI_STATUSES,
+  "room-designer": ROOM_DESIGNER_STATUSES,
 };
 
 function statusesFor(pipeline: PipelineId): readonly LeadStatus[] {
@@ -182,6 +205,19 @@ const GARBAGE_AI_TRANSITIONS: Record<GarbageAiStatus, GarbageAiStatus[]> = {
   lost: ["responded", "cold_call_list"],
 };
 
+const ROOM_DESIGNER_TRANSITIONS: Record<RoomDesignerStatus, RoomDesignerStatus[]> = {
+  new: ["cold_call_list", "contactless_list", "not_interested", "lost"],
+  contacted: ["responded", "demo_booked", "cold_call_list", "contactless_list", "not_interested", "lost"],
+  responded: ["demo_booked", "free_week", "paying_customer", "not_interested", "cold_call_list", "contacted", "lost"],
+  demo_booked: ["free_week", "paying_customer", "responded", "not_interested", "lost"],
+  free_week: ["paying_customer", "demo_booked", "not_interested", "lost"],
+  paying_customer: ["free_week", "lost"],
+  not_interested: ["responded", "lost"],
+  cold_call_list: ["responded", "demo_booked", "contactless_list", "not_interested", "lost"],
+  contactless_list: ["cold_call_list", "lost"],
+  lost: ["responded", "cold_call_list"],
+};
+
 // Appointment set is reached through the appointment form (it needs a
 // date), not the status dropdown, from these statuses.
 export const APPOINTMENT_FROM: readonly string[] = ["contacted", "responded", "cold_call_list", "appointment_set"];
@@ -192,6 +228,9 @@ export function allowedTransitions(pipeline: PipelineId, from: string): LeadStat
   }
   if (pipeline === "garbage-ai") {
     return GARBAGE_AI_TRANSITIONS[from as GarbageAiStatus] ?? [];
+  }
+  if (pipeline === "room-designer") {
+    return ROOM_DESIGNER_TRANSITIONS[from as RoomDesignerStatus] ?? [];
   }
   return COLD_OUTREACH_TRANSITIONS[from as ColdOutreachStatus] ?? [];
 }
@@ -208,8 +247,10 @@ const RANK: Record<LeadStatus, number> = {
   demo_booked: 4,
   working_for: 5,
   signed_up: 5,
+  free_week: 5,
   subscribed: 6,
   paying_client: 6,
+  paying_customer: 6,
   not_interested: 7,
   lost: 7,
 };
@@ -220,7 +261,14 @@ export function isBackwardMove(from: string, to: string): boolean {
 
 // Statuses where the relationship is past cold outreach: opting out of
 // marketing email doesn't make a client "lost".
-export const CUSTOMER_STATUSES: readonly string[] = ["working_for", "paying_client", "subscribed", "signed_up"];
+export const CUSTOMER_STATUSES: readonly string[] = [
+  "working_for",
+  "paying_client",
+  "subscribed",
+  "signed_up",
+  "free_week",
+  "paying_customer",
+];
 
 // --- Replies (every pipeline) ---
 // A genuine reply from a lead that was emailed moves it to Responded from

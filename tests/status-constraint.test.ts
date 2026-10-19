@@ -2,7 +2,7 @@
 // one that got in anyway instead of showing it raw.
 import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { COLD_OUTREACH_STATUSES, DATALEADSELL_STATUSES, statusLabel } from "@/lib/lead-status";
+import { COLD_OUTREACH_STATUSES, DATALEADSELL_STATUSES, ROOM_DESIGNER_STATUSES, statusLabel } from "@/lib/lead-status";
 import { makeAgentLead, makeColdLead } from "./helpers";
 
 async function allowedByDatabase(constraint: string): Promise<string[]> {
@@ -15,6 +15,7 @@ describe("lead status in the database", () => {
   it("allows exactly the statuses each pipeline knows", async () => {
     expect(await allowedByDatabase("Lead_status_check")).toEqual([...COLD_OUTREACH_STATUSES].sort());
     expect(await allowedByDatabase("AgentLead_status_check")).toEqual([...DATALEADSELL_STATUSES].sort());
+    expect(await allowedByDatabase("RemodelerLead_status_check")).toEqual([...ROOM_DESIGNER_STATUSES].sort());
   });
 
   it("rejects an unknown status", async () => {

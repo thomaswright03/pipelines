@@ -6,6 +6,7 @@ import { logError } from "@/lib/log";
 import {
   DATALEADSELL_SCHEDULE_ID,
   GARBAGE_AI_SCHEDULE_ID,
+  ROOM_DESIGNER_SCHEDULE_ID,
   savePipelineSchedule,
   scheduleSchema,
   VAULT_SCHEDULE_ID,
@@ -73,6 +74,18 @@ export async function updateGarbageAiScheduleAction(_prevState: UpdateScheduleSt
       schema: scheduleSchema,
       path: "/garbage-ai",
       logScope: "action.updateGarbageAiSchedule",
+    },
+    formData,
+  );
+}
+
+export async function updateRoomDesignerScheduleAction(_prevState: UpdateScheduleState, formData: FormData): Promise<UpdateScheduleState> {
+  return updateSchedule(
+    {
+      scheduleId: ROOM_DESIGNER_SCHEDULE_ID,
+      schema: scheduleSchema,
+      path: "/room-designer",
+      logScope: "action.updateRoomDesignerSchedule",
     },
     formData,
   );

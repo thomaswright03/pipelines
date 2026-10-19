@@ -149,7 +149,7 @@ the operator and names no settings; this table is for the developer they're told
 | --- | --- | --- |
 | Sending email | The latest send succeeded, or the latest **Test connection** (SMTP connect, STARTTLS and login; nothing is sent) passed | "turned down our login" → `ZEPTOMAIL_SMTP_PASSWORD`; "isn't set up on the server" → the password is missing; "still in test mode" → `EMAIL_TRANSPORT` isn't `zeptomail`; "no server address" → `SMTP_HOST` |
 | Receiving replies | An inbound message of any kind arrived in the last 7 days | "Reply forwarding isn't switched on" → `EMAIL_INBOUND_SECRET`; "Not confirmed yet" / "replies seem to have stopped" → the Cloudflare Email Worker and Vercel's Protection Bypass for Automation (see "Reply tracking: the email Worker" above) |
-| Each scheduled job in `vercel.json`: the Cold Outreach, dataleadsell and Garbage AI daily runs, the call-deck move, the daily report email | The last run succeeded and was less than 26 hours ago. A pipeline's daily run switched off on its page shows **Off** (grey), not as a problem | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab. A failed run's next step links the job's own page (the pipeline's Daily automation panel, the dashboard for the call-deck move, Sending email for the report). `tests/connections.test.ts` fails if a cron in `vercel.json` has no row or a different time |
+| Each scheduled job in `vercel.json`: the Cold Outreach, dataleadsell, Garbage AI and Room Designer 3D daily runs, the call-deck move, the daily report email | The last run succeeded and was less than 26 hours ago. A pipeline's daily run switched off on its page shows **Off** (grey), not as a problem | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab. A failed run's next step links the job's own page (the pipeline's Daily automation panel, the dashboard for the call-deck move, Sending email for the report). `tests/connections.test.ts` fails if a cron in `vercel.json` has no row or a different time |
 | Yelp search | The latest Yelp request (a search, a daily run or **Test connection**, which asks for one business) answered | "Yelp isn't set up" → `YELP_API_KEY` missing; "rejected our access key" → the key is wrong or revoked |
 
 ## Post-deploy smoke check: the reply loop
@@ -191,8 +191,10 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
    template version of each send), `20261002090000_inbound_verdict` (each reply's verdict, backfilled from
    the stored fields, and the rules version on each correction), `20261003090000_garbage_ai_pipeline`
    (the Garbage AI tables: `HaulerLead` with its status check, its activity and send log, and
-   `ScrapedHaulerCity` — new and empty, so nothing existing changes) and `20261015090000_interest_alerts`
-   (interest-alert and CSO-reading columns on `InboundReply`, all empty to start). All are additive.
+   `ScrapedHaulerCity` — new and empty, so nothing existing changes), `20261015090000_interest_alerts`
+   (interest-alert and CSO-reading columns on `InboundReply`, all empty to start) and
+   `20261019090000_room_designer_pipeline` (the Room Designer 3D tables: `RemodelerLead` with its status check, its
+   activity and send log, and `ScrapedRemodelerCity` — new and empty). All are additive.
    `20260929110000_lead_status_check` adds its status checks `NOT VALID`, so they can't fail on existing rows. Afterwards, check for rows it
    would reject and fix them (for example with the lead page's status control), then validate it:
 

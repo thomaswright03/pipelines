@@ -105,7 +105,7 @@ describe("daily report contents", () => {
     const report = await buildDailyReport();
     const byId = Object.fromEntries(report.sections.map((s) => [s.id, s]));
 
-    expect(report.sections.map((s) => s.id)).toEqual(["cold-outreach", "garbage-ai", "dataleadsell"]);
+    expect(report.sections.map((s) => s.id)).toEqual(["cold-outreach", "garbage-ai", "room-designer", "dataleadsell"]);
     expect(byId["cold-outreach"]).toMatchObject({
       enabled: true,
       businessesChecked: 3,

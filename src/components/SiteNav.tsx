@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/dataleadsell", label: "dataleadsell.com" },
   { href: "/vault-pipeline", label: "Cold Outreach" },
   { href: "/garbage-ai", label: "Garbage AI" },
+  { href: "/room-designer", label: "Room Designer 3D" },
   { href: "/replies", label: "Unmatched replies" },
   { href: "/settings", label: "Settings" },
 ];

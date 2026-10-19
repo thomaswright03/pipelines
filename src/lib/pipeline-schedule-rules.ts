@@ -39,6 +39,13 @@ export const GARBAGE_AI_SCHEDULE_ID = "garbage-ai";
 /** The Garbage AI cron times in vercel.json ("0 15 * * *" UTC and hourly after), as Arizona time. */
 export const GARBAGE_AI_DAILY_RUN_TIME_LABEL = runTimesLabel(8, 0);
 
+export const ROOM_DESIGNER_SCHEDULE_ID = "room-designer";
+
+/** Room Designer 3D runs once a day, Monday to Friday (vercel.json: "0 16 * * 1-5" UTC), and sends the whole day's number in that run. */
+export const ROOM_DESIGNER_RUNS_WEEKDAYS_ONLY = true;
+/** The Room Designer 3D cron time in vercel.json, as Arizona time. */
+export const ROOM_DESIGNER_DAILY_RUN_TIME_LABEL = dailyAtLabel(9, 0, ROOM_DESIGNER_RUNS_WEEKDAYS_ONLY);
+
 /**
  * `emailsPerDay` is how many first pitches a pipeline sends a day (its
  * daily runs plus anything sent by hand that day). Cold Outreach runs once
