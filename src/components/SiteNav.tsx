@@ -28,7 +28,7 @@ export default function SiteNav({
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Main" className="flex flex-wrap gap-1 text-sm lg:flex-nowrap">
+    <nav aria-label="Main" className="flex flex-wrap gap-1 text-sm lg:flex-nowrap lg:gap-0.5 2xl:gap-1">
       {LINKS.map(({ href, label }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
@@ -36,7 +36,7 @@ export default function SiteNav({
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-2.5 py-1.5 font-medium transition sm:min-h-8 lg:px-1.5 2xl:px-2.5 ${
+            className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-2.5 py-1.5 font-medium transition sm:min-h-8 lg:px-1 2xl:px-2.5 ${
               active
                 ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300"
                 : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
