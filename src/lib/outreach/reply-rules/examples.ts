@@ -12,6 +12,7 @@ export const RULE_EXAMPLES: { group: string; verdict: ReplyVerdict; examples: st
       "Yes, send it over.\n\nBest,\nJane Doe\nDesert Realty | Unsubscribe from our listings alerts",
       "Sounds good.\n\nDon't want to hear from us again? Reply STOP and we won't email you again.",
       "Sounds good, what times work?\n\nIf this isn't for you, just reply \"no thanks\" and I won't email again.",
+      "Sounds good, show me Tuesday.\n\nNot interested? Just reply “unsubscribe” and I’ll take you off.",
     ],
   },
   {
