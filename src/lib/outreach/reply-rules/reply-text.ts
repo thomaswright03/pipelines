@@ -2,8 +2,10 @@
 // signatures, sign-offs, legal and newsletter footers and our own
 // template's footer are cut before any rule reads a reply.
 
-// Our own footer, in case a client quotes it without ">" markers.
-export const TEMPLATE_FOOTER_RE = /don'?t want to hear from us again\?\s*reply stop and we won'?t email you again\.?/gi;
+// Our own footers, in case a client quotes one without ">" markers (the
+// Garbage AI one's "no thanks" would otherwise read as a decline).
+export const TEMPLATE_FOOTER_RE =
+  /don['’]?t want to hear from us again\?\s*reply stop and we won['’]?t email you again\.?|if this isn['’]?t for you,\s*just reply\s*["“]?no thanks["”]?\s*and i won['’]?t email again\.?/gi;
 
 // Where quoted history starts: everything from here down is cut.
 export const QUOTE_HEADER_PATTERNS: RegExp[] = [
