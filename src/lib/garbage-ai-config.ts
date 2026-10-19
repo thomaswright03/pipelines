@@ -3,10 +3,8 @@
 // - SENDING_HELD: while true, no Garbage AI email goes out from any path
 //   (single, bulk, daily run); the daily run still finds haulers. Off
 //   since Thomas said go on 2026-09-28; set it back to true to stop sends.
-// - NAME_REFERENCE_CUSTOMER: whether the pitch names Mountain High Disposal
-//   (off: the email says "A hauler in Colorado").
-// - BRAND / PHONE / SIGNUP_URL: the signature. The "Or take a look first"
-//   line and the signature URL only appear once SIGNUP_URL is set.
+// - BRAND / PHONE: the signature.
+// - SIGNUP_URL: the video and signup form the pitch links to.
 //
 // Split out from the template so client and server code can read these
 // without pulling in the template.
@@ -18,8 +16,7 @@ export const GARBAGE_AI_SENDING_HELD = false;
 export const GARBAGE_AI_HOLD_MESSAGE =
   "Garbage AI sending is off until Thomas turns it on. Haulers are still found and saved; nothing is emailed.";
 
-/** Whether the pitch names the reference customer. Off: Thomas said no on 2026-09-28. */
-export const GARBAGE_AI_NAME_REFERENCE_CUSTOMER = false;
+/** The current client the pitch never emails (and whose Colorado area it skips). */
 export const GARBAGE_AI_REFERENCE_CUSTOMER = "Mountain High Disposal";
 
 /** The company in the signature and on the dashboard card (decided 2026-09-28). */
@@ -28,8 +25,8 @@ export const GARBAGE_AI_BRAND = "Wright AI Solutions, LLC";
 export const GARBAGE_AI_PHONE = "(385) 306-8041";
 /** Who runs the demo. */
 export const GARBAGE_AI_DEMO_HOST = "Max Garrett";
-/** The hauler signup site, once it is deployed (null until then). */
-export const GARBAGE_AI_SIGNUP_URL: string | null = null;
+/** The hauler signup site (short video + signup form) the pitch links to. */
+export const GARBAGE_AI_SIGNUP_URL = "https://hauler-signup.vercel.app";
 
 // The address this pipeline's outreach is sent "from" via ZeptoMail (see
 // send-email.ts) — must be a verified sender for wright-ai-solutions.com.

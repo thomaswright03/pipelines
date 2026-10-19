@@ -63,7 +63,7 @@ describe("the Garbage AI pages", () => {
     await prisma.haulerLeadActivity.create({ data: { leadId: lead.id, type: "note", notes: "Owner is Sam." } });
     const page = await renderPage(Hauler(pageProps({ id: lead.id })));
     expect(page.getByRole("heading", { name: "Desert Roll Off", level: 1 })).toBeTruthy();
-    expect(page.text).toContain("Who's texting back your 9pm leads?");
+    expect(page.text).toContain("quick question about your leads");
     expect(page.text).toContain("Garbage Collection");
     expect(page.getByRole("button", { name: "Send outreach email" }).hasAttribute("disabled")).toBe(false);
     await expect(renderPage(Hauler(pageProps({ id: "missing" })))).rejects.toThrow("NEXT_NOT_FOUND");

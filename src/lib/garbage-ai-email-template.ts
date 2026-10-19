@@ -1,22 +1,13 @@
 // The Garbage AI pitch to waste haulers. Used for every send and for the
 // preview on each hauler's page. CAN-SPAM requires the physical mailing
-// address and the opt-out line. No prices and no results figures: pricing
-// is covered on the demo, and no current number is confirmed yet.
+// address and the opt-out line.
 import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
 import { templateVersion } from "@/lib/email-template-version";
 import { greetingName } from "@/lib/dataleadsell-email-template";
-import {
-  GARBAGE_AI_BRAND,
-  GARBAGE_AI_DEMO_HOST,
-  GARBAGE_AI_NAME_REFERENCE_CUSTOMER,
-  GARBAGE_AI_PHONE,
-  GARBAGE_AI_REFERENCE_CUSTOMER,
-  GARBAGE_AI_SIGNUP_URL,
-} from "@/lib/garbage-ai-config";
+import { GARBAGE_AI_BRAND, GARBAGE_AI_PHONE, GARBAGE_AI_SIGNUP_URL } from "@/lib/garbage-ai-config";
 
 type PitchOptions = {
-  nameReferenceCustomer?: boolean;
-  signupUrl?: string | null;
+  signupUrl?: string;
   brand?: string;
   phone?: string;
 };
@@ -31,35 +22,40 @@ export function haulerGreetingName(name: string, company: string | null): string
   return greetingName(name);
 }
 
+// Thomas's wording (2026-10-19), word for word.
 export function buildHaulerOutreachEmail(
   lead: { name: string; company: string | null },
   options: PitchOptions = {},
 ): { subject: string; body: string } {
-  const named = options.nameReferenceCustomer ?? GARBAGE_AI_NAME_REFERENCE_CUSTOMER;
-  const signupUrl = options.signupUrl === undefined ? GARBAGE_AI_SIGNUP_URL : options.signupUrl;
+  const signupUrl = options.signupUrl ?? GARBAGE_AI_SIGNUP_URL;
   const brand = options.brand ?? GARBAGE_AI_BRAND;
   const phone = options.phone ?? GARBAGE_AI_PHONE;
+  const company = lead.company?.trim() || lead.name.trim();
 
-  const subject = `Who's texting back your 9pm leads?`;
+  const subject = `quick question about your leads`;
   const body = [
-    `Hi ${haulerGreetingName(lead.name, lead.company) ?? "there"},`,
+    `Hey ${haulerGreetingName(lead.name, lead.company) ?? "there"},`,
     ``,
-    `A homeowner fills out your form at 9pm. By morning, they've signed with whoever texted back first.`,
+    `Thomas here. I'll keep this short.`,
     ``,
-    `We built an AI that texts back every lead you get, day or night, in your company's own voice. It only quotes the prices and policies you've approved, answers questions, handles the usual objections, and gets the customer to sign off on the terms by text. Anything that needs a real person goes straight to your team.`,
+    `I've been building something for trash haulers and wanted to see if it'd be useful to you guys at ${company}.`,
     ``,
-    `${named ? `${GARBAGE_AI_REFERENCE_CUSTOMER} in Colorado` : "A hauler in Colorado"} runs it today. Leads that used to go unanswered now turn into signed customers every week, with no new hires, and it even writes each contract into their back-office system on its own.`,
+    `It's basically an AI that texts your leads back for you. Someone texts asking if you pick up on their street, and it answers using your actual prices and policies. It figures out what they need, gets them to confirm, and can even set up the service agreement. If it's something a person should handle, like a billing issue or someone who wants to talk to a human, it hands it off to your team.`,
     ``,
-    `Worth 15 minutes to see it live? ${GARBAGE_AI_DEMO_HOST}, who runs it with ${named ? "Mountain High" : "them"}, will walk you through it. Just reply with a time that works.`,
-    ...(signupUrl ? [``, `Or take a look first: ${signupUrl}`] : []),
+    `I built it because I kept seeing haulers lose people who reached out on a Saturday night and didn't hear back until Monday. By then they'd already called someone else.`,
     ``,
+    `It doesn't go live until you've seen how it talks to your customers and you're happy with it. And there's no commitment just to check it out.`,
+    ``,
+    `If you're curious, there's a short video and a signup form here: ${signupUrl}`,
+    ``,
+    `Or just reply and I'll walk you through it. Takes about 15 minutes.`,
+    ``,
+    `Thanks,`,
     `Thomas Wright`,
     phone,
     brand,
     OUTREACH_MAILING_ADDRESS,
-    ...(signupUrl ? [signupUrl] : []),
-    ``,
-    `Don't want to hear from us again? Reply STOP and we won't email you again.`,
+    `If this isn't for you, just reply "no thanks" and I won't email again.`,
   ].join("\n");
   return { subject, body };
 }
