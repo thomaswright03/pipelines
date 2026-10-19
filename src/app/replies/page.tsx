@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PIPELINE_BASE_PATH, PIPELINE_IDS, PIPELINE_LABEL } from "@/lib/outreach/pipeline-id";
 import HowThisWorks from "@/components/HowThisWorks";
 import ReplyStatus from "@/components/ReplyStatus";
+import RepliesTabs from "@/components/RepliesTabs";
 import UnmatchedReplies from "@/components/UnmatchedReplies";
 import { listUnmatchedReplies } from "@/lib/outreach/inbound";
 import { getReplyHealth } from "@/lib/outreach/reply-health";
@@ -27,6 +28,7 @@ export default async function RepliesPage() {
   const others = health.unmatched - health.unmatchedInterested;
   return (
     <div className="flex flex-col gap-6">
+      <RepliesTabs current="/replies" />
       <div className="flex flex-col gap-2">
         <h1 className="accent-text text-2xl font-bold tracking-tight">Unmatched replies</h1>
         <p className="text-sm muted">
