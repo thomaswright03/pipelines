@@ -10,6 +10,7 @@ import {
   type MailboxMessage,
 } from "@/lib/outreach/mailbox";
 import { formatDateTime } from "@/lib/time";
+import RepliesTabs from "@/components/RepliesTabs";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Inbox" };
@@ -60,6 +61,7 @@ export default async function InboxPage({ searchParams }: PageProps<"/inbox">) {
   const pages = Math.max(1, Math.ceil(total / MAILBOX_PAGE_SIZE));
   return (
     <div className="flex flex-col gap-4">
+      <RepliesTabs current="/inbox" />
       <div>
         <h1 className="accent-text text-2xl font-bold tracking-tight">Inbox</h1>
         <p className="mt-1 text-sm muted">

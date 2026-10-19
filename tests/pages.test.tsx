@@ -475,8 +475,8 @@ describe("the pipeline layouts, Replies, Settings, Help and not-found pages", ()
     expect(people.getAllByRole("listitem")).toHaveLength(1);
     expect(people.text).not.toContain("Instagram");
 
-    const layout = await renderPage(RootLayout({ children: <p>Inside</p>, params: Promise.resolve({}) } as never));
-    expect(layout.getAllByRole("link").some((link) => link.getAttribute("href") === "/inbox")).toBe(true);
+    const replies = await renderPage(Replies());
+    expect(replies.getByRole("link", { name: "Inbox" }).getAttribute("href")).toBe("/inbox");
   });
 
   it("show the reply-loop check on Settings, with what came back", async () => {
