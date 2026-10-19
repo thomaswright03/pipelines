@@ -30,17 +30,17 @@ describe("greetingName", () => {
     });
   }
 
-  it("falls back to 'Hi there'", () => {
-    expect(buildAgentOutreachEmail("Desert Realty Group", "Maricopa").body.startsWith("Hi there,\n")).toBe(true);
+  it("falls back to 'Hey there'", () => {
+    expect(buildAgentOutreachEmail("Desert Realty Group", "Maricopa").body.startsWith("Hey there,\n")).toBe(true);
   });
 });
 
 describe("the sent greeting matches the preview", () => {
-  it("sends 'Hi Jane,' for a roster-style name", async () => {
+  it("sends 'Hey Jane,' for a roster-style name", async () => {
     mail = captureMail();
     const lead = await makeAgentLead({ name: "JANE M DOE - Keller Williams Realty", email: "jane@kw.test" });
     const preview = getPipeline("dataleadsell").buildEmail({ name: lead.name, company: null, county: lead.county });
-    expect(preview.body.startsWith("Hi Jane,\n")).toBe(true);
+    expect(preview.body.startsWith("Hey Jane,\n")).toBe(true);
 
     await sendFirstTouch("dataleadsell", lead.id);
     expect(mail.messages[0]!.text).toBe(preview.body);
@@ -49,12 +49,33 @@ describe("the sent greeting matches the preview", () => {
 });
 
 describe("the CAN-SPAM footer", () => {
-  it("both pipelines' pitches carry the one postal address and the STOP opt-out line", async () => {
+  it("both pipelines' pitches carry the one postal address and an opt-out line", async () => {
     const { OUTREACH_MAILING_ADDRESS } = await import("@/lib/outreach-mailing-address");
     const { buildOutreachEmail } = await import("@/lib/vault-email-template");
-    for (const { body } of [buildOutreachEmail("Bob's Bakery"), buildAgentOutreachEmail("Jane Doe", "Maricopa")]) {
-      expect(body).toContain(OUTREACH_MAILING_ADDRESS);
-      expect(body).toMatch(/Reply STOP/i);
-    }
+    expect(buildOutreachEmail("Bob's Bakery").body).toContain(OUTREACH_MAILING_ADDRESS);
+    expect(buildOutreachEmail("Bob's Bakery").body).toMatch(/Reply STOP/i);
+    const agent = buildAgentOutreachEmail("Jane Doe", "Maricopa").body;
+    expect(agent).toContain(OUTREACH_MAILING_ADDRESS);
+    expect(agent.endsWith("Not interested? Just reply “unsubscribe” and I’ll take you off.")).toBe(true);
+  });
+});
+
+describe("the dataleadsell pitch", () => {
+  it("names the lead's county in the subject and the open-county line", () => {
+    const { subject, body } = buildAgentOutreachEmail("Jane Doe", "Salt Lake");
+    expect(subject).toBe("quick question about Salt Lake County");
+    expect(body).toContain("I’m an agent in Salt Lake County too.");
+    expect(body).toContain("Salt Lake County is still open.");
+  });
+
+  it("reads naturally without a county", () => {
+    const { subject, body } = buildAgentOutreachEmail("Jane Doe", null);
+    expect(subject).toBe("quick question about your county");
+    expect(body).toContain("Your county is still open.");
+  });
+
+  it("leaves no template brackets in the email", () => {
+    const { subject, body } = buildAgentOutreachEmail("Jane Doe", "Maricopa");
+    expect(subject + body).not.toMatch(/[[\]]/);
   });
 });

@@ -1,16 +1,17 @@
-// Outreach copy for the dataleadsell.com pipeline — pitching a Probate
-// Property Leads subscription to real estate agents. Used for every send
-// (single, bulk) and for the preview on each agent's page.
+// Outreach copy for the dataleadsell.com pipeline, written by Thomas: a
+// casual note to real estate agents about the obituary-matching lead tool.
+// Used for every send (single, bulk) and for the preview on each agent's page.
 
 // CAN-SPAM requires a valid physical postal address on commercial email.
 import { OUTREACH_MAILING_ADDRESS } from "@/lib/outreach-mailing-address";
 import { templateVersion } from "@/lib/email-template-version";
-
-const COUNTY_PRICING: Record<string, string> = {
-  Maricopa: "$500/mo",
-  "Salt Lake": "$300/mo",
-  Utah: "$175/mo",
-};
+import {
+  DATALEADSELL_BROKERAGE,
+  DATALEADSELL_BUSINESS_NAME,
+  DATALEADSELL_COUNTY_STATUS,
+  DATALEADSELL_PHONE,
+  DATALEADSELL_SIGNER,
+} from "@/lib/dataleadsell-config";
 
 // Words that mean a listing is a team or company, not a person — "Hi
 // Realty," would be worse than "Hi there,".
@@ -54,36 +55,41 @@ export function greetingName(rawName: string | null | undefined): string | null 
 
 export function buildAgentOutreachEmail(agentName: string, county: string | null): { subject: string; body: string } {
   const countyLabel = county ? `${county} County` : "your county";
-  const price = county ? COUNTY_PRICING[county] : undefined;
-  const priceLine = price ? ` — ${price} for ${countyLabel}` : "";
+  const status = (county && DATALEADSELL_COUNTY_STATUS[county]) || "still open";
+  const signoff = [DATALEADSELL_BROKERAGE, DATALEADSELL_PHONE].filter(Boolean).join(" | ");
 
-  const subject = `Probate leads in ${countyLabel} before your competitors see them`;
+  const subject = `quick question about ${countyLabel}`;
 
   const body = [
-    `Hi ${greetingName(agentName) ?? "there"},`,
+    `Hey ${greetingName(agentName) ?? "there"},`,
     ``,
-    `I run Data Lead Sell — we track new probate filings in ${countyLabel}, cross-check the property owner's name against the deceased's obituary to confirm it's a real, sellable lead, and hand you a list of verified probate property leads every week, plus optional pre-designed letters mailed straight to the heirs.`,
+    `${DATALEADSELL_SIGNER} here, I’m an agent in ${countyLabel} too. I built something I think you’d like and wanted to run it by you.`,
     ``,
-    `These are motivated sellers most agents never hear about until a wholesaler or another agent already has the listing.`,
+    `A lot of the best listings start with a life event, and by the time they hit the MLS everyone has already seen them. So I built a tool that checks obituary notices against county property records every night. It shows me which homes might be coming up for sale before anyone else is talking to the family. It also mails a personal letter for me, so I’m not stuffing envelopes.`,
     ``,
-    `Access is a monthly subscription by county${priceLine}, no long-term contract — cancel anytime.`,
+    `I’m now offering it to a few other agents. Each county gets one buyer, so you wouldn’t be fighting another agent over the same list. Letters run about 73 cents each.`,
     ``,
-    `Take a look at dataleadsell.com and see this week's confirmed leads for ${countyLabel}. Happy to answer any questions — just reply to this email.`,
+    `One heads up: it’s matched off public records, so I always look over a lead before I send anything. It’s a head start, not a guarantee.`,
     ``,
-    `Thomas Wright`,
-    `(801) 580-8630`,
-    `Data Lead Sell — Wright AI Solutions, LLC`,
-    `${OUTREACH_MAILING_ADDRESS}`,
+    `${capitalize(countyLabel)} is ${status}. Want me to show you how it works? Takes 10 minutes.`,
+    ``,
+    DATALEADSELL_SIGNER,
+    signoff,
     `dataleadsell.com`,
     ``,
-    `Don't want to hear from us again? Reply STOP and we won't email you again.`,
+    `${DATALEADSELL_BUSINESS_NAME} · ${OUTREACH_MAILING_ADDRESS}`,
+    `Not interested? Just reply “unsubscribe” and I’ll take you off.`,
   ].join("\n");
 
   return { subject, body };
 }
 
-/** Which wording a send used (stored with it); changes whenever the template's text or a county price does. */
+function capitalize(text: string): string {
+  return text[0]!.toUpperCase() + text.slice(1);
+}
+
+/** Which wording a send used (stored with it); changes whenever the template's text or a county's status does. */
 export const DATALEADSELL_TEMPLATE_VERSION = templateVersion(
   "dataleadsell",
-  [null, ...Object.keys(COUNTY_PRICING)].map((county) => buildAgentOutreachEmail("{agent}", county)),
+  [null, ...Object.keys(DATALEADSELL_COUNTY_STATUS)].map((county) => buildAgentOutreachEmail("{agent}", county)),
 );
