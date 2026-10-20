@@ -130,14 +130,14 @@ describe("stale-contact routing", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: fresh.id } })).status).toBe("contacted");
     // The summary is shown as-is in Settings → Connections: display names, plain words.
     expect(json.summary).toBe(
-      "Leads with no reply 7 days after their email — dataleadsell.com: 1 lead to the call deck, 1 lead to No phone number (no number to call). Cold Outreach: 1 lead to the call deck. Garbage AI: nobody to move.",
+      "Leads with no reply 7 days after their email — dataleadsell.com: 1 lead to the call deck, 1 lead to No phone number (no number to call). Cold Outreach: 1 lead to the call deck. Garbage AI: nobody to move. Room Designer 3D: nobody to move.",
     );
   });
 
   it("says so plainly when there is nobody to move", async () => {
     const json = await (await cron(staleGET)).json();
     expect(json.summary).toBe(
-      "Leads with no reply 7 days after their email — dataleadsell.com: nobody to move. Cold Outreach: nobody to move. Garbage AI: nobody to move.",
+      "Leads with no reply 7 days after their email — dataleadsell.com: nobody to move. Cold Outreach: nobody to move. Garbage AI: nobody to move. Room Designer 3D: nobody to move.",
     );
   });
 });

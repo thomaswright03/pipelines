@@ -11,6 +11,7 @@ import {
 } from "@/lib/pipeline-schedule-rules";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import { GARBAGE_AI_SENDING_HELD } from "@/lib/garbage-ai-config";
+import { ROOM_DESIGNER_SENDING_HELD } from "@/lib/room-designer-config";
 import ActionMessage from "@/components/ActionMessage";
 import { plural } from "@/lib/format";
 
@@ -78,6 +79,17 @@ const WORDING: Record<
         : `Each run sends first pitches until ${n} have gone out today, searching a new city on Yelp for garbage collection when the haulers already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
       "Not every hauler has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
+  },
+  "room-designer": {
+    perDayLabel: EMAILS_PER_DAY_LABEL,
+    checked: { one: "remodeler", many: "remodelers" },
+    emailed: { one: "remodeler", many: "remodelers" },
+    describe: (n) =>
+      ROOM_DESIGNER_SENDING_HELD
+        ? `Each weekday's run searches new cities on Yelp for bathroom remodeling and saves the remodelers it finds an email address for, until ${n} are waiting. Sending is on hold, so it emails nobody.`
+        : `Each weekday's run sends ${n} first pitches, searching new cities on Yelp for bathroom remodeling when the remodelers already found don't cover it.`,
+    yieldNote:
+      "Not every remodeler has a findable email address, and the run searches at most 6 cities in its 5 minutes, so a day with a high number can fall short; the next weekday starts fresh.",
   },
 };
 

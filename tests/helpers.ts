@@ -141,6 +141,13 @@ export async function makeHaulerLead(data: Partial<Parameters<typeof prisma.haul
   });
 }
 
+export async function makeRemodelerLead(data: Partial<Parameters<typeof prisma.remodelerLead.create>[0]["data"]> = {}) {
+  seq++;
+  return prisma.remodelerLead.create({
+    data: { name: `Remodeler ${seq}`, company: `Remodeler ${seq}`, email: `info${seq}@remodeler${seq}.test`, status: "new", ...data },
+  });
+}
+
 export async function makeAgentLead(data: Partial<Parameters<typeof prisma.agentLead.create>[0]["data"]> = {}) {
   seq++;
   return prisma.agentLead.create({

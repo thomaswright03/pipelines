@@ -19,6 +19,7 @@ export const PRODUCT_NAME: Record<PipelineId, string> = {
   dataleadsell: "the Probate Property Leads subscription",
   "cold-outreach": "custom software from Wright AI Solutions",
   "garbage-ai": "Garbage AI, the AI that texts back haulers' leads",
+  "room-designer": "Room Designer 3D, the 3D bathroom designer for remodelers",
 };
 
 /** The name Hitta should say for the project that sent the report. */

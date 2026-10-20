@@ -50,6 +50,7 @@ function refreshLists() {
   revalidatePath("/settings");
   revalidatePath("/vault-pipeline", "layout");
   revalidatePath("/garbage-ai", "layout");
+  revalidatePath("/room-designer", "layout");
   revalidatePath("/dataleadsell", "layout");
 }
 

@@ -27,7 +27,7 @@ export default async function EditHauler({ params }: PageProps<"/garbage-ai/[id]
       </Link>
       <h1 className="accent-text-solid mt-1 break-words text-2xl font-bold tracking-tight">Edit {lead.name}</h1>
       <ColdOutreachLeadForm
-        haulers
+        pipeline="garbage-ai"
         mode={{ kind: "edit", leadId: lead.id, emailLocked: locked }}
         initial={{
           name: lead.name,

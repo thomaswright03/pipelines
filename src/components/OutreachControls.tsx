@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { runPipelineScrapeAction, searchLeadsAction, type LeadSearchState } from "@/lib/actions/vault-pipeline";
 import { runAgentPipelineScrapeAction, searchAgentsAction, type AgentSearchState } from "@/lib/actions/dataleadsell";
 import { runHaulerScrapeAction, searchHaulersAction } from "@/lib/actions/garbage-ai";
+import { runRemodelerScrapeAction, searchRemodelersAction } from "@/lib/actions/room-designer";
 import type { ActionResult } from "@/lib/outreach/lead-actions";
 import { LEAD_NOUN, PIPELINE_BASE_PATH, type PipelineId } from "@/lib/outreach/pipeline-id";
 import { US_STATE_OPTIONS } from "@/lib/us-states";
@@ -59,6 +60,7 @@ export default function OutreachControls({
   const [showSearch, setShowSearch] = useState(false);
   const isAgents = pipeline === "dataleadsell";
   const isHaulers = pipeline === "garbage-ai";
+  const isRemodelers = pipeline === "room-designer";
   const noun = LEAD_NOUN[pipeline];
 
   const epochRef = useRef(0);
@@ -80,7 +82,9 @@ export default function OutreachControls({
           ? await runAgentPipelineScrapeAction()
           : isHaulers
             ? await runHaulerScrapeAction()
-            : await runPipelineScrapeAction();
+            : isRemodelers
+              ? await runRemodelerScrapeAction()
+              : await runPipelineScrapeAction();
       } catch {
         result = { ok: false, error: unconfirmedMessage("the search ran") };
       }
@@ -168,7 +172,7 @@ export default function OutreachControls({
         (isAgents ? (
           <AgentSearchForm epoch={epoch} startControl={startControl} />
         ) : (
-          <BusinessSearchForm epoch={epoch} startControl={startControl} haulers={isHaulers} />
+          <BusinessSearchForm epoch={epoch} startControl={startControl} pipeline={pipeline} />
         ))}
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
@@ -188,6 +192,12 @@ export default function OutreachControls({
             city and county departments, and anything in Mountain High Disposal&apos;s service area.
           </p>
         )}
+        {isRemodelers && (
+          <p>
+            Each search asks Yelp for bathroom remodeling in one city and leaves out national franchises and big-box installers,
+            plumbing-only listings, supply houses and showrooms, and Eddys Remodeling.
+          </p>
+        )}
         <p>Replies to your emails are logged automatically; record anything else from the lead page.</p>
       </HowThisWorks>
     </section>
@@ -196,14 +206,21 @@ export default function OutreachControls({
 
 const initialSearch: LeadSearchState = {};
 
-/** City search; Garbage AI's always searches for garbage collection, so it has no business-type field. */
-function BusinessSearchForm({ epoch, startControl, haulers = false }: { epoch: number; startControl: StartControl; haulers?: boolean }) {
+// The pipelines with a fixed Yelp term (garbage collection, bathroom remodeling), so no business-type field.
+const FIXED_TERM_SEARCH: Partial<Record<PipelineId, typeof searchLeadsAction>> = {
+  "garbage-ai": searchHaulersAction,
+  "room-designer": searchRemodelersAction,
+};
+
+/** City search; Garbage AI and Room Designer 3D always search for their own term, so they have no business-type field. */
+function BusinessSearchForm({ epoch, startControl, pipeline }: { epoch: number; startControl: StartControl; pipeline: PipelineId }) {
+  const fixedTerm = FIXED_TERM_SEARCH[pipeline];
   const router = useRouter();
   const [values, setValues] = useState({ city: "", state: "", businessType: "" });
   const [submittedEpoch, setSubmittedEpoch] = useState(-1);
   const [clientError, setClientError] = useState<string | null>(null);
   const [state, action, pending] = useActionState(async (prev: LeadSearchState, formData: FormData) => {
-    const result = haulers ? await searchHaulersAction(prev, formData) : await searchLeadsAction(prev, formData);
+    const result = await (fixedTerm ?? searchLeadsAction)(prev, formData);
     router.refresh();
     return result;
   }, initialSearch);
@@ -253,7 +270,7 @@ function BusinessSearchForm({ epoch, startControl, haulers = false }: { epoch: n
             ))}
           </select>
         </label>
-        {!haulers && (
+        {!fixedTerm && (
           <label className="field-label w-44">
             Business type (optional)
             <input

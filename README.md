@@ -14,8 +14,13 @@ access is gated by Vercel Deployment Protection (SSO). Three pipelines live here
   each run, and pitches them a demo of an AI that texts back their online leads. It never emails current
   clients, national haulers, city/county departments or any hauler in Mountain High Disposal's Colorado
   service area (`src/lib/garbage-ai-targeting.ts`).
+- **Room Designer 3D** (`/room-designer`) finds independent bathroom remodelers via Yelp, new US cities each
+  weekday, and pitches them Room Designer 3D (a 3D bathroom designer and estimator) with a free week. It never
+  emails Eddys Remodeling, national franchises, big-box installers, plumbers, supply houses or showrooms
+  (`src/lib/room-designer-targeting.ts`). Sending is held in code until Thomas says go
+  (`ROOM_DESIGNER_SENDING_HELD` in `src/lib/room-designer-config.ts`).
 
-All three share one set of send rules: one pitch per address across pipelines, the do-not-email list,
+All four share one set of send rules: one pitch per address across pipelines, the do-not-email list,
 reply holds and both kill switches apply to every pipeline.
 
 Each pipeline has a lead list, a call deck for phone follow-up, **Sent & replies** (its sent and failed
@@ -54,16 +59,18 @@ Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach
   `lead-edit.ts` (status moves, edits), `stale-contacts.ts` (the 7-day move), `daily-run.ts` (the one daily
   run every pipeline uses, configured per pipeline in `src/lib/*-daily-run.ts`), `pipelines.ts` (the three
   pipelines' tables behind one interface).
-- **Routes that aren't pages.** Five Vercel Cron jobs (`vercel.json`, Bearer `CRON_SECRET`): the three daily
-  runs `/api/cron/garbage-ai-daily`, `/api/cron/vault-daily` and `/api/cron/dataleadsell-daily`, plus
+- **Routes that aren't pages.** Six Vercel Cron jobs (`vercel.json`, Bearer `CRON_SECRET`): the four daily
+  runs `/api/cron/garbage-ai-daily`, `/api/cron/vault-daily`, `/api/cron/dataleadsell-daily` and
+  `/api/cron/room-designer-daily`, plus
   `/api/cron/stale-contacts` and `/api/cron/daily-report` (times in docs/operator.md → "Daily automation"); `/api/email-inbound` (the Cloudflare Email Worker in
   `workers/email-inbound/`, Bearer `EMAIL_INBOUND_SECRET`); `/api/health`; `/api/contact-card/…` (vCard).
   `src/proxy.ts` answers page requests with 503 while the database is down; `src/instrumentation.ts`
   checks the environment at startup.
 - **Data stores.** One Postgres database (Neon in production), schema in `prisma/schema.prisma`,
   migrations in `prisma/migrations/` (additive; see docs/deployment.md). Main tables: `Lead` (Cold
-  Outreach), `AgentLead` (dataleadsell) and `HaulerLead` (Garbage AI), each with its `…Activity` history and
-  send-log table (`LeadEmailSendLog`, `EmailSendLog`, `HaulerEmailSendLog`);
+  Outreach), `AgentLead` (dataleadsell), `HaulerLead` (Garbage AI) and `RemodelerLead` (Room Designer 3D), each
+  with its `…Activity` history and send-log table (`LeadEmailSendLog`, `EmailSendLog`, `HaulerEmailSendLog`,
+  `RemodelerEmailSendLog`);
   `OutreachRecipient` (the one-pitch-per-address ledger); `SuppressedEmail` (do-not-email list);
   `InboundReply` (every inbound message and the rules' verdict); `OutreachCorrection` (operator
   corrections); `PipelineRun` (cron runs); `AppSettings`, `PipelineSchedule`, `PipelineMeta`; ADRE and

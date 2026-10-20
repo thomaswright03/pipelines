@@ -1,7 +1,8 @@
 // Prisma schema for Pipelines — Wright AI Solutions' outreach dashboard.
 // Each pipeline keeps its own lead/send-log tables (AgentLead/EmailSendLog
 // for dataleadsell, Lead/LeadEmailSendLog for Cold Outreach,
-// HaulerLead/HaulerEmailSendLog for Garbage AI) so their data and stats
+// HaulerLead/HaulerEmailSendLog for Garbage AI, RemodelerLead/
+// RemodelerEmailSendLog for Room Designer 3D) so their data and stats
 // stay independent; the rules that decide who gets emailed live once, in
 // src/lib/outreach/, and work against all of them.
 
@@ -82,7 +83,7 @@ model OutreachRecipient {
   id                String    @id @default(cuid())
   pipeline          String // "dataleadsell" | "cold-outreach" | "garbage-ai"
   email             String // lower-case
-  leadId            String? // AgentLead.id, Lead.id or HaulerLead.id, depending on pipeline
+  leadId            String? // AgentLead.id, Lead.id, HaulerLead.id or RemodelerLead.id, depending on pipeline
   // claimed: reserved, SMTP call in flight (or the process died mid-send)
   // sent: the provider accepted the message
   // unknown: the connection dropped mid-send; delivery can't be confirmed
@@ -531,6 +532,91 @@ model HaulerEmailSendLog {
 // kept apart from Cold Outreach's ScrapedCity so each pipeline walks the
 // city pool on its own.
 model ScrapedHaulerCity {
+  id        String   @id @default(cuid())
+  city      String
+  state     String
+  queriedAt DateTime @default(now())
+
+  @@unique([city, state])
+}
+
+// --- Room Designer 3D pipeline ---
+// Pitches Room Designer 3D (a 3D bathroom designer and estimator) to
+// independent bathroom remodelers found on Yelp, one new US city per
+// weekday. Same shape as the HaulerLead tables, Yelp categories included
+// ("services"). Sending is held in code until the owner says go (see
+// src/lib/room-designer-config.ts).
+model RemodelerLead {
+  id                  String    @id @default(cuid())
+  name                String
+  company             String? // the business name from Yelp
+  services            String? // the business's Yelp categories, e.g. "Contractors, Kitchen & Bath"
+  email               String? // lower-case
+  phone               String?
+  address             String?
+  city                String? // the city the discovery query targeted
+  state               String? // two-letter code
+  website             String?
+  source              String?
+  status              String    @default("new") // see src/lib/lead-status.ts
+  callOutcome         String? // see src/lib/lead-status.ts
+  starred             Boolean   @default(false)
+  emailCheckedAt      DateTime? // see AgentLead.emailCheckedAt
+  emailLookupFailedAt DateTime? // see AgentLead.emailLookupFailedAt
+  emailEvidence       String? // see AgentLead.emailEvidence
+  emailRulesVersion   String? // see AgentLead.emailRulesVersion
+  sendBlockedReason   String? // see AgentLead.sendBlockedReason
+  lastSendFailedAt    DateTime? // see AgentLead.lastSendFailedAt
+  lastSendFailure     String?
+  sendRefusalCount    Int       @default(0)
+  lastEmailedAt       DateTime?
+  repliedAt           DateTime?
+  ourReplyAt          DateTime?
+  replyNeedsReview    Boolean   @default(false) // see AgentLead.replyNeedsReview
+  replyReviewReason   String?
+  estimatedValueCents Int? // see Lead.estimatedValueCents
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  activities RemodelerLeadActivity[]
+  emailLogs  RemodelerEmailSendLog[]
+
+  @@index([status])
+  @@index([email])
+}
+
+model RemodelerLeadActivity {
+  id     String        @id @default(cuid())
+  leadId String
+  lead   RemodelerLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type   String // call | email | meeting | note
+  notes  String
+  date   DateTime      @default(now())
+
+  @@index([leadId, date])
+}
+
+// One row per Room Designer 3D outreach send; see EmailSendLog.
+model RemodelerEmailSendLog {
+  id                String         @id @default(cuid())
+  leadId            String?
+  lead              RemodelerLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  email             String
+  sentAt            DateTime       @default(now())
+  bounced           Boolean        @default(false)
+  bouncedAt         DateTime?
+  providerMessageId String?        @unique
+  subject           String?
+  templateVersion   String?
+
+  @@index([leadId])
+}
+
+// Which "city, state" pairs the Room Designer 3D Yelp search has already
+// used, kept apart from the other pipelines' so each walks the city pool on
+// its own.
+model ScrapedRemodelerCity {
   id        String   @id @default(cuid())
   city      String
   state     String

@@ -1,7 +1,7 @@
 // Registry of every marketing pipeline this dashboard knows about.
 //
 // "internal" pipelines live inside this app (see src/app/dataleadsell,
-// src/app/vault-pipeline, src/app/garbage-ai). "hosted" pipelines are separate codebases
+// src/app/vault-pipeline, src/app/garbage-ai, src/app/room-designer). "hosted" pipelines are separate codebases
 // already deployed as their own live, always-on Vercel project — nothing
 // to start/stop, Pipelines just links out to it.
 //
@@ -53,5 +53,10 @@ export const PIPELINES: Pipeline[] = [
     id: "garbage-ai",
     kind: "internal",
     href: "/garbage-ai",
+  },
+  {
+    id: "room-designer",
+    kind: "internal",
+    href: "/room-designer",
   },
 ];

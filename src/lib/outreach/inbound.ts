@@ -65,6 +65,7 @@ import { ANSWERED_BLOCK_PREFIX, OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/se
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { GARBAGE_AI_SENDER_EMAIL } from "@/lib/garbage-ai-config";
+import { ROOM_DESIGNER_SENDER_EMAIL } from "@/lib/room-designer-config";
 import { ALL_PIPELINES, type Db, type LeadUpdate, type OutreachLead, type PipelineAdapter } from "@/lib/outreach/pipelines";
 
 /** The rules behind every stored inbound verdict (kind, opt-out, review). */
@@ -133,7 +134,7 @@ function inboundDedupeKey(message: InboundEmail, fromEmail: string): string {
   return `hash:${digest}`;
 }
 
-const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL, GARBAGE_AI_SENDER_EMAIL].map(
+const OWN_DOMAINS = [VAULT_PIPELINE_SENDER_EMAIL, DATALEADSELL_SENDER_EMAIL, GARBAGE_AI_SENDER_EMAIL, ROOM_DESIGNER_SENDER_EMAIL].map(
   (address) => address.split("@")[1]!,
 );
 

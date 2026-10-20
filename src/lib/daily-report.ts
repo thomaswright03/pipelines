@@ -15,10 +15,12 @@ import {
   GARBAGE_AI_DAILY_RUN_TIME_LABEL,
   GARBAGE_AI_SCHEDULE_ID,
   getPipelineSchedule,
+  ROOM_DESIGNER_DAILY_RUN_TIME_LABEL,
+  ROOM_DESIGNER_SCHEDULE_ID,
   VAULT_DAILY_RUN_TIME_LABEL,
   VAULT_SCHEDULE_ID,
 } from "@/lib/pipeline-schedule";
-import { VAULT_RUNS_WEEKDAYS_ONLY } from "@/lib/pipeline-schedule-rules";
+import { ROOM_DESIGNER_RUNS_WEEKDAYS_ONLY, VAULT_RUNS_WEEKDAYS_ONLY } from "@/lib/pipeline-schedule-rules";
 import { VAULT_PIPELINE_SENDER_EMAIL } from "@/lib/vault-config";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { PIPELINE_IDS, PIPELINE_LABEL, type PipelineId } from "@/lib/outreach/pipeline-id";
@@ -70,6 +72,14 @@ const REPORT_SOURCES: Record<PipelineId, ReportSource> = {
     leadTable: "HaulerLead",
     logTable: "HaulerEmailSendLog",
     activityTable: "HaulerLeadActivity",
+  },
+  "room-designer": {
+    scheduleId: ROOM_DESIGNER_SCHEDULE_ID,
+    runTime: ROOM_DESIGNER_DAILY_RUN_TIME_LABEL,
+    weekdaysOnly: ROOM_DESIGNER_RUNS_WEEKDAYS_ONLY,
+    leadTable: "RemodelerLead",
+    logTable: "RemodelerEmailSendLog",
+    activityTable: "RemodelerLeadActivity",
   },
   dataleadsell: {
     scheduleId: DATALEADSELL_SCHEDULE_ID,

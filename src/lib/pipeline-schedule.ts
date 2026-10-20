@@ -2,13 +2,20 @@
 // fire time is fixed in vercel.json; only "enabled" and "businesses to
 // check per run" are live settings. Validation rules: ./pipeline-schedule-rules.ts.
 import { prisma } from "@/lib/db";
-import { EMAILS_PER_DAY_MAX, DATALEADSELL_SCHEDULE_ID, type PipelineScheduleData } from "@/lib/pipeline-schedule-rules";
+import {
+  EMAILS_PER_DAY_MAX,
+  DATALEADSELL_SCHEDULE_ID,
+  ROOM_DESIGNER_SCHEDULE_ID,
+  type PipelineScheduleData,
+} from "@/lib/pipeline-schedule-rules";
 
 export {
   DATALEADSELL_DAILY_RUN_TIME_LABEL,
   DATALEADSELL_SCHEDULE_ID,
   GARBAGE_AI_DAILY_RUN_TIME_LABEL,
   GARBAGE_AI_SCHEDULE_ID,
+  ROOM_DESIGNER_DAILY_RUN_TIME_LABEL,
+  ROOM_DESIGNER_SCHEDULE_ID,
   scheduleSchema,
   VAULT_DAILY_RUN_TIME_LABEL,
   VAULT_SCHEDULE_ID,
@@ -19,10 +26,13 @@ const DEFAULT_SCHEDULE: PipelineScheduleData = { enabled: true, emailsPerDay: 30
 /**
  * Until someone saves settings for a pipeline, its daily run uses these.
  * dataleadsell starts off, with a small batch, so its volume grows
- * gradually and bounces stay low.
+ * gradually and bounces stay low. Room Designer 3D starts on at 10 a day
+ * (its sends are held in code until Thomas says go, so it only finds
+ * remodelers until then).
  */
 const DEFAULT_SCHEDULES: Record<string, PipelineScheduleData> = {
   [DATALEADSELL_SCHEDULE_ID]: { enabled: false, emailsPerDay: 10 },
+  [ROOM_DESIGNER_SCHEDULE_ID]: { enabled: true, emailsPerDay: 10 },
 };
 
 export async function getPipelineSchedule(pipelineId: string): Promise<PipelineScheduleData> {

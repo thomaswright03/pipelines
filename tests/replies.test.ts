@@ -297,6 +297,7 @@ describe("stale-contacts routing", () => {
       dataleadsell: { coldCall: 1, contactless: 0 },
       "cold-outreach": { coldCall: 0, contactless: 1 },
       "garbage-ai": { coldCall: 0, contactless: 0 },
+      "room-designer": { coldCall: 0, contactless: 0 },
     });
     const agentHistory = await prisma.agentLeadActivity.findMany({ where: { leadId: agent.id } });
     expect(agentHistory).toEqual([

@@ -7,10 +7,13 @@
 //   OUTBOUND_EMAIL_DISABLED environment variable).
 // - Nothing is sent for a pipeline whose sends are held in code (its
 //   adapter's sendHold; Garbage AI's GARBAGE_AI_SENDING_HELD switch in
-//   garbage-ai-config.ts, off since 2026-09-28, so it sends today).
+//   garbage-ai-config.ts, off since 2026-09-28, so it sends today; Room
+//   Designer 3D's ROOM_DESIGNER_SENDING_HELD, on until Thomas says go).
 // - Nothing is sent to a lead the pipeline never pitches (its adapter's
 //   neverPitch; Garbage AI's current clients, national haulers, agencies
-//   and Mountain High Disposal's area — see garbage-ai-targeting.ts).
+//   and Mountain High Disposal's area — see garbage-ai-targeting.ts; Room
+//   Designer 3D's client, franchises and supply houses — see
+//   room-designer-targeting.ts).
 // - Nothing is sent to a suppressed (opted-out) address.
 // - Nothing is sent to an address whose reply is waiting for the operator
 //   ("Reply needs a look", on any lead in any pipeline, or unmatched on
