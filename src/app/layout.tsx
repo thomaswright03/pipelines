@@ -15,10 +15,14 @@ import { countUnmatchedInterested, countUnmatchedReplies } from "@/lib/outreach/
 import { getReplyHealth } from "@/lib/outreach/reply-health";
 import { databaseReachable } from "@/lib/db-health";
 import DatabaseUnavailable from "@/components/DatabaseUnavailable";
+import PageTransition from "@/components/motion/PageTransition";
+import RouteProgress from "@/components/motion/RouteProgress";
+import PointerLight from "@/components/motion/PointerLight";
 // The display serif, bundled with the app (no font CDN): titles, names and big numbers (globals.css).
 import "@fontsource-variable/fraunces/opsz.css";
 import "@fontsource-variable/fraunces/opsz-italic.css";
 import "./globals.css";
+import "./motion.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,6 +47,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col text-zinc-900 dark:text-zinc-100">
+        <RouteProgress />
+        <PointerLight />
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-indigo-800 focus:shadow focus:ring-2 focus:ring-indigo-600 dark:focus:bg-zinc-900 dark:focus:text-indigo-200 dark:focus:ring-indigo-400"
@@ -75,7 +81,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
         <main id="main" className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 pb-8 pt-4 sm:px-6 sm:pt-8">
-          <UnlessDatabaseDown>{children}</UnlessDatabaseDown>
+          <PageTransition>
+            <UnlessDatabaseDown>{children}</UnlessDatabaseDown>
+          </PageTransition>
         </main>
         <footer className="border-t border-zinc-200/70 px-6 py-4 text-center text-xs text-zinc-600 dark:border-zinc-800/70 dark:text-zinc-400">
           © {new Date().getFullYear()} Wright AI Solutions LLC ·{" "}

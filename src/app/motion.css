@@ -1,0 +1,742 @@
+/* ==========================================================================
+   Motion
+   --------------------------------------------------------------------------
+   One language for every page: things arrive by rising out of a soft blur,
+   pages hand over to each other through the browser's View Transitions
+   (React <ViewTransition>, src/components/motion/PageTransition.tsx), and
+   the light behind the page drifts slowly. Everything animates transform,
+   opacity, filter or clip-path only, so it stays on the compositor.
+
+   Reduced motion: the global rule in globals.css zeroes every duration, and
+   the block at the end of this file switches off what moves on its own
+   (the ambient light, scroll-linked effects, page slides).
+   ========================================================================== */
+
+:root {
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --swift: cubic-bezier(0.16, 1, 0.3, 1);
+  --stagger-step: 55ms;
+}
+
+/* --- Keyframes ------------------------------------------------------------------------------- */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    filter: blur(8px);
+  }
+}
+@keyframes rise {
+  from {
+    transform: translateY(12px);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes draw-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+/* The gradient starts stretched (its gold end showing) and settles to its resting width. */
+@keyframes ink-sweep {
+  from {
+    background-size: 320% 100%;
+    background-position: 100% 50%;
+  }
+  to {
+    background-size: 100% 100%;
+    background-position: 0% 50%;
+  }
+}
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+@keyframes float {
+  50% {
+    transform: translateY(-8px) rotate(-1deg);
+  }
+}
+@keyframes ring-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+@keyframes aurora-a {
+  0% {
+    transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, 3%, 0) rotate(8deg) scale(1.12);
+  }
+  100% {
+    transform: translate3d(8%, -2%, 0) rotate(-4deg) scale(1.04);
+  }
+}
+@keyframes sheen {
+  from {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+@keyframes progress-crawl {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.82);
+  }
+}
+@keyframes progress-glow {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* --- Ambient light: two slow-moving pools of indigo and gold behind everything ---------------- */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 30vmax at 22% 18%, var(--accent-tint), transparent 70%),
+    radial-gradient(34vmax 28vmax at 78% 12%, var(--gold-tint), transparent 70%),
+    radial-gradient(40vmax 34vmax at 60% 88%, color-mix(in oklab, var(--accent-tint) 70%, transparent), transparent 70%);
+  animation: aurora-a 38s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* --- Page arrival: the title, then the cards in a cascade ------------------------------------ */
+main h1 {
+  animation: rise-in 700ms var(--swift) both;
+}
+main h1::after {
+  transform-origin: left center;
+  animation: draw-x 900ms var(--swift) 260ms both;
+}
+main h1.text-center::after {
+  transform-origin: center;
+}
+main h1 + p,
+main h1 ~ p.muted {
+  animation: rise-in 700ms var(--swift) 90ms both;
+}
+/* The gradient title ink settles across the letters once. */
+.accent-text {
+  animation:
+    rise-in 700ms var(--swift) both,
+    ink-sweep 1600ms var(--swift) 120ms both;
+}
+
+/*
+ * Cards rise out of a blur, one after another. A card holding a table is
+ * left still (its rows move instead), so its pinned column headers line up
+ * with the site header straight away.
+ */
+main .card:not(:has(table)) {
+  animation: rise-in 640ms var(--swift) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger-step) + 80ms);
+}
+:nth-child(1 of .card) {
+  --i: 0;
+}
+:nth-child(2 of .card) {
+  --i: 1;
+}
+:nth-child(3 of .card) {
+  --i: 2;
+}
+:nth-child(4 of .card) {
+  --i: 3;
+}
+:nth-child(5 of .card) {
+  --i: 4;
+}
+:nth-child(6 of .card) {
+  --i: 5;
+}
+:nth-child(7 of .card) {
+  --i: 6;
+}
+:nth-child(n + 8 of .card) {
+  --i: 7;
+}
+
+/* Number tiles inside a card follow the card in, a beat apart. */
+main .card dl > div {
+  animation: rise-in 560ms var(--swift) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger-step) + 220ms + var(--j, 0) * 45ms);
+}
+main .card dl > div:nth-child(2) {
+  --j: 1;
+}
+main .card dl > div:nth-child(3) {
+  --j: 2;
+}
+main .card dl > div:nth-child(n + 4) {
+  --j: 3;
+}
+
+/* Table rows slide up into place in a quick wave (the header row stays put). */
+main .card table tbody tr {
+  animation: rise 520ms var(--swift) both;
+  animation-delay: calc(min(var(--r, 12), 12) * 22ms);
+}
+main .card table tbody tr:nth-child(1) {
+  --r: 0;
+}
+main .card table tbody tr:nth-child(2) {
+  --r: 1;
+}
+main .card table tbody tr:nth-child(3) {
+  --r: 2;
+}
+main .card table tbody tr:nth-child(4) {
+  --r: 3;
+}
+main .card table tbody tr:nth-child(5) {
+  --r: 4;
+}
+main .card table tbody tr:nth-child(6) {
+  --r: 5;
+}
+main .card table tbody tr:nth-child(7) {
+  --r: 6;
+}
+main .card table tbody tr:nth-child(8) {
+  --r: 7;
+}
+main .card table tbody tr:nth-child(9) {
+  --r: 8;
+}
+main .card table tbody tr:nth-child(10) {
+  --r: 9;
+}
+main .card table tbody tr:nth-child(11) {
+  --r: 10;
+}
+/* List items on phone-sized lead lists, the same wave. */
+main ul.card > li {
+  animation: rise-in 520ms var(--swift) both;
+}
+main ul.card > li:nth-child(2) {
+  animation-delay: 30ms;
+}
+main ul.card > li:nth-child(3) {
+  animation-delay: 60ms;
+}
+main ul.card > li:nth-child(4) {
+  animation-delay: 90ms;
+}
+main ul.card > li:nth-child(n + 5) {
+  animation-delay: 120ms;
+}
+
+/* Section tabs drop in beside the title. */
+nav[aria-label$=" sections"] > a {
+  animation: rise-in 520ms var(--swift) both;
+}
+nav[aria-label$=" sections"] > a:nth-child(2) {
+  animation-delay: 40ms;
+}
+nav[aria-label$=" sections"] > a:nth-child(3) {
+  animation-delay: 80ms;
+}
+nav[aria-label$=" sections"] > a:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+/* Progress bars fill from the left the first time they show. */
+[role="progressbar"] > div,
+main .card ul li [aria-hidden] > div.h-full {
+  transform-origin: left center;
+  animation: draw-x 1100ms var(--swift) 300ms both;
+}
+
+/* --- Cards: a light that follows the pointer (PointerLight sets --mx/--my) ------------------- */
+.card-hover {
+  position: relative;
+  isolation: isolate;
+}
+.card-hover::before,
+.card-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 420ms var(--ease);
+}
+/* A soft pool of light inside the card. */
+.card-hover::after {
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), var(--accent-tint), transparent 62%);
+}
+/* And a brighter edge where the pointer is: a gradient ring, masked to the border. */
+.card-hover::before {
+  z-index: 1;
+  padding: 1px;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), var(--gold-line), var(--accent-ring) 45%, transparent 75%);
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+}
+.card-hover:hover::before,
+.card-hover:hover::after {
+  opacity: 1;
+}
+/* The letter tile lifts and tilts toward you. */
+main .card span.bg-gradient-to-br {
+  transition:
+    transform 520ms var(--spring),
+    box-shadow 420ms var(--ease);
+}
+.card-hover:hover span.bg-gradient-to-br {
+  transform: translateY(-2px) rotate(-6deg) scale(1.08);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(214 177 106 / 0.6),
+    0 12px 22px -8px var(--accent-glow);
+}
+/* Number tiles respond on their own. */
+main .card dl > div.rounded-lg {
+  transition:
+    translate 320ms var(--spring),
+    border-color 240ms var(--ease),
+    background-color 240ms var(--ease);
+}
+main .card dl > div.rounded-lg:hover {
+  translate: 0 -2px;
+  border-color: var(--gold-line);
+  background-color: var(--surface);
+}
+
+/* --- Buttons: a light sweep across the primary ones, a springy press ------------------------ */
+.btn-primary,
+.btn-danger-solid,
+.tab-active {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn-primary::after,
+.btn-danger-solid::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.32), transparent);
+  transform: translateX(-120%) skewX(-18deg);
+}
+.btn-primary:hover:not(:disabled)::after,
+.btn-danger-solid:hover:not(:disabled)::after,
+.btn-primary:focus-visible::after {
+  animation: sheen 900ms var(--swift);
+}
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-danger-solid,
+.btn-ghost {
+  transition-timing-function: var(--spring), var(--ease), var(--ease), var(--ease), var(--ease), var(--ease);
+}
+.btn-primary:hover:not(:disabled),
+.btn-danger-solid:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+/* Tabs: the active one is lit, the others lift on hover. */
+.tab-inactive {
+  transition:
+    background-color 180ms var(--ease),
+    color 180ms var(--ease),
+    box-shadow 240ms var(--ease),
+    translate 320ms var(--spring);
+}
+.tab-inactive:hover {
+  translate: 0 -1px;
+}
+
+/* --- Main nav: links underline from the centre on hover -------------------------------------- */
+nav[aria-label="Main"] a:not([aria-current="page"])::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 14px;
+  height: 2px;
+  translate: -50% 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--accent-fill-from), var(--gold));
+  transform: scaleX(0);
+  transition: transform 320ms var(--spring);
+}
+nav[aria-label="Main"] a:not([aria-current="page"]):hover::after {
+  transform: scaleX(1);
+}
+
+/* The header's O mark turns a little on hover. */
+body > header a[href="/"] > span:first-child {
+  transition:
+    transform 600ms var(--spring),
+    box-shadow 420ms var(--ease);
+}
+body > header a[href="/"]:hover > span:first-child {
+  transform: rotate(-10deg) scale(1.08);
+}
+
+/* Header tooltips fade and lift in rather than snapping. */
+body > header [role="tooltip"] {
+  opacity: 0;
+  translate: 0 -4px;
+  transition:
+    opacity 180ms var(--ease),
+    translate 240ms var(--spring),
+    visibility 0s linear 180ms;
+}
+body > header .group:hover [role="tooltip"],
+body > header .group:focus-visible [role="tooltip"] {
+  opacity: 1;
+  translate: 0 0;
+  transition-delay: 0s;
+}
+
+/* Status pills: the dot of an urgent one pulses. */
+@keyframes dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+body > header .rounded-full.bg-red-600 {
+  color: var(--danger);
+  animation: dot-pulse 2.2s var(--ease) infinite;
+}
+
+/* --- Header: deepens as the page scrolls, with a reading-progress line ----------------------- */
+@supports (animation-timeline: scroll()) {
+  @keyframes header-deepen {
+    to {
+      box-shadow: var(--shadow-md);
+    }
+  }
+  @keyframes scroll-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  body > header {
+    animation: header-deepen linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 160px;
+  }
+  body > header::before {
+    content: "";
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 2px;
+    z-index: 1;
+    pointer-events: none;
+    transform-origin: left center;
+    background: linear-gradient(90deg, var(--accent-fill-from), var(--gold));
+    animation: scroll-progress linear both;
+    animation-timeline: scroll(root);
+  }
+}
+
+/* --- Route progress: a gold bar while the next page is on its way (RouteProgress.tsx) ------- */
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 60;
+  pointer-events: none;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--accent-fill-from), var(--gold) 70%, var(--accent-fill-from));
+  box-shadow: 0 0 12px var(--accent-glow);
+  opacity: 0;
+  transform: scaleX(0);
+}
+.route-progress[data-state="loading"] {
+  opacity: 1;
+  animation:
+    progress-crawl 6s var(--swift) both,
+    progress-glow 1.2s ease-in-out infinite;
+}
+.route-progress[data-state="done"] {
+  opacity: 0;
+  transform: scaleX(1);
+  transition:
+    transform 260ms var(--swift),
+    opacity 380ms var(--ease) 200ms;
+}
+
+/* --- Dialogs: spring in over a blurred backdrop, and back out --------------------------------- */
+dialog[open] {
+  animation: pop-in 520ms var(--spring) both;
+}
+dialog[open]::backdrop {
+  animation: fade-in 320ms var(--ease) both;
+}
+
+/* --- Disclosures open smoothly where the browser can animate to auto height ------------------ */
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  details::details-content {
+    height: 0;
+    overflow: clip;
+    opacity: 0;
+    transition:
+      height 420ms var(--swift),
+      opacity 320ms var(--ease),
+      content-visibility 420ms allow-discrete;
+  }
+  details[open]::details-content {
+    height: auto;
+    opacity: 1;
+  }
+}
+details > summary {
+  transition: color 180ms var(--ease);
+}
+
+/* --- Feedback: errors shake once, successes pop -------------------------------------------- */
+.notice-error {
+  animation:
+    rise-in 420ms var(--swift) both,
+    shake 420ms ease-in-out 120ms;
+}
+.notice-success,
+.notice-info,
+.notice-warning {
+  animation: rise-in 520ms var(--swift) both;
+}
+.field-error {
+  animation: rise-in 320ms var(--swift) both;
+}
+/* The check mark springs. */
+input[type="checkbox"]::after {
+  transition: scale 360ms var(--spring);
+}
+label:has(> input[type="checkbox"]) {
+  transition:
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease),
+    translate 320ms var(--spring);
+}
+label:has(> input[type="checkbox"]):active {
+  translate: 0 1px;
+}
+
+/* --- Empty states and error pages ------------------------------------------------------------ */
+main .card.items-center.text-center::before {
+  animation: ring-spin 9s linear infinite;
+}
+main span.accent-text.text-5xl {
+  display: inline-block;
+  animation:
+    rise-in 800ms var(--swift) both,
+    ink-sweep 1600ms var(--swift) 120ms both,
+    float 6s ease-in-out 900ms infinite;
+}
+
+/* ==========================================================================
+   Page transitions (View Transitions)
+   ========================================================================== */
+
+/* The overlay never eats a click; the header holds still while the page moves under it. */
+::view-transition {
+  pointer-events: none;
+}
+body > header {
+  view-transition-name: site-header;
+}
+::view-transition-group(site-header) {
+  animation: none;
+  z-index: 50;
+}
+::view-transition-old(site-header) {
+  display: none;
+}
+::view-transition-new(site-header) {
+  animation: none;
+}
+/* Everything outside the page itself (background, footer) swaps without a crossfade of its own. */
+html:not(.theme-switching)::view-transition-old(root) {
+  display: none;
+}
+html:not(.theme-switching)::view-transition-new(root) {
+  animation: none;
+}
+
+/* The lit nav pill and section tab glide from the old link to the new one. */
+nav[aria-label="Main"] a[aria-current="page"] {
+  view-transition-name: nav-current;
+}
+nav[aria-label$=" sections"] a[aria-current="page"] {
+  view-transition-name: section-current;
+}
+::view-transition-group(nav-current),
+::view-transition-group(section-current) {
+  z-index: 60;
+  animation-duration: 520ms;
+  animation-timing-function: var(--spring);
+}
+::view-transition-old(nav-current),
+::view-transition-new(nav-current),
+::view-transition-old(section-current),
+::view-transition-new(section-current) {
+  height: 100%;
+  animation-duration: 520ms;
+}
+
+/* Default route change: the old page sinks back into a blur, the new one rises out of one. */
+::view-transition-old(.page) {
+  animation: page-out 220ms var(--ease) both;
+}
+::view-transition-new(.page) {
+  animation: page-in 560ms var(--swift) 90ms both;
+}
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+    filter: blur(6px);
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(1.01);
+    filter: blur(10px);
+  }
+}
+
+/* Moving along the nav (left to right is "forward"): the pages slide past each other. */
+::view-transition-old(.nav-forward) {
+  --slide: -72px;
+  animation: slide-out 260ms var(--ease) both;
+}
+::view-transition-new(.nav-forward) {
+  --slide: 72px;
+  animation: slide-in 560ms var(--swift) 60ms both;
+}
+::view-transition-old(.nav-back) {
+  --slide: 72px;
+  animation: slide-out 260ms var(--ease) both;
+}
+::view-transition-new(.nav-back) {
+  --slide: -72px;
+  animation: slide-in 560ms var(--swift) 60ms both;
+}
+@keyframes slide-out {
+  to {
+    opacity: 0;
+    translate: var(--slide) 0;
+    filter: blur(4px);
+  }
+}
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    translate: var(--slide) 0;
+    filter: blur(8px);
+  }
+}
+
+/* Switching theme: the new theme spreads out in a circle from the picker (ThemeToggle.tsx). */
+html.theme-switching * {
+  view-transition-name: none !important;
+}
+html.theme-switching::view-transition-old(root) {
+  animation: none;
+}
+html.theme-switching::view-transition-new(root) {
+  animation: theme-reveal 760ms var(--swift) both;
+}
+html.theme-switching::view-transition-group(root) {
+  animation: none;
+}
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--theme-x, 90%) var(--theme-y, 2rem));
+  }
+  to {
+    clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 90%) var(--theme-y, 2rem));
+  }
+}
+
+/* ==========================================================================
+   Reduced motion: nothing moves on its own, pages swap instantly
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  body > header,
+  body > header::before,
+  main .card.items-center.text-center::before,
+  main span.accent-text.text-5xl,
+  body > header .rounded-full.bg-red-600,
+  .route-progress[data-state="loading"] {
+    animation: none !important;
+  }
+  body > header::before {
+    display: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .card-hover:hover span.bg-gradient-to-br,
+  body > header a[href="/"]:hover > span:first-child {
+    transform: none;
+  }
+}
