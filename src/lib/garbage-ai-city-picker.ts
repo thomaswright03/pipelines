@@ -1,4 +1,4 @@
-// The next city for the Garbage AI Yelp search (city-rotation.ts): the same
+// The next city for the Garbage AI business-list search (city-rotation.ts): the same
 // pool and order as Cold Outreach, tracked separately in ScrapedHaulerCity,
 // and never a city in Mountain High's service area.
 import type { PrismaClient } from "@/generated/prisma/client";

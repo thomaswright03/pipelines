@@ -1,4 +1,4 @@
-// The next city for Cold Outreach's Yelp search (city-rotation.ts), tracked
+// The next city for Cold Outreach's business-list search (city-rotation.ts), tracked
 // in ScrapedCity.
 import type { PrismaClient } from "@/generated/prisma/client";
 import { cityRotation } from "@/lib/city-rotation";

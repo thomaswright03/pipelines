@@ -2,7 +2,7 @@
 // Garbage AI), several times a day: work out how many of the day's emails
 // are still to send (the "emails to send per day" setting minus what this
 // pipeline already sent today), and if the leads waiting from earlier runs
-// don't cover it, search a new city on Yelp (and another, while time and
+// don't cover it, search a new city in the business list (and another, while time and
 // the day's number allow) and check the results for email addresses until
 // enough are found. Then pitch the waiting leads, up
 // to the day's remaining number. Once the day's number is sent, later runs
@@ -16,11 +16,11 @@
 //
 // Each pipeline supplies only what differs (its spec, in
 // src/lib/vault-daily-run.ts, src/lib/dataleadsell-daily-run.ts and
-// src/lib/garbage-ai-daily-run.ts): the Yelp term, its city picker, its
+// src/lib/garbage-ai-daily-run.ts): the kind of business, its city picker, its
 // lead table, its wording, and — for Garbage AI — the results it must
 // never pitch.
 import type { Prisma } from "@/generated/prisma/client";
-import { findBusinessesViaYelp, YelpError, type YelpCandidate } from "@/lib/yelp-discovery";
+import { findBusinesses, PlaceSearchError, type PlaceCandidate, type PlaceSearch } from "@/lib/place-discovery";
 import { withRetry } from "@/lib/with-retry";
 import { createLeadsFromCandidates, type DiscoveryCandidate, type DiscoveryResult } from "@/lib/outreach/discovery";
 import { describeError, logError } from "@/lib/log";
@@ -34,11 +34,14 @@ import type { PipelineId } from "@/lib/outreach/pipeline-id";
 import type { RunOutcome } from "@/lib/outreach/runs";
 
 /** The `source` of every lead a Cold Outreach or dataleadsell daily run saves (Garbage AI has its own). */
-export const DAILY_RUN_SOURCE = "Yelp search (daily automated run)";
+export const DAILY_RUN_SOURCE = "Business list (daily automated run)";
+/** The same, on leads found before the switch from Yelp (October 2026); still emailed by daily runs. */
+export const LEGACY_DAILY_RUN_SOURCE = "Yelp search (daily automated run)";
+export const DAILY_RUN_SOURCES = [DAILY_RUN_SOURCE, LEGACY_DAILY_RUN_SOURCE];
 
 // Vercel Hobby functions stop at 60 s, and the run must record its outcome
 // before then. Every step starts only if its worst case fits:
-// - discovery (including the Yelp call, ≤10 s) ends by 25 s — no lookup
+// - discovery (including the business-list query) ends by 25 s — no lookup
 //   starts with under 2 s left, and one in progress is cut off at 25 s;
 // - a send starts only if its worst case (SMTP connect 5 s + greeting 5 s +
 //   socket 10 s) still ends by 55 s;
@@ -49,8 +52,8 @@ const DISCOVERY_BUDGET_MS = 25_000;
 const RUN_LIMIT_MS = 55_000;
 const SEND_WORST_CASE_MS = 20_000;
 const SEND_DELAY_MS = 500;
-// With `maxCities` above 1, another city is searched only if its Yelp call
-// (≤10 s) still leaves time to check some of its results.
+// With `maxCities` above 1, another city is searched only if there is
+// still time to check some of its results.
 const NEXT_CITY_MIN_MS = 15_000;
 
 /**
@@ -74,7 +77,7 @@ export type DailyRunOptions = {
 
 /** New leads with an address that a Cold Outreach or dataleadsell daily run found and hasn't emailed yet. */
 export const UNSENT_DAILY = {
-  source: DAILY_RUN_SOURCE,
+  source: { in: DAILY_RUN_SOURCES },
   status: "new",
   email: { not: null },
   sendBlockedReason: null,
@@ -84,9 +87,9 @@ type DailyRunTarget = { city: string; state: string; county?: string };
 
 type DailyRunSpec<T extends DailyRunTarget> = {
   pipeline: PipelineId;
-  /** The Yelp search term ("" searches every kind of business). */
-  searchTerm: string;
-  /** What Yelp lists, for the summary ("Yelp listed 50 businesses"). */
+  /** What to look for in the business list. */
+  search: PlaceSearch;
+  /** What the list holds, for the summary ("the business list had 50 businesses"). */
   listedNoun: { one: string; many: string };
   /** What the run finds, for the summary ("so no new leads were found"). */
   foundNoun: string;
@@ -104,7 +107,7 @@ type DailyRunSpec<T extends DailyRunTarget> = {
    * lookup, and says how many in the summary's words ("left out 4 that…").
    * Without it every result is a candidate.
    */
-  screen?(results: YelpCandidate[]): { kept: DiscoveryCandidate[]; leftOut: string | null };
+  screen?(results: PlaceCandidate[]): { kept: DiscoveryCandidate[]; leftOut: string | null };
 };
 
 // Refusals are the rules working (address already pitched, opted out, the
@@ -146,7 +149,7 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   const waiting = (await spec.listUnsent(remaining)).length;
   const needed = remaining - waiting;
 
-  // Discovery failing (Yelp down, rate-limited, key revoked) must not stop
+  // Discovery failing (the business list unreadable or not loaded) must not stop
   // the leads earlier runs already found from being emailed: the error is
   // recorded and the run goes on to the send queue. A city is only marked
   // as used when its search actually came back. When enough leads are
@@ -160,7 +163,7 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   let examined = 0;
   let stoppedEarly = false;
   let failedWhere: string | null = null;
-  let failedAtYelp = false;
+  let failedAtSearch = false;
   let discoveryError: string | null = null;
   const discoveryEndsBy = startedAt + (options.discoveryBudgetMs ?? DISCOVERY_BUDGET_MS);
   while (
@@ -170,9 +173,9 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
   ) {
     const target = await withRetry(() => spec.pickTarget());
     const where = spec.describeTarget(target);
-    let results: YelpCandidate[] | null = null;
+    let results: PlaceCandidate[] | null = null;
     try {
-      results = await findBusinessesViaYelp(spec.searchTerm, `${target.city}, ${target.state}`);
+      results = await findBusinesses(spec.search, target.city, target.state);
       await withRetry(() => spec.markTargetUsed(target));
       const screened = spec.screen ? spec.screen(results) : { kept: results, leftOut: null };
       const discovery = await createLeadsFromCandidates(spec.pipeline, screened.kept, {
@@ -196,8 +199,8 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
     } catch (err) {
       logError("run.daily.discovery", err, { pipeline: spec.pipeline, city: target.city, county: target.county, state: target.state });
       failedWhere = where;
-      failedAtYelp = results === null;
-      discoveryError = err instanceof YelpError ? err.unattended : describeError(err);
+      failedAtSearch = results === null;
+      discoveryError = err instanceof PlaceSearchError ? err.unattended : describeError(err);
       break;
     }
   }
@@ -242,14 +245,14 @@ export async function runDailyDiscoveryAndSend<T extends DailyRunTarget>(
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
-  const couldNotSearch = `${failedWhere}${failedAtYelp ? " on Yelp" : " for email addresses"}`;
+  const couldNotSearch = `${failedWhere}${failedAtSearch ? " in the business list" : " for email addresses"}`;
   const parts =
     searched.length === 0 && failedWhere === null
       ? ["Enough leads were already waiting, so no city was searched"]
       : searched.length === 0
         ? [`Couldn't search ${couldNotSearch}, so no new ${spec.foundNoun} were found`]
         : [
-            `Searched ${searched.join("; ")}: Yelp listed ${listed} ${listed === 1 ? spec.listedNoun.one : spec.listedNoun.many}`,
+            `Searched ${searched.join("; ")}: the business list had ${listed} ${listed === 1 ? spec.listedNoun.one : spec.listedNoun.many}`,
             ...leftOut,
             `checked ${examined} for an email${stoppedEarly ? " (stopped early: out of time)" : ""}`,
             `found ${created.length} new ${created.length === 1 ? "address" : "addresses"}`,

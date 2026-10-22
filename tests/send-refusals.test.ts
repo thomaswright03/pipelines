@@ -13,7 +13,7 @@ import { runDailyColdOutreach, DAILY_RUN_SOURCE } from "@/lib/vault-daily-run";
 import { getConnectionStatus } from "@/lib/integration-status";
 import { editLead } from "@/lib/outreach/lead-edit";
 import { loadLeadContext } from "@/lib/lead-page";
-import { captureMail, makeAgentLead, makeColdLead, recipientRefusal, smtpError, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeAgentLead, makeColdLead, recipientRefusal, seedNoneOf, smtpError, stubFetch } from "./helpers";
 
 let mail: ReturnType<typeof captureMail>;
 afterEach(() => mail?.restore());
@@ -148,7 +148,8 @@ describe("refused addresses don't jam the queues", () => {
 
   it("the daily run skips them after the first refusal and isn't partial because of them", async () => {
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    await seedNoneOf();
+    stubFetch({});
     for (const n of [1, 2, 3]) {
       mail.refuse(`bad${n}@nowhere.test`);
       await makeColdLead({ email: `bad${n}@nowhere.test`, source: DAILY_RUN_SOURCE, createdAt: new Date(Date.now() - 60_000) });

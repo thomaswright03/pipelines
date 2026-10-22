@@ -9,7 +9,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
 import { normalizeState } from "@/lib/us-states";
-import { YelpError } from "@/lib/yelp-discovery";
+import { PlaceSearchError } from "@/lib/place-discovery";
 import { markHaulerCityUsed, pickNextHaulerCity } from "@/lib/garbage-ai-city-picker";
 import { isMountainHighCity } from "@/lib/garbage-ai-targeting";
 import { describeHaulerSearch, searchHaulers } from "@/lib/garbage-ai-daily-run";
@@ -79,15 +79,15 @@ export async function searchHaulersAction(_prev: HaulerSearchState, formData: Fo
   }
   try {
     const outcome = await searchHaulers(city, state, {
-      source: "Yelp search",
+      source: "Business list search",
       maxCreate: MAX_PER_RUN,
       deadline: Date.now() + RUN_TIME_BUDGET_MS,
     });
     revalidate();
-    if (outcome.listed === 0) return { error: `Yelp found no garbage collection businesses in ${city}, ${state}.` };
+    if (outcome.listed === 0) return { error: `The business list has no garbage collection businesses in ${city}, ${state}.` };
     return { message: describeHaulerSearch(`${city}, ${state}`, outcome) };
   } catch (err) {
-    if (err instanceof YelpError) return { error: err.message };
+    if (err instanceof PlaceSearchError) return { error: err.message };
     logError("action.searchHaulers", err);
     return { error: failureMessage(err, "The search stopped because of an unexpected error. Any haulers already added are saved.") };
   }
@@ -98,7 +98,7 @@ export async function runHaulerScrapeAction(): Promise<ActionResult> {
   try {
     const target = await withRetry(() => pickNextHaulerCity(prisma));
     const outcome = await searchHaulers(target.city, target.state, {
-      source: "Yelp search (Find haulers button)",
+      source: "Business list (Find haulers button)",
       maxCreate: MAX_PER_RUN,
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
@@ -106,7 +106,7 @@ export async function runHaulerScrapeAction(): Promise<ActionResult> {
     revalidate();
     return { ok: true, message: describeHaulerSearch(`${target.city}, ${target.state}`, outcome) };
   } catch (err) {
-    if (err instanceof YelpError) return { ok: false, error: err.message };
+    if (err instanceof PlaceSearchError) return { ok: false, error: err.message };
     logError("action.runHaulerScrape", err);
     return {
       ok: false,

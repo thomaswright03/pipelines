@@ -13,7 +13,7 @@ export function missingEnvVars(env: Env = process.env): string[] {
   // A deployment must be able to discover leads and authenticate its
   // webhooks; a local checkout can run without them (the features that need
   // them say so when used).
-  if (env.VERCEL) required.push("YELP_API_KEY", "EMAIL_INBOUND_SECRET", "CRON_SECRET");
+  if (env.VERCEL) required.push("EMAIL_INBOUND_SECRET", "CRON_SECRET");
   return required.filter((name) => !env[name]);
 }
 

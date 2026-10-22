@@ -43,7 +43,7 @@ describe("the Room Designer 3D pages", () => {
     expect(page.getAllByText("Room Designer 3D").length).toBeGreaterThan(0);
   });
 
-  it("list remodelers with their Yelp categories, and say sending is held", async () => {
+  it("list remodelers with their categories, and say sending is held", async () => {
     await makeRemodelerLead({ name: "Desert Bath Remodel", services: "Contractors, Kitchen & Bath" });
     const page = await renderPage(List(pageProps()));
     expect(page.getByRole("heading", { name: "Room Designer 3D", level: 1 })).toBeTruthy();

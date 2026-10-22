@@ -6,7 +6,6 @@ import { revalidatePath } from "next/cache";
 import { logError } from "@/lib/log";
 import { recordServiceCheck, setAllowCrossPipelineRepeats, setOutboundPaused } from "@/lib/outreach/settings";
 import { describeConnectionTestError, verifyMailTransport } from "@/lib/send-email";
-import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
 import { formatDateTime } from "@/lib/time";
 import { addSuppression, removeSuppressionByEmail, type ActionResult } from "@/lib/outreach/lead-actions";
 import { startReplyCheck } from "@/lib/outreach/reply-check";
@@ -78,12 +77,10 @@ export async function removeSuppressionByEmailAction(email: string): Promise<Act
 
 /**
  * Settings → Connections "Test connection": proves the credentials work
- * without sending an email or using up more than one Yelp search.
- * - mail: SMTP connect, STARTTLS and login, then disconnect.
- * - yelp: one search for a single business.
- * The result is remembered and shown in the Connections list.
+ * without sending an email: SMTP connect, STARTTLS and login, then
+ * disconnect. The result is remembered and shown in the Connections list.
  */
-export async function testConnectionAction(service: "mail" | "yelp"): Promise<ActionResult> {
+export async function testConnectionAction(service: "mail"): Promise<ActionResult> {
   const at = new Date();
   if (service === "mail") {
     try {
@@ -97,21 +94,6 @@ export async function testConnectionAction(service: "mail" | "yelp"): Promise<Ac
       await recordServiceCheck("mail", message, at);
       revalidatePath("/settings");
       return { ok: false, error: `Email service: ${message}` };
-    }
-  }
-  if (service === "yelp") {
-    try {
-      // findBusinessesViaYelp remembers the outcome itself.
-      await findBusinessesViaYelp("", "Phoenix, AZ", { limit: 1 });
-      revalidatePath("/settings");
-      return { ok: true, message: `Yelp: answered a test search at ${formatDateTime(at)}.` };
-    } catch (err) {
-      if (!(err instanceof YelpError)) logError("action.testConnection.yelp", err);
-      revalidatePath("/settings");
-      return {
-        ok: false,
-        error: `Yelp: ${err instanceof YelpError ? err.message : "the test search failed. Try again later; if it keeps failing, tell your developer."}`,
-      };
     }
   }
   return { ok: false, error: "Unknown service." };

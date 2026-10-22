@@ -75,16 +75,8 @@ type ServiceCheck = { at: Date; error: string | null };
  * Settings → Connections: `error` null means it answered. Best-effort:
  * never throws.
  */
-export async function recordServiceCheck(
-  service: "mail" | "yelp",
-  error: string | null,
-  at: Date = new Date(),
-  db: Db = prisma,
-): Promise<void> {
-  const data =
-    service === "mail"
-      ? { mailTestedAt: at, mailTestError: error?.slice(0, 500) ?? null }
-      : { yelpCheckedAt: at, yelpCheckError: error?.slice(0, 500) ?? null };
+export async function recordServiceCheck(service: "mail", error: string | null, at: Date = new Date(), db: Db = prisma): Promise<void> {
+  const data = { mailTestedAt: at, mailTestError: error?.slice(0, 500) ?? null };
   try {
     await db.appSettings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, ...data }, update: data });
   } catch {
@@ -92,13 +84,12 @@ export async function recordServiceCheck(
   }
 }
 
-export async function lastServiceChecks(db: Db = prisma): Promise<{ mail: ServiceCheck | null; yelp: ServiceCheck | null }> {
+export async function lastServiceChecks(db: Db = prisma): Promise<{ mail: ServiceCheck | null }> {
   const row = await db.appSettings.findUnique({
     where: { id: SETTINGS_ID },
-    select: { mailTestedAt: true, mailTestError: true, yelpCheckedAt: true, yelpCheckError: true },
+    select: { mailTestedAt: true, mailTestError: true },
   });
   return {
     mail: row?.mailTestedAt ? { at: row.mailTestedAt, error: row.mailTestError } : null,
-    yelp: row?.yelpCheckedAt ? { at: row.yelpCheckedAt, error: row.yelpCheckError } : null,
   };
 }

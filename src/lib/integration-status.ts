@@ -13,6 +13,7 @@ import { prisma } from "@/lib/db";
 import { describeMailDestination, type Env } from "@/lib/mail-transport-kind";
 import { ENV_OFF_DETAIL, ENV_OFF_SUMMARY } from "@/lib/outbound-switch";
 import { formatDateTime } from "@/lib/time";
+import { placesSummary } from "@/lib/place-discovery";
 import { getAppSettings, lastSendFailure, lastServiceChecks } from "@/lib/outreach/settings";
 import { getReplyHealth, REPLY_WATCH_WINDOW_DAYS, replyIsRecent } from "@/lib/outreach/reply-health";
 import { displayRunStatus, isRunOverdue } from "@/lib/outreach/runs";
@@ -38,7 +39,7 @@ export type StatusTone = "ok" | "warn" | "error" | "off";
 export type StatusLink = { href: string; label: string };
 
 export type ConnectionStatus = {
-  key: "mail" | "replies" | CronJob["key"] | "yelp";
+  key: "mail" | "replies" | CronJob["key"] | "places";
   label: string;
   tone: StatusTone;
   /** The badge's words when they differ from the tone's usual label ("Not confirmed yet"). */
@@ -331,36 +332,40 @@ async function cronStatus(job: CronJob, env: Env, now: Date): Promise<Connection
   return { ...base, tone: "ok", summary, next: null };
 }
 
-async function yelpStatus(env: Env): Promise<ConnectionStatus> {
-  const base = { key: "yelp" as const, label: "Yelp search", testable: true };
-  if (!env.YELP_API_KEY) {
+/** How old the business list may get before Settings warns: the monthly import plus a week's slack. */
+const PLACES_STALE_DAYS = 38;
+
+async function placesStatus(now: Date): Promise<ConnectionStatus> {
+  const base = { key: "places" as const, label: "Business list (Foursquare)", testable: false };
+  let summary;
+  try {
+    summary = await placesSummary();
+  } catch {
     return {
       ...base,
-      testable: false,
       tone: "error",
-      summary: "Yelp isn't set up, so searches and the daily run can't find businesses.",
-      next: "Tell your developer the Yelp access key is missing.",
+      summary: "The business list couldn't be read.",
+      next: "Reload this page. If it keeps failing, tell your developer.",
     };
   }
-  const { yelp } = await lastServiceChecks();
-  if (!yelp) {
+  if (summary.places === 0 || !summary.importedAt) {
+    return {
+      ...base,
+      tone: "error",
+      summary: "The business list is empty, so searches and the daily runs can't find businesses.",
+      next: "Tell your developer to run the monthly business import (GitHub → Actions → Import business list).",
+    };
+  }
+  const loaded = `${summary.places.toLocaleString("en-US")} businesses in ${summary.cities} cities, loaded ${formatDateTime(summary.importedAt)}`;
+  if (now.getTime() - summary.importedAt.getTime() > PLACES_STALE_DAYS * 24 * 60 * 60 * 1000) {
     return {
       ...base,
       tone: "warn",
-      badge: NOT_CONFIRMED,
-      summary: "An access key is set, but no search has run yet to prove it works.",
-      next: "Press Test connection — it runs one tiny search.",
+      summary: `${loaded}. The monthly import seems to have stopped, so new businesses aren't being added.`,
+      next: "Tell your developer to check the Import business list job in GitHub Actions.",
     };
   }
-  if (yelp.error) {
-    return {
-      ...base,
-      tone: "error",
-      summary: `The last Yelp request ${formatDateTime(yelp.at)} failed: ${yelp.error}`,
-      next: "Press Test connection. If it fails again, tell your developer what it says.",
-    };
-  }
-  return { ...base, tone: "ok", summary: `Yelp last answered ${formatDateTime(yelp.at)}.`, next: null };
+  return { ...base, tone: "ok", summary: `${loaded}.`, next: null };
 }
 
 export async function getConnectionStatus(env: Env = process.env, now: Date = new Date()): Promise<ConnectionStatus[]> {
@@ -368,7 +373,7 @@ export async function getConnectionStatus(env: Env = process.env, now: Date = ne
     mailStatus(env),
     repliesStatus(env, now),
     ...CRON_JOBS.map((job) => cronStatus(job, env, now)),
-    yelpStatus(env),
+    placesStatus(now),
   ]);
   return [mail, replies, ...rest];
 }

@@ -6,9 +6,9 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { numberVersions } from "@/lib/template-versions";
 import { APP_TIME_ZONE, dayKey, startOfZoneDay } from "@/lib/time";
-import { DAILY_RUN_SOURCE } from "@/lib/vault-daily-run";
-import { GARBAGE_AI_DAILY_SOURCE } from "@/lib/garbage-ai-daily-run";
-import { ROOM_DESIGNER_DAILY_SOURCE } from "@/lib/room-designer-daily-run";
+import { DAILY_RUN_SOURCES } from "@/lib/outreach/daily-run";
+import { GARBAGE_AI_DAILY_SOURCES } from "@/lib/garbage-ai-daily-run";
+import { ROOM_DESIGNER_DAILY_SOURCES } from "@/lib/room-designer-daily-run";
 import { OPTED_OUT_BLOCK_PREFIX } from "@/lib/outreach/send";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
 
@@ -310,7 +310,7 @@ async function getPipelineStats(pipelineId: PipelineId, now: Date = new Date()):
 export async function getVaultStats(now: Date = new Date()): Promise<VaultStats> {
   const [base, automatedLeads] = await Promise.all([
     getPipelineStats("cold-outreach", now),
-    prisma.lead.count({ where: { source: DAILY_RUN_SOURCE } }),
+    prisma.lead.count({ where: { source: { in: DAILY_RUN_SOURCES } } }),
   ]);
   const c = base.statusCounts;
   return { ...base, positiveOutcomes: (c.appointment_set ?? 0) + (c.working_for ?? 0) + (c.paying_client ?? 0), automatedLeads };
@@ -320,7 +320,7 @@ export async function getVaultStats(now: Date = new Date()): Promise<VaultStats>
 export async function getGarbageAiStats(now: Date = new Date()): Promise<VaultStats> {
   const [base, automatedLeads] = await Promise.all([
     getPipelineStats("garbage-ai", now),
-    prisma.haulerLead.count({ where: { source: GARBAGE_AI_DAILY_SOURCE } }),
+    prisma.haulerLead.count({ where: { source: { in: GARBAGE_AI_DAILY_SOURCES } } }),
   ]);
   const c = base.statusCounts;
   return { ...base, positiveOutcomes: (c.demo_booked ?? 0) + (c.signed_up ?? 0) + (c.paying_client ?? 0), automatedLeads };
@@ -330,7 +330,7 @@ export async function getGarbageAiStats(now: Date = new Date()): Promise<VaultSt
 export async function getRoomDesignerStats(now: Date = new Date()): Promise<VaultStats> {
   const [base, automatedLeads] = await Promise.all([
     getPipelineStats("room-designer", now),
-    prisma.remodelerLead.count({ where: { source: ROOM_DESIGNER_DAILY_SOURCE } }),
+    prisma.remodelerLead.count({ where: { source: { in: ROOM_DESIGNER_DAILY_SOURCES } } }),
   ]);
   const c = base.statusCounts;
   return { ...base, positiveOutcomes: (c.demo_booked ?? 0) + (c.free_week ?? 0) + (c.paying_customer ?? 0), automatedLeads };

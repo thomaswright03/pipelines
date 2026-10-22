@@ -1,6 +1,6 @@
 // Which found addresses may be used for which lead.
 //
-// ADRE and many Yelp listings name an agent *and* their brokerage, and the
+// ADRE and many business listings name an agent *and* their brokerage, and the
 // website guess tries the brokerage's name first. The address on a
 // brokerage's site is the office's shared inbox (frontdesk@, info@…), not
 // the agent's — pitching five agents "Hi <name>" through one front desk is

@@ -32,6 +32,3 @@ export const ROOM_DESIGNER_CLIENT = "Eddys Remodeling";
 // send-email.ts) — must be a verified sender for wright-ai-solutions.com.
 // Override with ROOM_DESIGNER_SENDER_EMAIL.
 export const ROOM_DESIGNER_SENDER_EMAIL = process.env.ROOM_DESIGNER_SENDER_EMAIL ?? "thomas@wright-ai-solutions.com";
-
-/** The Yelp search term for each city. */
-export const ROOM_DESIGNER_YELP_TERM = "bathroom remodeling";

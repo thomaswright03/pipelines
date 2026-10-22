@@ -47,7 +47,7 @@ describe("the Garbage AI pages", () => {
     expect(links).toContainEqual(["/garbage-ai?status=new", "Ready to email: 1"]);
   });
 
-  it("list haulers with their Yelp services and a working bulk send", async () => {
+  it("list haulers with their services and a working bulk send", async () => {
     await makeHaulerLead({ name: "Desert Roll Off", services: "Dumpster Rental" });
     const page = await renderPage(List(pageProps()));
     expect(page.getByRole("heading", { name: "Garbage AI", level: 1 })).toBeTruthy();

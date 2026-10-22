@@ -53,8 +53,9 @@ model AppSettings {
   // when, and why it failed (null when it passed).
   mailTestedAt              DateTime?
   mailTestError             String?
-  // The last time Yelp was asked anything (a search, a daily run or a
-  // "Test connection"): when, and why it failed (null when it answered).
+  // No longer written: the last Yelp request, from before the switch to
+  // the Place table (October 2026). Kept so the running app and the
+  // database never disagree mid-deploy; drop in a later migration.
   yelpCheckedAt             DateTime?
   yelpCheckError            String?
   updatedAt                 DateTime  @updatedAt
@@ -623,4 +624,27 @@ model ScrapedRemodelerCity {
   queriedAt DateTime @default(now())
 
   @@unique([city, state])
+}
+
+// Businesses from Foursquare's open places data (Apache 2.0), which every
+// pipeline's search reads instead of calling a live API. Loaded in full
+// once a month by scripts/import-places.py (.github/workflows/
+// import-places.yml) for the cities the pipelines rotate through, so each
+// row is replaced on the next import. `kinds` says which searches a place
+// belongs to: "hauler" (Garbage AI), "remodeler" (Room Designer 3D),
+// "agent" (dataleadsell) and "business" (Cold Outreach).
+model Place {
+  id          String    @id // Foursquare's fsq_place_id
+  name        String
+  address     String? // "123 Main St, Boise, ID 83702"
+  city        String
+  state       String // two-letter code
+  phone       String?
+  website     String?
+  categories  String[] // Foursquare's category labels, most specific part only
+  kinds       String[]
+  refreshedAt DateTime? // when Foursquare last confirmed the place
+  importedAt  DateTime  @default(now())
+
+  @@index([state, city])
 }

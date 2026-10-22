@@ -61,9 +61,7 @@ export default function ConnectionStatusList({ items }: { items: ConnectionStatu
               </p>
             )}
             {item.detail && <p className="text-xs muted">{item.detail}</p>}
-            {item.testable && (item.key === "mail" || item.key === "yelp") && (
-              <TestConnectionButton service={item.key} label={item.label} />
-            )}
+            {item.testable && item.key === "mail" && <TestConnectionButton service={item.key} label={item.label} />}
           </li>
         );
       })}

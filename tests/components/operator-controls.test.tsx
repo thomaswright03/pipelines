@@ -219,14 +219,16 @@ describe("OutreachControls: searching a specific city", () => {
   });
 
   it("shows a search the server refused", async () => {
-    vault.searchLeadsAction.mockResolvedValue({ error: "Yelp didn't recognise that location — check the city and state." });
+    vault.searchLeadsAction.mockResolvedValue({
+      error: "Mesaa, AZ isn't in the loaded business list — only the cities the daily runs rotate through are loaded.",
+    });
     render(controls("cold-outreach"));
     fireEvent.click(screen.getByRole("button", { name: "Search a specific city" }));
     const form = screen.getByRole("button", { name: "Search" }).closest("form")!;
     fireEvent.change(within(form).getByLabelText("City"), { target: { value: "Nowhere" } });
     fireEvent.change(within(form).getByLabelText("State"), { target: { value: "AZ" } });
     fireEvent.submit(form);
-    expect(await screen.findByText(/Yelp didn't recognise that location/)).toBeTruthy();
+    expect(await screen.findByText(/Mesaa, AZ isn't in the loaded business list/)).toBeTruthy();
   });
 
   it("offers only the sold counties' cities for agents, and searches the one picked", async () => {

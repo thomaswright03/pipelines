@@ -9,7 +9,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
 import { normalizeState } from "@/lib/us-states";
-import { findBusinessesViaYelp, YelpError } from "@/lib/yelp-discovery";
+import { findBusinesses, PlaceSearchError } from "@/lib/place-discovery";
 import { pickNextCity, markCityUsed } from "@/lib/vault-city-picker";
 import { withRetry } from "@/lib/with-retry";
 import { parseZonedInputValue, formatDateTime } from "@/lib/time";
@@ -66,7 +66,7 @@ export type LeadSearchState = { error?: string; message?: string };
 
 // Every lookup ends by this long after the click (one in flight is cut
 // off), which leaves room under the 60 s function limit for saving and the
-// response. The Yelp call (≤10 s) is inside this budget.
+// response. The business-list query is inside this budget.
 const RUN_TIME_BUDGET_MS = 45 * 1000;
 const MAX_PER_RUN = 50;
 
@@ -90,19 +90,19 @@ export async function searchLeadsAction(_prev: LeadSearchState, formData: FormDa
   const startedAt = Date.now();
 
   try {
-    const results = await findBusinessesViaYelp(parsed.data.businessType, `${parsed.data.city}, ${state}`);
-    if (results.length === 0) return { error: `Yelp found no businesses in ${parsed.data.city}, ${state}.` };
+    const results = await findBusinesses({ words: parsed.data.businessType }, parsed.data.city, state);
+    if (results.length === 0) return { error: `The business list has no businesses in ${parsed.data.city}, ${state}.` };
     const result = await createLeadsFromCandidates("cold-outreach", results, {
       city: parsed.data.city,
       state,
-      source: "Yelp search",
+      source: "Business list search",
       maxCreate: MAX_PER_RUN,
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
     revalidate();
     return { message: describeDiscovery("cold-outreach", `${parsed.data.city}, ${state}`, results.length, result) };
   } catch (err) {
-    if (err instanceof YelpError) return { error: err.message };
+    if (err instanceof PlaceSearchError) return { error: err.message };
     logError("action.searchLeads", err);
     return { error: failureMessage(err, "The search stopped because of an unexpected error. Any leads already added are saved.") };
   }
@@ -112,19 +112,19 @@ export async function runPipelineScrapeAction(): Promise<ActionResult> {
   const startedAt = Date.now();
   try {
     const target = await withRetry(() => pickNextCity(prisma));
-    const results = await findBusinessesViaYelp("", `${target.city}, ${target.state}`);
+    const results = await findBusinesses({ kind: "business" }, target.city, target.state);
     await withRetry(() => markCityUsed(prisma, target.city, target.state));
     const result = await createLeadsFromCandidates("cold-outreach", results, {
       city: target.city,
       state: target.state,
-      source: "Yelp search (Run pipeline button)",
+      source: "Business list (Run pipeline button)",
       maxCreate: MAX_PER_RUN,
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
     revalidate();
     return { ok: true, message: describeDiscovery("cold-outreach", `${target.city}, ${target.state}`, results.length, result) };
   } catch (err) {
-    if (err instanceof YelpError) return { ok: false, error: err.message };
+    if (err instanceof PlaceSearchError) return { ok: false, error: err.message };
     logError("action.runPipelineScrape", err);
     return { ok: false, error: failureMessage(err, "The run stopped because of an unexpected error. Any leads already added are saved.") };
   }

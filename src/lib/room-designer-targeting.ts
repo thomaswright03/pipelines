@@ -4,7 +4,7 @@
 //   Star Bath Solutions, Kitchen Tune-Up, home-improvement store
 //   installation services);
 // - plumbing-only and supply-house listings, and cabinet or tile showrooms
-//   that don't do installs: a Yelp result whose categories are all of that
+//   that don't do installs: a search result whose categories are all of that
 //   kind, or whose name says it is a supply house or showroom.
 // Remodelers another pipeline already emailed are kept out by the send
 // ledger (one pitch per address across pipelines; see send.ts). Whether a
@@ -46,11 +46,20 @@ const FRANCHISES = [
 // A name that says the business sells, not installs.
 const SUPPLY_OR_SHOWROOM = [/\bsupply\b/, /\bsupplies\b/, /\bshowroom\b/, /\bwholesale\b/, /\bdistributors?\b/];
 
-// Yelp categories that on their own mean a plumber, a supply house or a
-// showroom. A listing with any other category too (Contractors, Kitchen &
-// Bath remodeling, Tiling, Handyman…) is kept.
+// Categories that on their own mean a plumber, a supply house or a
+// showroom: Foursquare's names (the business list's), then Yelp's (leads
+// found before October 2026). A listing with any other category too
+// (Bathroom Contractor, Kitchen Remodeler, General Contractor…) is kept.
 const NOT_A_REMODELER_CATEGORIES = new Set(
   [
+    "Plumber",
+    "Kitchen Supply Store",
+    "Hardware Store",
+    "Furniture and Home Store",
+    "Home Appliance Store",
+    "Construction Supplies Store",
+    "Lighting Store",
+    "Carpet and Flooring Contractor",
     "Plumbing",
     "Water Heater Installation/Repair",
     "Hydro-jetting",
@@ -69,7 +78,7 @@ const NOT_A_REMODELER_CATEGORIES = new Set(
   ].map(normalize),
 );
 
-/** Why a Yelp result must never be pitched, or null when it may be. */
+/** Why a search result must never be pitched, or null when it may be. */
 export function remodelerExclusion(candidate: { name: string; categories?: readonly string[] }): string | null {
   const name = normalize(candidate.name);
   if (CLIENTS.some((client) => hasWords(name, client))) return "Thomas's client";
@@ -85,7 +94,7 @@ export function remodelerExclusion(candidate: { name: string; categories?: reado
 /**
  * Why a saved remodeler must never be emailed, or null when it may be — the
  * send gate's last check (send.ts), so one added or edited by hand is held
- * to the same name rules as a Yelp result. Beyond the name it also looks at
+ * to the same name rules as a search result. Beyond the name it also looks at
  * the company and the email's domain. (Categories are only screened at
  * search time: a remodeler added by hand was chosen by a person.)
  */

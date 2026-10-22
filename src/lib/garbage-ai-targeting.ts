@@ -80,7 +80,7 @@ const NATIONAL_HAULERS = [
   "recology",
 ];
 
-// City and county departments that show up in Yelp garbage searches.
+// City and county departments that show up in searches for haulers.
 const PUBLIC_AGENCY = [
   /\b(city|county|town|village|township|borough|parish) of\b/,
   /\bpublic works\b/,
@@ -92,14 +92,14 @@ const PUBLIC_AGENCY = [
 
 const hasWords = (haystack: string, needle: string) => ` ${haystack} `.includes(` ${needle} `);
 
-/** Why a Yelp result must never be pitched, or null when it may be. */
+/** Why a search result must never be pitched, or null when it may be. */
 export function haulerExclusion(candidate: { name: string; address: string | null }): string | null {
   const name = normalize(candidate.name);
   if (CURRENT_CLIENTS.some((client) => hasWords(name, client))) return "already a client";
   if (NATIONAL_HAULERS.some((hauler) => hasWords(name, hauler))) return "national or large regional hauler";
   if (PUBLIC_AGENCY.some((pattern) => pattern.test(name))) return "a city or county department";
   if (candidate.address) {
-    // Yelp's display address ends "…, Greeley, CO 80631".
+    // Addresses end "…, Greeley, CO 80631" (the business list's and Yelp's alike).
     const match = candidate.address.match(/,\s*([^,]+?),\s*CO\b/i);
     if (match && AREA.has(normalize(match[1]!))) return "in Mountain High's service area";
   }
@@ -109,7 +109,7 @@ export function haulerExclusion(candidate: { name: string; address: string | nul
 /**
  * Why a saved hauler must never be emailed, or null when it may be — the
  * send gate's last check (send.ts), so a hauler added or edited by hand is
- * held to the same rules as a Yelp result. Beyond haulerExclusion it also
+ * held to the same rules as a search result. Beyond haulerExclusion it also
  * looks at the company, the email's domain and the city.
  */
 export function pitchExclusion(lead: {

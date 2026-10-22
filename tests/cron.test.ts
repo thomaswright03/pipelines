@@ -5,21 +5,20 @@ import { GET as dailyGET } from "@/app/api/cron/vault-daily/route";
 import { GET as staleGET } from "@/app/api/cron/stale-contacts/route";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { savePipelineSchedule, VAULT_SCHEDULE_ID } from "@/lib/pipeline-schedule";
-import { captureMail, makeAgentLead, makeColdLead, page, smtpError, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeAgentLead, makeColdLead, page, smtpError, seedPlaces, stubFetch } from "./helpers";
 
 function cron(handler: typeof dailyGET, auth: string | null = "Bearer test-cron-secret") {
   return handler(new NextRequest("http://localhost/api/cron/x", { headers: auth === null ? {} : { authorization: auth } }));
 }
 
-// Two Yelp listings for one bakery (same inbox) plus one more business.
-function stubYelpCity() {
+// Two listings for one bakery (same inbox) plus one more business, in every city.
+async function stubCity() {
+  await seedPlaces([
+    { name: "Omega Bakery", phone: "(480) 555-0101" },
+    { name: "Omega Bakery Downtown", phone: "(480) 555-0102" },
+    { name: "Zeta Roofing", phone: "(480) 555-0103" },
+  ]);
   return stubFetch({
-    [YELP_PREFIX]: () =>
-      yelpResponse([
-        { name: "Omega Bakery", phone: "+14805550101" },
-        { name: "Omega Bakery Downtown", phone: "+14805550102" },
-        { name: "Zeta Roofing", phone: "+14805550103" },
-      ]),
     "https://www.omegabakery.com": page(`(480) 555-0101 <a href="mailto:hello@omegabakery.test">Email</a>`),
     "https://www.omegabakerydowntown.com": page(`Our downtown shop, (480) 555-0102: hello@omegabakery.test`),
     "https://www.zetaroofing.com": page(`Zeta Roofing 480-555-0103 owner@zetaroofing.test`),
@@ -50,7 +49,7 @@ describe("cron authentication", () => {
 describe("daily Cold Outreach run", () => {
   it("discovers, dedupes by address, sends one message per inbox, and records the run", async () => {
     mail = captureMail();
-    stubYelpCity();
+    await stubCity();
 
     const res = await cron(dailyGET);
     const json = await res.json();
@@ -62,16 +61,16 @@ describe("daily Cold Outreach run", () => {
     expect((await prisma.lead.findFirstOrThrow({ where: { name: "Zeta Roofing" } })).phone).toBe("(480) 555-0103");
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
     expect(run).toMatchObject({ status: "succeeded", pipeline: "cold-outreach" });
-    // The day needs 30, so it searched more cities (the stub lists the same 3 businesses for each).
+    // The day needs 30, so it searched more cities (each lists the same 3 businesses).
     expect(run.summary).toMatch(
-      /^Searched [^:]+; [^:]+: Yelp listed 18 businesses, checked \d+ for an email, found 2 new addresses, emailed 2/,
+      /^Searched [^:]+; [^:]+: the business list had 18 businesses, checked \d+ for an email, found 2 new addresses, emailed 2/,
     );
     expect(run).toMatchObject({ leadsFound: 2, emailsSent: 2 });
   });
 
   it("is skipped (and says so) when automation is turned off", async () => {
     mail = captureMail();
-    const fetchStub = stubYelpCity();
+    const fetchStub = await stubCity();
     await savePipelineSchedule(VAULT_SCHEDULE_ID, { enabled: false, emailsPerDay: 30 });
 
     const json = await (await cron(dailyGET)).json();
@@ -84,7 +83,7 @@ describe("daily Cold Outreach run", () => {
 
   it("is skipped while outbound email is paused", async () => {
     mail = captureMail();
-    stubYelpCity();
+    await stubCity();
     await setOutboundPaused(true);
     expect(await (await cron(dailyGET)).json()).toMatchObject({ status: "skipped" });
     expect(mail.messages).toHaveLength(0);
@@ -93,7 +92,7 @@ describe("daily Cold Outreach run", () => {
   it("records an SMTP outage as a failed run with the reason", async () => {
     mail = captureMail();
     mail.fail(smtpError("connect ECONNREFUSED 127.0.0.1:587", { code: "ESOCKET", syscall: "connect" }));
-    stubYelpCity();
+    await stubCity();
 
     const res = await cron(dailyGET);
 
@@ -104,12 +103,12 @@ describe("daily Cold Outreach run", () => {
     expect(await prisma.lead.count({ where: { status: "new" } })).toBe(2);
   });
 
-  it("records a Yelp outage with nothing left to send as a failed run with a readable cause", async () => {
+  it("records an empty business list with nothing left to send as a failed run with a readable cause", async () => {
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
+    stubFetch({});
     const json = await (await cron(dailyGET)).json();
     expect(json.status).toBe("failed");
-    expect(json.errors[0]).toContain("Yelp wasn't responding, so no new leads were found");
+    expect(json.errors[0]).toContain("The business list hasn't been loaded yet");
   });
 });
 

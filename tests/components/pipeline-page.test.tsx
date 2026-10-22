@@ -87,8 +87,8 @@ describe("VaultScheduleSettings: the last run", () => {
             id: "r2",
             status: "failed",
             startedAt: "Sep 26, 2026, 8:33 AM MST",
-            summary: "Couldn't search Mesa, AZ on Yelp, so no new leads were found, emailed 0.",
-            errors: ["Search of Mesa, AZ failed: Yelp didn't answer."],
+            summary: "Couldn't search Mesa, AZ in the business list, so no new leads were found, emailed 0.",
+            errors: ["Search of Mesa, AZ failed: Couldn't read the business list."],
             numbers: { businessesChecked: 0, leadsFound: 0, emailsSent: 0 },
           },
         ]}

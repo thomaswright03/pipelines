@@ -75,9 +75,9 @@ export default async function DataleadsellPipeline({ searchParams }: PageProps<"
         <div className="mt-1">
           <HowThisWorks>
             <p>
-              Agents come from Yelp in Maricopa, Salt Lake and Utah counties, plus Arizona&apos;s ADRE license roster for Maricopa. An email
-              address is looked for on each agent&apos;s website, and every address gets one pitch at most. Agents who don&apos;t reply
-              within a week move to the call deck.
+              Agents come from a business list (Foursquare) in Maricopa, Salt Lake and Utah counties, plus Arizona&apos;s ADRE license
+              roster for Maricopa. An email address is looked for on each agent&apos;s website, and every address gets one pitch at most.
+              Agents who don&apos;t reply within a week move to the call deck.
             </p>
           </HowThisWorks>
         </div>

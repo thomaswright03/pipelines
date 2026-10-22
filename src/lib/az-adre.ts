@@ -1,8 +1,8 @@
 // Arizona Department of Real Estate's public license roster — a real,
-// verified alternative to Yelp for Maricopa County specifically. Unlike
-// Yelp it gives a genuine mailing address and license status, at the cost
+// verified source for Maricopa County specifically. Unlike the business
+// list it gives a genuine mailing address and license status, at the cost
 // of being Arizona-only: Utah's equivalent public data has no
-// address/county field, so Salt Lake and Utah counties use Yelp.
+// address/county field, so Salt Lake and Utah counties use the business list.
 //
 // Source: https://services.azre.gov/PdbWeb/List/DownloadList/1 — a ~50 MB
 // CSV of every individual license ADRE has issued (all categories and

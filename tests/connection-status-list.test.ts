@@ -38,7 +38,14 @@ const items: ConnectionStatus[] = [
     next: "Turn it on.",
     link: { href: "/dataleadsell", label: "Open the dataleadsell.com page" },
   },
-  { key: "yelp", label: "Yelp search", tone: "warn", summary: "No search has run yet.", next: "Press Test connection.", testable: true },
+  {
+    key: "places",
+    label: "Business list (Foursquare)",
+    tone: "error",
+    summary: "The business list is empty.",
+    next: "Tell your developer.",
+    testable: false,
+  },
 ];
 
 function rowOf(html: string, key: string): string {
@@ -55,7 +62,7 @@ describe("ConnectionStatusList", () => {
     expect(rowOf(html, "replies")).toContain("Not confirmed yet");
     expect(rowOf(html, "replies")).not.toContain("Check");
     expect(rowOf(html, "garbage-ai-daily")).toContain("Not working");
-    expect(rowOf(html, "yelp")).toContain("Check");
+    expect(rowOf(html, "places")).toContain("Not working");
   });
 
   it("exposes the tone for styling and tests", () => {
@@ -69,7 +76,7 @@ describe("ConnectionStatusList", () => {
 
   it("offers Test connection only for services that can be tested", () => {
     expect(rowOf(html, "mail")).toContain("Test connection");
-    expect(rowOf(html, "yelp")).toContain('aria-label="Test connection: Yelp search"');
+    expect(rowOf(html, "places")).not.toContain("Test connection");
     expect(rowOf(html, "replies")).not.toContain("Test connection");
     expect(rowOf(html, "garbage-ai-daily")).not.toContain("Test connection");
   });

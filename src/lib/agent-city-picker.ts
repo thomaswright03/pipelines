@@ -1,11 +1,11 @@
-// The next (city, county) for dataleadsell's Yelp agent search
+// The next (city, county) for dataleadsell's business-list agent search
 // (city-rotation.ts), tracked in ScrapedAgentCity.
 //
 // Maricopa County now goes through the Arizona ADRE license roster
-// (az-adre.ts) instead of Yelp — a real, verified source Yelp can't match.
+// (az-adre.ts) instead — a real, verified source the business list can't match.
 // Utah's equivalent public data has no address/county field at all (see
 // az-adre.ts's module comment), so Salt Lake and Utah counties still rely
-// on this Yelp-based picker.
+// on this business-list picker.
 import type { PrismaClient } from "@/generated/prisma/client";
 import { cityRotation } from "@/lib/city-rotation";
 import { AGENT_CITIES } from "@/lib/agent-cities";

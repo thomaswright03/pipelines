@@ -1,6 +1,6 @@
 // The daily dataleadsell run: what its "agents to check per run" setting
 // yields, that agents it didn't get to are emailed by the next run, that it
-// is off until turned on, and how a Yelp failure is handled — the same
+// is off until turned on, and how a failed search is handled — the same
 // rules as the Cold Outreach run (tests/daily-run.test.ts), on AgentLead.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -14,14 +14,17 @@ import { getPipeline } from "@/lib/outreach/pipelines";
 import { recentRuns } from "@/lib/outreach/runs";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { DATALEADSELL_SENDER_EMAIL } from "@/lib/dataleadsell-config";
-import { captureMail, makeAgentLead, makeColdLead, page, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeAgentLead, makeColdLead, page, seedPlaces, stubFetch } from "./helpers";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Yelp lists 50 agents; every fifth one (20%) has a site with their own address on it. */
-function stubYelpFiftyAgents() {
-  const agents = Array.from({ length: 50 }, (_, i) => ({ name: `Homes By ${pad(i + 1)}`, phone: `+1801555${1000 + i}` }));
-  const routes: Parameters<typeof stubFetch>[0] = { [YELP_PREFIX]: () => yelpResponse(agents) };
+/** Every city lists 50 agents; every fifth one (20%) has a site with their own address on it. */
+async function stubFiftyAgents() {
+  const agents = Array.from({ length: 50 }, (_, i) => ({ name: `Homes By ${pad(i + 1)}`, phone: `(801) 555-${1000 + i}` }));
+  await seedPlaces(agents, { kind: "agent" });
+  // Other businesses in the same cities are never searched for agents.
+  await seedPlaces([{ name: "Homes By 99 Bakery", website: "https://www.bakery.test" }], { kind: "business" });
+  const routes: Parameters<typeof stubFetch>[0] = {};
   for (let n = 5; n <= 50; n += 5) {
     routes[`https://www.homesby${pad(n)}.com`] = page(
       `Homes By ${pad(n)} — call 801-555-${1000 + n - 1} or write to me@homesby${pad(n)}.test`,
@@ -46,17 +49,16 @@ afterEach(() => mail?.restore());
 describe("dataleadsell daily run yield", () => {
   it("searches the next agent city for real estate agents, checks them until the day's number is found and emails them", async () => {
     mail = captureMail();
-    const fetchStub = stubYelpFiftyAgents();
+    const fetchStub = await stubFiftyAgents();
 
     const outcome = await runDailyDataleadsell(2, { sendDelayMs: 0 });
 
     expect(outcome.status).toBe("succeeded");
     expect(outcome.numbers).toMatchObject({ leadsFound: 2, emailsSent: 2 });
     expect(outcome.summary).toMatch(
-      /^Searched .+ \(.+ County, UT\): Yelp listed 50 agents, checked \d+ for an email, found 2 new addresses, emailed 2, 2 of today's 2 sent\.$/,
+      /^Searched .+ \(.+ County, UT\): the business list had 50 agents, checked \d+ for an email, found 2 new addresses, emailed 2, 2 of today's 2 sent\.$/,
     );
-    const yelpCall = new URL(fetchStub.calls.find((u) => u.startsWith(YELP_PREFIX))!);
-    expect(yelpCall.searchParams.get("term")).toBe("real estate agent");
+    expect(fetchStub.calls.some((u) => u.includes("bakery"))).toBe(false);
     expect(mail.to().sort()).toEqual(["me@homesby05.test", "me@homesby10.test"]);
     expect(mail.messages.every((m) => m.from.includes(DATALEADSELL_SENDER_EMAIL))).toBe(true);
     // Saved as agents, with the daily run's source and the city's county; no Cold Outreach lead was made.
@@ -70,7 +72,7 @@ describe("dataleadsell daily run yield", () => {
 
   it("checks the whole city when the day needs more than it has", async () => {
     mail = captureMail();
-    stubYelpFiftyAgents();
+    await stubFiftyAgents();
     const outcome = await runDailyDataleadsell(50, { sendDelayMs: 0 });
     expect(outcome.numbers).toEqual({ businessesChecked: 50, leadsFound: 10, emailsSent: 10 });
   });
@@ -79,7 +81,7 @@ describe("dataleadsell daily run yield", () => {
 describe("agents a dataleadsell daily run didn't get to", () => {
   it("are emailed by the next run; hand-added agents and Cold Outreach leads are left alone", async () => {
     mail = captureMail();
-    stubYelpFiftyAgents();
+    await stubFiftyAgents();
     const manual = await makeAgentLead({ source: "Manual entry" }); // not the daily run's to send
     const cold = await makeColdLead({ source: DAILY_RUN_SOURCE }); // the other pipeline's daily run sends this one
 
@@ -92,7 +94,7 @@ describe("agents a dataleadsell daily run didn't get to", () => {
     expect(await countUnsentDailyAgentLeads()).toBe(2);
 
     // Run 2 has enough waiting, so it searches no city and emails the two left over.
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    stubFetch({});
     const second = await runDailyDataleadsell(2, { sendDelayMs: 0 });
     expect(second.summary).toBe(
       "Enough leads were already waiting, so no city was searched, 2 left over from earlier runs, emailed 2, 2 of today's 2 sent.",
@@ -105,37 +107,33 @@ describe("agents a dataleadsell daily run didn't get to", () => {
   });
 });
 
-describe("a dataleadsell daily run whose Yelp search fails", () => {
-  it("still emails the agents earlier runs found, records the Yelp error and is 'partial'", async () => {
+describe("a dataleadsell daily run whose search fails", () => {
+  it("still emails the agents earlier runs found, records the error and is 'partial'", async () => {
     mail = captureMail();
     await turnOn();
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
+    stubFetch({});
     const leftover = await makeAgentLead({ source: DAILY_RUN_SOURCE, createdAt: new Date(Date.now() - 86_400_000) });
 
     const json = await (await cron()).json();
 
     expect(json.status).toBe("partial");
     expect(json.summary).toMatch(
-      /^Couldn't search .+ on Yelp, so no new agents were found, 1 left over from earlier runs, emailed 1, 1 of today's \d+ sent\.$/,
+      /^Couldn't search .+ in the business list, so no new agents were found, 1 left over from earlier runs, emailed 1, 1 of today's \d+ sent\.$/,
     );
     expect(mail.to()).toEqual([leftover.email]);
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { pipeline: "dataleadsell", kind: "daily" } });
     expect(run.status).toBe("partial");
-    expect(run.errors).toMatch(/^Search of .+ County, UT\) failed: Yelp wasn't responding, so no new leads were found/);
+    expect(run.errors).toMatch(/^Search of .+ County, UT\) failed: The business list hasn't been loaded yet/);
     // The city wasn't searched, so it stays available for a later run.
     expect(await prisma.scrapedAgentCity.count()).toBe(0);
   });
 
   it("is 'failed' when the search fails and there is nothing left to email", async () => {
     mail = captureMail();
-    stubFetch({
-      [YELP_PREFIX]: () => {
-        throw new TypeError("fetch failed");
-      },
-    });
+    stubFetch({});
     const outcome = await runDailyDataleadsell(10, { sendDelayMs: 0 });
     expect(outcome.status).toBe("failed");
-    expect(outcome.errors?.[0]).toMatch(/Couldn't reach Yelp, so no new leads were found this time/);
+    expect(outcome.errors?.[0]).toMatch(/The business list hasn't been loaded yet/);
     expect(mail.messages).toHaveLength(0);
   });
 });
@@ -175,7 +173,7 @@ describe("the dataleadsell daily cron route", () => {
 
   it("is skipped when no schedule has been saved (off by default), and says where to turn it on", async () => {
     mail = captureMail();
-    const fetchStub = stubYelpFiftyAgents();
+    const fetchStub = await stubFiftyAgents();
 
     const res = await cron();
     const json = await res.json();
@@ -189,7 +187,7 @@ describe("the dataleadsell daily cron route", () => {
 
   it("is skipped when turned off", async () => {
     mail = captureMail();
-    const fetchStub = stubYelpFiftyAgents();
+    const fetchStub = await stubFiftyAgents();
     await savePipelineSchedule(DATALEADSELL_SCHEDULE_ID, { enabled: false, emailsPerDay: 20 });
 
     expect(await (await cron()).json()).toMatchObject({ status: "skipped" });
@@ -199,7 +197,7 @@ describe("the dataleadsell daily cron route", () => {
 
   it("is skipped while outbound email is paused", async () => {
     mail = captureMail();
-    stubYelpFiftyAgents();
+    await stubFiftyAgents();
     await turnOn();
     await setOutboundPaused(true);
     expect(await (await cron()).json()).toMatchObject({ status: "skipped" });
@@ -208,7 +206,7 @@ describe("the dataleadsell daily cron route", () => {
 
   it("runs with the saved number when on, and records the run under dataleadsell only", async () => {
     mail = captureMail();
-    stubYelpFiftyAgents();
+    await stubFiftyAgents();
     await turnOn(3);
 
     const res = await cron();
@@ -219,7 +217,9 @@ describe("the dataleadsell daily cron route", () => {
     expect(mail.messages).toHaveLength(3);
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
     expect(run).toMatchObject({ pipeline: "dataleadsell", status: "succeeded", leadsFound: 3, emailsSent: 3 });
-    expect(run.summary).toMatch(/Yelp listed 50 agents, checked \d+ for an email, found 3 new addresses, emailed 3, 3 of today's 3 sent\./);
+    expect(run.summary).toMatch(
+      /the business list had 50 agents, checked \d+ for an email, found 3 new addresses, emailed 3, 3 of today's 3 sent\./,
+    );
     expect(await recentRuns("dataleadsell", "daily")).toHaveLength(1);
     expect(await recentRuns("cold-outreach", "daily")).toHaveLength(0);
   });

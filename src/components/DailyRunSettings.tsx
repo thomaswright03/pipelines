@@ -56,7 +56,7 @@ const WORDING: Record<
     checked: { one: "business", many: "businesses" },
     emailed: { one: "lead", many: "leads" },
     describe: (n) =>
-      `Each run sends first pitches until ${n} have gone out today, searching a new city on Yelp for business email addresses when the leads already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
+      `Each run sends first pitches until ${n} have gone out today, searching a new city in the business list for business email addresses when the leads already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
       "Only about 1 in 5 businesses has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
   },
@@ -65,7 +65,7 @@ const WORDING: Record<
     checked: { one: "agent", many: "agents" },
     emailed: { one: "agent", many: "agents" },
     describe: (n) =>
-      `Each run sends first pitches until ${n} have gone out today, searching the next city on Yelp for real estate agents when the agents already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
+      `Each run sends first pitches until ${n} have gone out today, searching the next city in the business list for real estate agents when the agents already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
       "Not every agent has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
   },
@@ -75,8 +75,8 @@ const WORDING: Record<
     emailed: { one: "hauler", many: "haulers" },
     describe: (n) =>
       GARBAGE_AI_SENDING_HELD
-        ? `Each run searches a new city on Yelp for garbage collection and saves the haulers it finds an email address for, until ${n} are waiting. Sending is on hold, so it emails nobody.`
-        : `Each run sends first pitches until ${n} have gone out today, searching a new city on Yelp for garbage collection when the haulers already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
+        ? `Each run searches a new city in the business list for waste haulers and saves the haulers it finds an email address for, until ${n} are waiting. Sending is on hold, so it emails nobody.`
+        : `Each run sends first pitches until ${n} have gone out today, searching a new city in the business list for waste haulers when the haulers already found don't cover it. Once ${n} are sent, the rest of the day's runs do nothing.`,
     yieldNote:
       "Not every hauler has a findable email address and each run has about a minute, so one run sends roughly 10 at most. A day with a high number can fall short; the next day starts fresh.",
   },
@@ -86,8 +86,8 @@ const WORDING: Record<
     emailed: { one: "remodeler", many: "remodelers" },
     describe: (n) =>
       ROOM_DESIGNER_SENDING_HELD
-        ? `Each weekday's run searches new cities on Yelp for bathroom remodeling and saves the remodelers it finds an email address for, until ${n} are waiting. Sending is on hold, so it emails nobody.`
-        : `Each weekday's run sends ${n} first pitches, searching new cities on Yelp for bathroom remodeling when the remodelers already found don't cover it.`,
+        ? `Each weekday's run searches new cities in the business list for bathroom remodelers and saves the remodelers it finds an email address for, until ${n} are waiting. Sending is on hold, so it emails nobody.`
+        : `Each weekday's run sends ${n} first pitches, searching new cities in the business list for bathroom remodelers when the remodelers already found don't cover it.`,
     yieldNote:
       "Not every remodeler has a findable email address, and the run searches at most 6 cities in its 5 minutes, so a day with a high number can fall short; the next weekday starts fresh.",
   },

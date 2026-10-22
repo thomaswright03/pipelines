@@ -55,7 +55,7 @@ export default async function RemodelerDetail({ params }: PageProps<"/room-desig
           <DetailField label="Email" value={lead.email ?? "—"} href={lead.email ? `mailto:${lead.email}` : undefined} />
           {lead.email && lead.emailEvidence && <DetailField label="Why this address" value={lead.emailEvidence} />}
           <DetailField label="Phone" value={lead.phone ?? "—"} href={lead.phone ? `tel:${lead.phone}` : undefined} />
-          <DetailField label="Services (Yelp)" value={lead.services ?? "—"} />
+          <DetailField label="Services" value={lead.services ?? "—"} />
           <DetailField label="Address" value={lead.address ?? "—"} />
           <DetailField label="City/State" value={lead.city ? [lead.city, lead.state].filter(Boolean).join(", ") : "—"} />
           <DetailField label="Website" value={lead.website ?? "—"} href={lead.website ?? undefined} />

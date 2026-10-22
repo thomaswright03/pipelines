@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 import { prisma } from "@/lib/db";
+import { US_CITIES } from "@/lib/us-cities";
+import { AGENT_CITIES } from "@/lib/agent-cities";
 import { setMailTransportForTesting, type MailMessage } from "@/lib/send-email";
 
 export async function resetDatabase(): Promise<void> {
@@ -107,20 +109,44 @@ export function stubFetch(routes: Record<string, Route | ((url: string) => Route
   return { calls, fetchMock };
 }
 
-export function yelpResponse(businesses: { name: string; phone?: string; address?: string }[]): Route {
-  return {
-    contentType: "application/json",
-    body: JSON.stringify({
-      businesses: businesses.map((b) => ({
-        name: b.name,
-        phone: b.phone ?? "",
-        location: { display_address: [b.address ?? "1 Main St", "Phoenix, AZ 85001"] },
-      })),
-    }),
-  };
+type PlaceSeed = { name: string; phone?: string; address?: string; website?: string; categories?: string[] };
+
+/**
+ * Loads `businesses` into the business list (the Place table) for every
+ * city a pipeline rotates through, or only `cities`, tagged `kind`. Each
+ * address ends with the city, as the import writes it. Returns how many
+ * rows were written.
+ */
+export async function seedPlaces(
+  businesses: PlaceSeed[] | ((cityIndex: number) => PlaceSeed[]),
+  options: { kind?: "hauler" | "remodeler" | "agent" | "business"; cities?: { city: string; state: string }[] } = {},
+): Promise<number> {
+  const kind = options.kind ?? "business";
+  const cities = options.cities ?? [...new Map([...US_CITIES, ...AGENT_CITIES].map((c) => [`${c.city}|${c.state}`, c])).values()];
+  const data = cities.flatMap(({ city, state }, c) =>
+    (typeof businesses === "function" ? businesses(c) : businesses).map((b, i) => ({
+      id: `${kind}-${city}-${state}-${i}`,
+      name: b.name,
+      phone: b.phone ?? null,
+      // A street alone gets the city appended, as the import writes it; a full address is kept.
+      address: b.address?.includes(", ") ? b.address : `${b.address ?? "1 Main St"}, ${city}, ${state} 85001`,
+      city,
+      state,
+      website: b.website ?? null,
+      categories: b.categories ?? [],
+      kinds: [kind],
+      // Listed in order: the first business is the most recently confirmed.
+      refreshedAt: new Date(Date.UTC(2026, 0, 1) - i * 86_400_000),
+    })),
+  );
+  const { count } = await prisma.place.createMany({ data });
+  return count;
 }
 
-export const YELP_PREFIX = "https://api.yelp.com/v3/businesses/search";
+/** Loads every city with one place of another kind, so a search for `kind` finds nothing (rather than "city not loaded"). */
+export function seedNoneOf(kind: "hauler" | "remodeler" | "agent" | "business" = "business"): Promise<number> {
+  return seedPlaces([{ name: "Unrelated Place" }], { kind: kind === "hauler" ? "agent" : "hauler" });
+}
 
 export function page(html: string): Route {
   return { body: `<html><body>${html}</body></html>` };

@@ -17,7 +17,7 @@ type PitchOptions = {
 };
 
 /**
- * The first name to greet a remodeler by: Yelp only gives the business name,
+ * The first name to greet a remodeler by: the business list only gives the business name,
  * so a name is used only when the lead has a separate company and its own
  * name reads as a person's; otherwise "there".
  */

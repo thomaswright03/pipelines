@@ -1,4 +1,4 @@
-// The daily automated dataleadsell run: search the next agent city on Yelp
+// The daily automated dataleadsell run: search the next agent city in the business list
 // for real estate agents, check up to the configured number of them for an
 // email address, save the ones an address was found for, then pitch every
 // sendable agent the daily runs have found — this run's plus any an earlier
@@ -22,7 +22,7 @@ export function runDailyDataleadsell(agentsPerRun: number = DEFAULT_AGENTS_PER_R
   return runDailyDiscoveryAndSend(
     {
       pipeline: "dataleadsell",
-      searchTerm: "real estate agent",
+      search: { kind: "agent" },
       listedNoun: { one: "agent", many: "agents" },
       foundNoun: "agents",
       pickTarget: () => pickNextAgentCity(prisma),

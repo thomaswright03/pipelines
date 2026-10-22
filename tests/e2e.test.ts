@@ -1,7 +1,7 @@
 // End-to-end per pipeline, through the same server actions the pages call:
 // discover → find emails → confirm and bulk-send → reply / bounce → stats.
-// External services are fixtures: Yelp and business websites via a fetch
-// stub, SMTP via a capturing transport.
+// External services are fixtures: the business list is seeded, business
+// websites come from a fetch stub, SMTP from a capturing transport.
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { searchLeadsAction } from "@/lib/actions/vault-pipeline";
@@ -16,7 +16,7 @@ import {
 import { handleInboundReply } from "@/lib/outreach/inbound";
 import { getDataleadsellStats, getVaultStats } from "@/lib/pipeline-stats";
 import type { PipelineId } from "@/lib/outreach/pipeline-id";
-import { captureMail, page, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, page, seedPlaces, stubFetch } from "./helpers";
 
 let mail: ReturnType<typeof captureMail>;
 afterEach(() => mail?.restore());
@@ -45,13 +45,15 @@ async function confirmAndSendAll(pipeline: PipelineId) {
 describe("Cold Outreach, end to end", () => {
   it("finds businesses, emails each once, records a reply and a bounce, and reports the rates", async () => {
     mail = captureMail();
+    await seedPlaces(
+      [
+        { name: "Alpha Plumbing", phone: "(480) 555-0111" },
+        { name: "Bravo Dental", phone: "(480) 555-0112" },
+        { name: "Charlie Nails", phone: "(480) 555-0113" },
+      ],
+      { cities: [{ city: "Mesa", state: "AZ" }] },
+    );
     stubFetch({
-      [YELP_PREFIX]: () =>
-        yelpResponse([
-          { name: "Alpha Plumbing", phone: "+14805550111" },
-          { name: "Bravo Dental", phone: "+14805550112" },
-          { name: "Charlie Nails", phone: "+14805550113" },
-        ]),
       "https://www.alphaplumbing.com": page(`Alpha Plumbing, Mesa AZ — call (480) 555-0111 — hello@alphaplumbing.test`),
       "https://www.bravodental.com": page(
         `Bravo Dental <a href="tel:+14805550112">480.555.0112</a> <a href="mailto:frontdesk@bravodental.test">email</a>`,
@@ -87,12 +89,14 @@ describe("Cold Outreach, end to end", () => {
 describe("dataleadsell, end to end", () => {
   it("finds agents, emails their own address, sends the rest to the call deck, and records calls", async () => {
     mail = captureMail();
+    await seedPlaces(
+      [
+        { name: "Dana Diaz - Desert Realty", phone: "(602) 555-0121" },
+        { name: "Eli Evans - Desert Realty", phone: "(602) 555-0122" },
+      ],
+      { kind: "agent", cities: [{ city: "Mesa", state: "AZ" }] },
+    );
     stubFetch({
-      [YELP_PREFIX]: () =>
-        yelpResponse([
-          { name: "Dana Diaz - Desert Realty", phone: "+16025550121" },
-          { name: "Eli Evans - Desert Realty", phone: "+16025550122" },
-        ]),
       // The brokerage site lists its front desk and one agent's own address.
       "https://www.desertrealty.com": page(`Desert Realty, serving Mesa: frontdesk@desertrealty.test · dana.diaz@desertrealty.test`),
     });

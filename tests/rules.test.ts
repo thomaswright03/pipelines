@@ -192,7 +192,6 @@ describe("auth and startup checks", () => {
     expect(missingEnvVars({ PIPELINES_DATABASE_URL: "postgres://x" })).toEqual([]);
     expect(missingEnvVars({ PIPELINES_DATABASE_URL: "postgres://x", VERCEL: "1" })).toEqual([
       "ZEPTOMAIL_SMTP_PASSWORD",
-      "YELP_API_KEY",
       "EMAIL_INBOUND_SECRET",
       "CRON_SECRET",
     ]);

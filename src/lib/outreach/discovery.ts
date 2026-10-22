@@ -1,6 +1,6 @@
 // Shared lead discovery and email lookup for every pipeline: guess a
 // website, find an address on it, apply the address rules, and save — the
-// same way whether the candidates came from Yelp, the ADRE roster, the
+// same way whether the candidates came from the business list, the ADRE roster, the
 // daily cron or a manual search.
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
@@ -155,7 +155,7 @@ export type DiscoveryCandidate = {
   address: string | null;
   website: string | null;
   brokerage?: string | null;
-  /** The business's Yelp categories (Garbage AI stores them). */
+  /** The business's categories (Garbage AI and Room Designer 3D store them). */
   services?: string | null;
   city?: string | null;
   notes?: string | null;

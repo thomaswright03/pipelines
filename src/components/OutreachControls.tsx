@@ -181,21 +181,22 @@ export default function OutreachControls({
 
       <HowThisWorks summary="How finding and sending work">
         <p>
-          Only {isAgents ? "agents" : "businesses"} an email was found for are saved. Yelp{isAgents ? " and ADRE don't" : " doesn't"} give a
-          website, so each search guesses one from the name and keeps it only if the site shows the {isAgents ? "agent" : "business"}&apos;s
+          Only {isAgents ? "agents" : "businesses"} an email was found for are saved. {isAgents ? "Agents" : "Businesses"} come from a
+          business list (Foursquare&apos;s, refreshed monthly) for the cities the daily runs rotate through. When the list has no website
+          for one, the search guesses it from the name and keeps it only if the site shows the {isAgents ? "agent" : "business"}&apos;s
           phone number, street address or city — expect fewer new {noun.many} than results.
           {isAgents ? " An agent is only saved with an address that is recognisably their own, never a brokerage's shared inbox." : ""}
         </p>
         {isHaulers && (
           <p>
-            Each search asks Yelp for garbage collection in one city and leaves out current clients, national and large regional haulers,
-            city and county departments, and anything in Mountain High Disposal&apos;s service area.
+            Each search looks for waste haulers in one city and leaves out current clients, national and large regional haulers, city and
+            county departments, and anything in Mountain High Disposal&apos;s service area.
           </p>
         )}
         {isRemodelers && (
           <p>
-            Each search asks Yelp for bathroom remodeling in one city and leaves out national franchises and big-box installers,
-            plumbing-only listings, supply houses and showrooms, and Eddys Remodeling.
+            Each search looks for bathroom remodelers in one city and leaves out national franchises and big-box installers, plumbing-only
+            listings, supply houses and showrooms, and Eddys Remodeling.
           </p>
         )}
         <p>Replies to your emails are logged automatically; record anything else from the lead page.</p>
@@ -206,7 +207,7 @@ export default function OutreachControls({
 
 const initialSearch: LeadSearchState = {};
 
-// The pipelines with a fixed Yelp term (garbage collection, bathroom remodeling), so no business-type field.
+// The pipelines that search for one fixed kind of business (haulers, remodelers), so no business-type field.
 const FIXED_TERM_SEARCH: Partial<Record<PipelineId, typeof searchLeadsAction>> = {
   "garbage-ai": searchHaulersAction,
   "room-designer": searchRemodelersAction,

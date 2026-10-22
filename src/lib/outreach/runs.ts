@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { logError, logInfo } from "@/lib/log";
 import { isDatabaseUnavailable } from "@/lib/db-health";
-import { YelpError } from "@/lib/yelp-discovery";
+import { PlaceSearchError } from "@/lib/place-discovery";
 
 type RunStatus = "succeeded" | "partial" | "failed" | "skipped";
 /** What a daily discovery-and-send run actually did, as numbers. */
@@ -50,8 +50,8 @@ export async function recordRun(pipeline: string, kind: string, fn: (runId: stri
  * (the technical detail is in the server log under the run id).
  */
 function operatorMessage(err: unknown, runId: string): string {
-  // Runs are unattended, so the Yelp wording that says what happens next.
-  if (err instanceof YelpError) return `Yelp: ${err.unattended}`;
+  // Runs are unattended, so the search wording that says what happens next.
+  if (err instanceof PlaceSearchError) return `Business list: ${err.unattended}`;
   if (isDatabaseUnavailable(err)) return "The database couldn't be reached partway through the run.";
   return `An internal error stopped the run (details in the server log under run ${runId}).`;
 }

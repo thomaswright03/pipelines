@@ -63,7 +63,8 @@ describe("the dataleadsell page's daily automation", () => {
         kind: "daily",
         status: "succeeded",
         startedAt: TWO_DAYS_AGO,
-        summary: "Searched Provo (Utah County, UT): Yelp listed 20 agents, checked 10 for an email, found 1 new address, emailed 1.",
+        summary:
+          "Searched Provo (Utah County, UT): the business list had 20 agents, checked 10 for an email, found 1 new address, emailed 1.",
         businessesChecked: 10,
         leadsFound: 1,
         emailsSent: 1,
@@ -71,7 +72,7 @@ describe("the dataleadsell page's daily automation", () => {
     });
     const page = await renderPage(AgentList(pageProps()));
     expect(page.text).toMatch(
-      /On: runs every hour from 9:03 AM to 4:03 PM Arizona time\. Each run sends first pitches until 10 have gone out today, searching the next city on Yelp for real estate agents/,
+      /On: runs every hour from 9:03 AM to 4:03 PM Arizona time\. Each run sends first pitches until 10 have gone out today, searching the next city in the business list for real estate agents/,
     );
     expect(page.text).toMatch(/checked 10 agents, found 1 address, emailed 1 agent\./);
     expect(page.text).toContain("Searched Provo (Utah County, UT)");
