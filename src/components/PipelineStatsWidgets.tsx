@@ -1,3 +1,4 @@
+import CountUp from "@/components/motion/CountUp";
 import type { BaseStats, Breakdown, TemplateStats } from "@/lib/pipeline-stats";
 import { formatDate } from "@/lib/time";
 import { statusLabel } from "@/lib/lead-status";
@@ -6,7 +7,7 @@ import { APP_TIME_ZONE_LABEL } from "@/lib/time";
 export function StatCard({ label, value, sublabel }: { label: string; value: string | number; sublabel?: string }) {
   return (
     <div className="card p-4">
-      <div className="accent-text text-2xl font-bold">{typeof value === "number" ? value.toLocaleString("en-US") : value}</div>
+      <div className="accent-text text-2xl font-bold">{typeof value === "number" ? <CountUp value={value} /> : value}</div>
       <div className="text-sm text-zinc-700 dark:text-zinc-300">{label}</div>
       {sublabel && <div className="mt-1 text-sm muted">{sublabel}</div>}
     </div>

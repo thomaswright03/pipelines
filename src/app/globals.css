@@ -990,23 +990,7 @@ dialog > div > dl {
   background-color: var(--surface-2);
 }
 
-/* --- Motion: entrances move content, never fade it --------------------------------------------- */
-@keyframes rise {
-  from {
-    transform: translateY(12px);
-  }
-}
-/*
- * Cards rise into place together as a page arrives. Transform only, so text
- * has full contrast from the first frame. A card holding a table is left
- * still, so its pinned column headers line up with the site header at once.
- */
-main .card:not(:has(table)) {
-  animation: rise 380ms var(--ease) both;
-}
-dialog[open] {
-  animation: rise 320ms var(--ease) both;
-}
+/* Motion (entrances, page transitions, ambient light) lives in motion.css, imported after this file. */
 
 /* --- High-contrast mode: keep the edges ---------------------------------------------------------- */
 @media (forced-colors: active) {

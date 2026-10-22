@@ -8,6 +8,7 @@ import type { PipelineMetaFields } from "@/lib/pipeline-meta-defaults";
 import type { DashboardNumbers } from "@/lib/dashboard";
 import HowThisWorks from "@/components/HowThisWorks";
 import { unconfirmedMessage } from "@/components/ActionMessage";
+import CountUp from "@/components/motion/CountUp";
 
 type InternalProps = {
   kind: "internal";
@@ -219,7 +220,7 @@ function KeyNumbers({ href, numbers }: { href: string; numbers: DashboardNumbers
                 aria-label={`${item.label}: ${item.value.toLocaleString("en-US")}`}
                 className="text-lg font-semibold tabular-nums hover:underline"
               >
-                {item.value.toLocaleString("en-US")}
+                <CountUp value={item.value} />
               </Link>
             </dd>
           </div>

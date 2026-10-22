@@ -26,17 +26,21 @@ export default function SiteNav({
   interestedReplies?: number;
 }) {
   const pathname = usePathname();
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href) || (href === "/replies" && pathname.startsWith("/inbox"));
+  // Following the nav to the right slides the pages left, and back again (motion.css).
+  const current = LINKS.findIndex(({ href }) => isActive(href));
 
   return (
     <nav aria-label="Main" className="flex flex-wrap gap-1 text-sm lg:flex-nowrap lg:gap-0.5 2xl:gap-1">
-      {LINKS.map(({ href, label }) => {
+      {LINKS.map(({ href, label }, index) => {
         // The Inbox is a tab of the Unmatched replies section.
-        const active =
-          href === "/" ? pathname === "/" : pathname.startsWith(href) || (href === "/replies" && pathname.startsWith("/inbox"));
+        const active = isActive(href);
         return (
           <Link
             key={href}
             href={href}
+            transitionTypes={current < 0 || index === current ? undefined : [index > current ? "nav-forward" : "nav-back"]}
             aria-current={active ? "page" : undefined}
             className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-2.5 py-1.5 font-medium transition sm:min-h-8 lg:px-1 2xl:px-2.5 ${
               active
