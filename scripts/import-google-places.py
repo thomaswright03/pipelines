@@ -69,6 +69,14 @@ CENSUS_NAMES = {
     ("Anchorage", "AK"): "Anchorage municipality",
     ("Boise", "ID"): "Boise City city",
 }
+# Cities whose Census center is far from where their businesses are (a large
+# consolidated area, or water): searched around downtown instead.
+CENTER_OVERRIDES = {
+    ("Anchorage", "AK"): (61.2176, -149.8997),
+    ("Corpus Christi", "TX"): (27.8006, -97.3964),
+    ("New York", "NY"): (40.7128, -74.0060),
+    ("San Francisco", "CA"): (37.7793, -122.4193),
+}
 SUFFIX = re.compile(r"\s+(city|town|village|CDP|municipality|borough|city and borough|metro township)$")
 
 
@@ -104,7 +112,8 @@ def city_centers(cities: list[tuple[str, str]]) -> dict[tuple[str, str], tuple[f
         by_name.setdefault((SUFFIX.sub("", name).lower(), state), (lat, lon))
     centers = {}
     for city, state in cities:
-        center = exact.get((CENSUS_NAMES[(city, state)], state)) if (city, state) in CENSUS_NAMES else None
+        center = CENTER_OVERRIDES.get((city, state))
+        center = center or (exact.get((CENSUS_NAMES[(city, state)], state)) if (city, state) in CENSUS_NAMES else None)
         center = center or by_name.get((city.lower(), state)) or by_name.get((re.sub(r"^Saint ", "St. ", city).lower(), state))
         if center:
             centers[(city, state)] = center
@@ -137,6 +146,11 @@ def address_city(row: dict) -> tuple[str, str] | None:
     """("Boise", "ID") from "613 Fairview Ave, Boise, ID 83702, United States"."""
     m = re.search(r",\s*([^,]+?),\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?(?:,\s*United States)?\s*$", row.get("address") or "")
     return (m.group(1).strip(), m.group(2)) if m else None
+
+
+def same_city(name: str) -> str:
+    """Google writes "St Paul" where the city lists say "Saint Paul"."""
+    return re.sub(r"^(saint|st\.?)\s+", "st ", name.strip().lower())
 
 
 def format_phone(phone: str | None) -> str | None:
@@ -190,7 +204,7 @@ def main() -> None:
                         if not name or not key or address_city(row) is None:
                             continue
                         row_city, row_state = address_city(row)
-                        if row_city.lower() != city.lower() or row_state != state:
+                        if same_city(row_city) != same_city(city) or row_state != state:
                             continue  # A neighboring town; the exact-city rule matches the Foursquare list.
                         if kind == "hauler" and NOT_A_HAULER.search(name):
                             continue

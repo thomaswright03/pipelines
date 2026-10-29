@@ -184,7 +184,7 @@ workflow) in fast mode, which sends one search request per query and needs no br
 mode opens each listing in a browser, and Google returns those pages empty to cloud servers. Each city is
 searched around its US Census center, and only listings whose address is in that city are kept.
 
-The **Import Google Maps listings** workflow runs it on the 22nd of each month (about 70 minutes for all
+The **Import Google Maps listings** workflow runs it on the 22nd of each month (about 70 to 80 minutes for all
 cities) and on demand, with a dry-run box and a "first N cities" box for a quick test. It uses the same
 `PIPELINES_DIRECT_URL` secret. Google rows have ids starting `g:`; each import replaces only those, and the
 Foursquare import replaces only the others. If fewer than half the cities return listings (Google blocking
