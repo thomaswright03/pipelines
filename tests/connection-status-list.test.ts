@@ -40,7 +40,7 @@ const items: ConnectionStatus[] = [
   },
   {
     key: "places",
-    label: "Business list (Foursquare)",
+    label: "Business list",
     tone: "error",
     summary: "The business list is empty.",
     next: "Tell your developer.",

@@ -109,6 +109,7 @@ describe("who Room Designer 3D never pitches", () => {
     ["Valley Tile Showroom", [], "a supply house or showroom"],
     ["Valley Plumbing", ["Plumbing"], "a plumber, supply house or showroom, not a remodeler"],
     ["Cabinet Gallery", ["Kitchen & Bath", "Cabinetry"], "a plumber, supply house or showroom, not a remodeler"],
+    ["Mesa Cabinet Outlet", ["Cabinet store", "Kitchen supply store"], "a plumber, supply house or showroom, not a remodeler"],
   ])("leaves out %s", (name, categories, reason) => {
     expect(remodelerExclusion({ name, categories })).toBe(reason);
   });
@@ -117,6 +118,7 @@ describe("who Room Designer 3D never pitches", () => {
     expect(remodelerExclusion({ name: "Desert Bath Remodel", categories: ["Contractors", "Kitchen & Bath"] })).toBeNull();
     expect(remodelerExclusion({ name: "Valley Plumbing & Remodel", categories: ["Plumbing", "Contractors"] })).toBeNull();
     expect(remodelerExclusion({ name: "Saguaro Renovations", categories: [] })).toBeNull();
+    expect(remodelerExclusion({ name: "Saguaro Baths", categories: ["Bathroom remodeler", "Plumber"] })).toBeNull();
   });
 
   it("never emails Eddys Remodeling, even by company or email domain", async () => {

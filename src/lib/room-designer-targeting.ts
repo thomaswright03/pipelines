@@ -47,8 +47,8 @@ const FRANCHISES = [
 const SUPPLY_OR_SHOWROOM = [/\bsupply\b/, /\bsupplies\b/, /\bshowroom\b/, /\bwholesale\b/, /\bdistributors?\b/];
 
 // Categories that on their own mean a plumber, a supply house or a
-// showroom: Foursquare's names (the business list's), then Yelp's (leads
-// found before October 2026). A listing with any other category too
+// showroom: Foursquare's names and Google Maps' (the business list's), then
+// Yelp's (leads found before October 2026). A listing with any other category too
 // (Bathroom Contractor, Kitchen Remodeler, General Contractor…) is kept.
 const NOT_A_REMODELER_CATEGORIES = new Set(
   [
@@ -60,6 +60,16 @@ const NOT_A_REMODELER_CATEGORIES = new Set(
     "Construction Supplies Store",
     "Lighting Store",
     "Carpet and Flooring Contractor",
+    "Kitchen supply store",
+    "Furniture store",
+    "Appliance store",
+    "Building materials supplier",
+    "Home improvement store",
+    "Flooring store",
+    "Flooring contractor",
+    "Tile store",
+    "Cabinet store",
+    "Plumbing supply store",
     "Plumbing",
     "Water Heater Installation/Repair",
     "Hydro-jetting",

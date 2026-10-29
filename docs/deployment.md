@@ -150,7 +150,7 @@ the operator and names no settings; this table is for the developer they're told
 | Sending email | The latest send succeeded, or the latest **Test connection** (SMTP connect, STARTTLS and login; nothing is sent) passed | "turned down our login" → `ZEPTOMAIL_SMTP_PASSWORD`; "isn't set up on the server" → the password is missing; "still in test mode" → `EMAIL_TRANSPORT` isn't `zeptomail`; "no server address" → `SMTP_HOST` |
 | Receiving replies | An inbound message of any kind arrived in the last 7 days | "Reply forwarding isn't switched on" → `EMAIL_INBOUND_SECRET`; "Not confirmed yet" / "replies seem to have stopped" → the Cloudflare Email Worker and Vercel's Protection Bypass for Automation (see "Reply tracking: the email Worker" above) |
 | Each scheduled job in `vercel.json`: the Cold Outreach, dataleadsell, Garbage AI and Room Designer 3D daily runs, the call-deck move, the daily report email | The last run succeeded and was less than 26 hours ago. A pipeline's daily run switched off on its page shows **Off** (grey), not as a problem | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab. A failed run's next step links the job's own page (the pipeline's Daily automation panel, the dashboard for the call-deck move, Sending email for the report). `tests/connections.test.ts` fails if a cron in `vercel.json` has no row or a different time |
-| Business list (Foursquare) | The `Place` table has rows and the last import was under 38 days ago (no Test connection: it's our own table) | "business list is empty" → run the import (below); "monthly import seems to have stopped" → the **Import business list** workflow in GitHub Actions failed or its `PIPELINES_DIRECT_URL` secret is missing or stale |
+| Business list | The `Place` table has rows and the last import was under 38 days ago (no Test connection: it's our own table; the summary says how many came from Google Maps) | "business list is empty" → run the import (below); "monthly import seems to have stopped" → the **Import business list** workflow in GitHub Actions failed or its `PIPELINES_DIRECT_URL` secret is missing or stale |
 
 ## Business list
 
@@ -174,6 +174,25 @@ To load it by hand instead: `pip install duckdb==1.5.6 "psycopg[binary]==3.2.12"
 `PIPELINES_DIRECT_URL="<Neon unpooled URL>" python3 scripts/import-places.py`. A city added to a pool is
 searchable after the next import. Places Foursquare hasn't confirmed since 2020 are left out, so fewer dead
 businesses (and bounces) get through; the trade-off is fewer places per city than Yelp listed.
+
+### Google Maps listings
+
+`scripts/import-google-places.py` adds Google Maps listings for the hauler, remodeler and real estate agency
+searches (Cold Outreach's general list stays Foursquare-only). It runs
+[gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper) (MIT, pinned to a commit in the
+workflow) in fast mode, which sends one search request per query and needs no browser: the scraper's normal
+mode opens each listing in a browser, and Google returns those pages empty to cloud servers. Each city is
+searched around its US Census center, and only listings whose address is in that city are kept.
+
+The **Import Google Maps listings** workflow runs it on the 22nd of each month (about 70 minutes for all
+cities) and on demand, with a dry-run box and a "first N cities" box for a quick test. It uses the same
+`PIPELINES_DIRECT_URL` secret. Google rows have ids starting `g:`; each import replaces only those, and the
+Foursquare import replaces only the others. If fewer than half the cities return listings (Google blocking
+the searches, or a page change the scraper hasn't caught up with), nothing is written and the job fails, so
+the previous Google rows stay. The fix is usually to bump the scraper commit in the workflow.
+
+Google's terms don't allow scraping Maps or using Maps data for outreach. The owner chose to use it anyway
+(2026-10-29; README → Known limitations).
 
 ## Post-deploy smoke check: the reply loop
 

@@ -4,6 +4,12 @@
 // may be kept and used for outreach (Apache 2.0). It replaced Yelp's API,
 // whose trial ended in October 2026 and whose terms forbid both.
 //
+// Google Maps listings for the haulers, remodelers and agents searches are
+// loaded into the same table every month (scripts/import-google-places.py).
+// They carry that month's date, so a search lists them before the older
+// Foursquare places; a business in both is skipped the second time by the
+// usual same-name check.
+//
 // Unlike Yelp, most places come with the business's own website, so the
 // email lookup can read the real site instead of guessing it. The data is
 // refreshed monthly, not live, so some places will have closed since.
@@ -25,6 +31,9 @@ export type PlaceKind = "hauler" | "remodeler" | "agent" | "business";
 
 /** A kind of business, or free words matched against names and categories (the manual Cold Outreach search). */
 export type PlaceSearch = { kind: PlaceKind } | { words: string };
+
+/** Ids of the rows scripts/import-google-places.py loads from Google Maps; the rest are Foursquare's. */
+export const GOOGLE_ID_PREFIX = "g:";
 
 const DEFAULT_LIMIT = 50; // Matches what one Yelp search returned, and our own per-run cap.
 
@@ -105,11 +114,12 @@ function searchByWords(words: string, city: string, state: string, take: number)
 }
 
 /** What Settings → Connections shows about the loaded data. */
-export async function placesSummary(): Promise<{ places: number; cities: number; importedAt: Date | null }> {
-  const [places, cities, latest] = await Promise.all([
+export async function placesSummary(): Promise<{ places: number; fromGoogle: number; cities: number; importedAt: Date | null }> {
+  const [places, fromGoogle, cities, latest] = await Promise.all([
     prisma.place.count(),
+    prisma.place.count({ where: { id: { startsWith: GOOGLE_ID_PREFIX } } }),
     prisma.place.groupBy({ by: ["state", "city"] }).then((g) => g.length),
     prisma.place.aggregate({ _max: { importedAt: true } }),
   ]);
-  return { places, cities, importedAt: latest._max.importedAt };
+  return { places, fromGoogle, cities, importedAt: latest._max.importedAt };
 }

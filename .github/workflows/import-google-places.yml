@@ -1,0 +1,49 @@
+# Adds Google Maps listings (haulers, remodelers, real estate agencies) to the
+# business list, once a month and whenever run by hand (Actions → Import
+# Google Maps listings → Run workflow). See scripts/import-google-places.py.
+#
+# Repository secret (Settings → Secrets and variables → Actions):
+#   PIPELINES_DIRECT_URL  the production database's unpooled address (required)
+name: Import Google Maps listings
+
+on:
+  schedule:
+    # 10:00 UTC on the 22nd (3:00 AM Arizona), after the Foursquare import on the 20th.
+    - cron: "0 10 22 * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print the counts; don't change the database"
+        type: boolean
+        default: false
+      cities:
+        description: "Only try the first N cities (blank for all)"
+        type: string
+        default: ""
+
+concurrency:
+  # Shared with the Foursquare import so the two never write at once.
+  group: import-places
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      # Pinned to a reviewed commit; bump it deliberately.
+      - run: go install github.com/gosom/google-maps-scraper@903b96d7aa8863188022c04db220e44f3218c860
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "psycopg[binary]==3.2.12"
+      - name: Import
+        env:
+          PIPELINES_DIRECT_URL: ${{ secrets.PIPELINES_DIRECT_URL }}
+          CITIES: ${{ inputs.cities }}
+        run: python3 scripts/import-google-places.py ${{ inputs.dry_run && '--dry-run' || '' }} ${CITIES:+--cities "$CITIES"}

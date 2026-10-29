@@ -77,8 +77,8 @@ Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach
   city-rotation tables. Nothing else is stored: no cache, queue or file store (the Worker's retry queue
   lives in Cloudflare).
 - **External services.** ZeptoMail (SMTP, sending), Cloudflare Email Routing + Worker (receiving),
-  Foursquare's open places data (discovery, loaded monthly into the `Place` table by a GitHub Actions
-  workflow; see docs/deployment.md → "Business list"), ADRE (public roster download), the businesses' own websites (address lookup),
+  Foursquare's open places data and Google Maps listings (discovery, loaded monthly into the `Place` table
+  by two GitHub Actions workflows; see docs/deployment.md → "Business list"), ADRE (public roster download), the businesses' own websites (address lookup),
   Vercel (hosting, cron, SSO). Local development and CI use none of them: mail goes to an outbox or a local
   catcher, and `fetch` is stubbed in tests.
 - **UI.** React 19 server components with small client components in `src/components/`, Tailwind v4.
@@ -151,6 +151,12 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
 - **The business list is a monthly snapshot of the rotation's cities.** Searches only find businesses in the
   cities the pipelines rotate through, as of the last import, and only places Foursquare confirmed since 2020.
   Some will have closed since; a manual search of any other city says the city isn't loaded.
+- **Google Maps listings are scraped, against Google's terms (owner decision, 2026-10-29).** Haulers,
+  remodelers and real estate agencies also come from Google Maps, via gosom/google-maps-scraper's fast mode
+  (up to 20 listings per search, five or six searches per city). Google's terms don't allow scraping Maps or
+  using its data for outreach; the owner chose to anyway. Google can block the searches at any time: the
+  import then keeps the previous month's Google listings and the Foursquare list still works. Many Google
+  dumpster listings are lead-generation pages with no website of their own, so they rarely yield an address.
 - **Leads found on Yelp before October 2026 are still stored** (their `source` starts "Yelp search") and
   still emailed by daily runs if waiting. Yelp's API terms say Yelp content must be deleted once access ends
   and can't be used for direct marketing; what to do with them is an owner decision, not yet made.
@@ -171,7 +177,7 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
   header; the HTTPS one-click form needs a public endpoint outside Vercel Deployment Protection (an owner
   decision, docs/deployment.md).
 - **Where the outreach data comes from is a business/legal question, not a code one.** All three pipelines email
-  people found through Foursquare's open places data (before October 2026, Yelp's API) and Arizona's public
+  people found through Foursquare's open places data and Google Maps (before October 2026, Yelp's API) and Arizona's public
   ADRE roster, without prior opt-in. What CAN-SPAM
   explicitly requires is handled (a mailing address and a working opt-out in every email, opt-outs enforced
   before every send); whether sourcing addresses this way has a sound lawful basis has not been reviewed.

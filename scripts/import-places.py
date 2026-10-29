@@ -13,8 +13,9 @@ it belongs to (the `kinds` column):
   business   Cold Outreach      up to BUSINESS_PER_CITY other local businesses
                                 with a website, most recently confirmed first
 
-The whole table is replaced in one transaction, so a failed import leaves the
-previous month's list in place.
+All the Foursquare rows are replaced in one transaction, so a failed import
+leaves the previous month's list in place. Google Maps rows (ids starting
+"g:", loaded by scripts/import-google-places.py) are left alone.
 
 Usage (GitHub Actions runs this monthly, see .github/workflows/import-places.yml):
   pip install duckdb==1.5.6 "psycopg[binary]==3.2.12"
@@ -148,14 +149,14 @@ def write(con: duckdb.DuckDBPyConnection, url: str) -> None:
 
     rows = con.execute("SELECT id, name, address, city, state, phone, website, categories, kinds, refreshed FROM place").fetchall()
     with psycopg.connect(url) as pg, pg.cursor() as cur:
-        cur.execute('DELETE FROM "Place"')
+        cur.execute("""DELETE FROM "Place" WHERE "id" NOT LIKE 'g:%'""")
         with cur.copy(
             'COPY "Place" ("id", "name", "address", "city", "state", "phone", "website", "categories", "kinds", "refreshedAt") FROM STDIN'
         ) as copy:
             for row in rows:
                 copy.write_row(row)
         # psycopg commits on leaving the `with` block, or rolls back on an error.
-    print(f"Wrote {len(rows)} places.")
+    print(f"Wrote {len(rows)} Foursquare places.")
 
 
 def main() -> None:

@@ -336,7 +336,7 @@ async function cronStatus(job: CronJob, env: Env, now: Date): Promise<Connection
 const PLACES_STALE_DAYS = 38;
 
 async function placesStatus(now: Date): Promise<ConnectionStatus> {
-  const base = { key: "places" as const, label: "Business list (Foursquare)", testable: false };
+  const base = { key: "places" as const, label: "Business list", testable: false };
   let summary;
   try {
     summary = await placesSummary();
@@ -356,7 +356,8 @@ async function placesStatus(now: Date): Promise<ConnectionStatus> {
       next: "Tell your developer to run the monthly business import (GitHub → Actions → Import business list).",
     };
   }
-  const loaded = `${summary.places.toLocaleString("en-US")} businesses in ${summary.cities} cities, loaded ${formatDateTime(summary.importedAt)}`;
+  const google = summary.fromGoogle ? ` (${summary.fromGoogle.toLocaleString("en-US")} from Google Maps)` : "";
+  const loaded = `${summary.places.toLocaleString("en-US")} businesses${google} in ${summary.cities} cities, loaded ${formatDateTime(summary.importedAt)}`;
   if (now.getTime() - summary.importedAt.getTime() > PLACES_STALE_DAYS * 24 * 60 * 60 * 1000) {
     return {
       ...base,

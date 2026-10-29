@@ -45,6 +45,12 @@ describe("Settings → Connections", () => {
       summary: expect.stringMatching(/^4 businesses in 2 cities, loaded /),
       next: null,
     });
+    await prisma.place.create({
+      data: { id: "g:0x1:0x2", name: "Mesa Dumpsters", city: "Mesa", state: "AZ", kinds: ["hauler"], refreshedAt: new Date() },
+    });
+    expect((await statusOf()).places).toMatchObject({
+      summary: expect.stringMatching(/^5 businesses \(1 from Google Maps\) in 2 cities, loaded /),
+    });
     const later = new Date(Date.now() + 40 * DAY_MS);
     expect((await statusOf(ENV, later)).places).toMatchObject({
       tone: "warn",
