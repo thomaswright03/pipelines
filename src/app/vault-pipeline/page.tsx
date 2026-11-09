@@ -69,8 +69,9 @@ export default async function VaultPipeline({ searchParams }: PageProps<"/vault-
         <div className="mt-1">
           <HowThisWorks>
             <p>
-              Wright AI Solutions&apos; own client-acquisition pipeline. Businesses come from Yelp; an email address is looked for on each
-              one&apos;s website, and every address gets one pitch at most. Leads that don&apos;t reply within a week move to the call deck.
+              Wright AI Solutions&apos; own client-acquisition pipeline. Businesses come from a business list (Foursquare); an email address
+              is looked for on each one&apos;s website, and every address gets one pitch at most. Leads that don&apos;t reply within a week
+              move to the call deck.
             </p>
           </HowThisWorks>
         </div>

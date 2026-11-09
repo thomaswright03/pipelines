@@ -150,7 +150,49 @@ the operator and names no settings; this table is for the developer they're told
 | Sending email | The latest send succeeded, or the latest **Test connection** (SMTP connect, STARTTLS and login; nothing is sent) passed | "turned down our login" → `ZEPTOMAIL_SMTP_PASSWORD`; "isn't set up on the server" → the password is missing; "still in test mode" → `EMAIL_TRANSPORT` isn't `zeptomail`; "no server address" → `SMTP_HOST` |
 | Receiving replies | An inbound message of any kind arrived in the last 7 days | "Reply forwarding isn't switched on" → `EMAIL_INBOUND_SECRET`; "Not confirmed yet" / "replies seem to have stopped" → the Cloudflare Email Worker and Vercel's Protection Bypass for Automation (see "Reply tracking: the email Worker" above) |
 | Each scheduled job in `vercel.json`: the Cold Outreach, dataleadsell, Garbage AI and Room Designer 3D daily runs, the call-deck move, the daily report email | The last run succeeded and was less than 26 hours ago. A pipeline's daily run switched off on its page shows **Off** (grey), not as a problem | "password isn't set on the server" → `CRON_SECRET`; "has stopped running" → the Vercel project's Cron Jobs tab. A failed run's next step links the job's own page (the pipeline's Daily automation panel, the dashboard for the call-deck move, Sending email for the report). `tests/connections.test.ts` fails if a cron in `vercel.json` has no row or a different time |
-| Yelp search | The latest Yelp request (a search, a daily run or **Test connection**, which asks for one business) answered | "Yelp isn't set up" → `YELP_API_KEY` missing; "rejected our access key" → the key is wrong or revoked |
+| Business list | The `Place` table has rows and the last import was under 38 days ago (no Test connection: it's our own table; the summary says how many came from Google Maps) | "business list is empty" → run the import (below); "monthly import seems to have stopped" → the **Import business list** workflow in GitHub Actions failed or its `PIPELINES_DIRECT_URL` secret is missing or stale |
+
+## Business list
+
+Every pipeline's search (daily runs and the find buttons) reads the `Place` table, which holds businesses
+from [Foursquare's open places data](https://opensource.foursquare.com/os-places/) (Apache 2.0, so it may be
+kept and used for outreach) for the cities the pipelines rotate through (`src/lib/us-cities.ts`,
+`src/lib/agent-cities.ts`). It replaced Yelp's API in October 2026: the Yelp trial ended, and Yelp's terms
+allow neither storing its data past 24 hours nor using it for direct marketing.
+
+`scripts/import-places.py` reloads the whole table in one transaction (about 15 minutes, ~100k rows,
+~35 MB). The **Import business list** GitHub Actions workflow runs it on the 20th of each month and on
+demand (Actions → Import business list → Run workflow; tick "dry run" to only print the counts). It needs
+two repository secrets (Settings → Secrets and variables → Actions):
+
+- `PIPELINES_DIRECT_URL`: production's unpooled Neon address (the same one migrations use). Required.
+- `HF_TOKEN`: a Hugging Face read token, after accepting the dataset's terms at
+  <https://huggingface.co/datasets/foursquare/fsq-os-places>. Optional: without it the script reads the
+  public Source Cooperative mirror, which stopped at the February 2025 release.
+
+To load it by hand instead: `pip install duckdb==1.5.6 "psycopg[binary]==3.2.12"`, then
+`PIPELINES_DIRECT_URL="<Neon unpooled URL>" python3 scripts/import-places.py`. A city added to a pool is
+searchable after the next import. Places Foursquare hasn't confirmed since 2020 are left out, so fewer dead
+businesses (and bounces) get through; the trade-off is fewer places per city than Yelp listed.
+
+### Google Maps listings
+
+`scripts/import-google-places.py` adds Google Maps listings for the hauler, remodeler and real estate agency
+searches (Cold Outreach's general list stays Foursquare-only). It runs
+[gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper) (MIT, pinned to a commit in the
+workflow) in fast mode, which sends one search request per query and needs no browser: the scraper's normal
+mode opens each listing in a browser, and Google returns those pages empty to cloud servers. Each city is
+searched around its US Census center, and only listings whose address is in that city are kept.
+
+The **Import Google Maps listings** workflow runs it on the 22nd of each month (about 70 to 80 minutes for all
+cities) and on demand, with a dry-run box and a "first N cities" box for a quick test. It uses the same
+`PIPELINES_DIRECT_URL` secret. Google rows have ids starting `g:`; each import replaces only those, and the
+Foursquare import replaces only the others. If fewer than half the cities return listings (Google blocking
+the searches, or a page change the scraper hasn't caught up with), nothing is written and the job fails, so
+the previous Google rows stay. The fix is usually to bump the scraper commit in the workflow.
+
+Google's terms don't allow scraping Maps or using Maps data for outreach. The owner chose to use it anyway
+(2026-10-29; README → Known limitations).
 
 ## Post-deploy smoke check: the reply loop
 
@@ -194,7 +236,9 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
    `ScrapedHaulerCity` — new and empty, so nothing existing changes), `20261015090000_interest_alerts`
    (interest-alert and CSO-reading columns on `InboundReply`, all empty to start) and
    `20261019090000_room_designer_pipeline` (the Room Designer 3D tables: `RemodelerLead` with its status check, its
-   activity and send log, and `ScrapedRemodelerCity` — new and empty). All are additive.
+   activity and send log, and `ScrapedRemodelerCity` — new and empty) and `20261022090000_places` (the
+   `Place` table the business-list search reads — new and empty until the first import; see "Business list"
+   below). All are additive.
    `20260929110000_lead_status_check` adds its status checks `NOT VALID`, so they can't fail on existing rows. Afterwards, check for rows it
    would reject and fix them (for example with the lead page's status control), then validate it:
 
@@ -230,8 +274,8 @@ These need the Vercel, GitHub or Cloudflare dashboards, or a business decision. 
 4. **Require CI before merging.** In GitHub → Settings → Branches (or Rules → Rulesets), protect `main` and
    make the `CI / build-lint-test` check required, so a pull request with a failing test, lint, format or
    build can't be merged. The repository can't show whether this is on; confirm it here once done.
-5. **Press Test connection** for email and Yelp in **Settings → Connections** after deploying, so each shows
-   "Working" from a real login/search rather than "Not confirmed yet", then run the reply-loop check
+5. **Press Test connection** for email in **Settings → Connections** after deploying, so it shows
+   "Working" from a real login rather than "Not confirmed yet", then run the reply-loop check
    ("Post-deploy smoke check" above) once reply tracking is reachable (item 2).
 6. **Decide cross-pipeline repeats.** Decide whether an address pitched by one pipeline may also get each
    other pipeline's pitch. Leave it off (the default) or turn it on in Settings.

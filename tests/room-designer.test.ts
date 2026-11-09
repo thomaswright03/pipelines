@@ -16,36 +16,25 @@ import { getPipelineSchedule, ROOM_DESIGNER_SCHEDULE_ID } from "@/lib/pipeline-s
 import { previewBulkSend, sendFirstTouch } from "@/lib/outreach/send";
 import { getPipeline } from "@/lib/outreach/pipelines";
 import { allowedTransitions, ROOM_DESIGNER_STATUSES, statusLabel } from "@/lib/lead-status";
-import { captureMail, makeRemodelerLead, page, stubFetch, YELP_PREFIX } from "./helpers";
+import { captureMail, makeRemodelerLead, page, seedPlaces, stubFetch } from "./helpers";
 
-type YelpBusiness = { name: string; phone?: string; categories?: string[] };
-
-function yelpRemodelers(businesses: YelpBusiness[]) {
-  return {
-    contentType: "application/json",
-    body: JSON.stringify({
-      businesses: businesses.map((b) => ({
-        name: b.name,
-        phone: b.phone ?? "",
-        location: { display_address: ["1 Main St", "Phoenix, AZ 85001"] },
-        categories: (b.categories ?? ["Contractors", "Kitchen & Bath"]).map((title) => ({ alias: title.toLowerCase(), title })),
-      })),
-    }),
-  };
-}
-
-/** Two sendable remodelers and one of each kind Room Designer 3D never pitches. */
-function stubRemodelerSearch() {
+/** Every city lists two sendable remodelers and one of each kind Room Designer 3D never pitches. */
+async function stubRemodelerSearch() {
+  const remodel = ["General Contractor", "Bathroom Contractor"];
+  await seedPlaces(
+    [
+      { name: "Desert Bath Remodel", phone: "(480) 555-2001", categories: remodel },
+      { name: "Saguaro Renovations", phone: "(480) 555-2002", categories: ["General Contractor"] },
+      { name: "Bath Fitter", phone: "(480) 555-2003", categories: remodel },
+      { name: "Eddy's Remodeling", phone: "(480) 555-2004", categories: remodel },
+      { name: "Valley Plumbing", phone: "(480) 555-2005", categories: ["Plumber"] },
+      { name: "Tile Supply Co", phone: "(480) 555-2006", categories: ["Construction Supplies Store", "General Contractor"] },
+    ],
+    { kind: "remodeler" },
+  );
+  // Other businesses in the same cities are never searched for remodelers.
+  await seedPlaces([{ name: "Desert Bakery", website: "https://www.desertbakery.test" }], { kind: "business" });
   return stubFetch({
-    [YELP_PREFIX]: () =>
-      yelpRemodelers([
-        { name: "Desert Bath Remodel", phone: "+14805552001" },
-        { name: "Saguaro Renovations", phone: "+14805552002", categories: ["Contractors"] },
-        { name: "Bath Fitter", phone: "+14805552003" },
-        { name: "Eddy's Remodeling", phone: "+14805552004" },
-        { name: "Valley Plumbing", phone: "+14805552005", categories: ["Plumbing"] },
-        { name: "Tile Supply Co", phone: "+14805552006", categories: ["Building Supplies", "Contractors"] },
-      ]),
     "https://www.desertbathremodel.com": page("Desert Bath Remodel — 480-555-2001 — info@desertbathremodel.test"),
     "https://www.saguarorenovations.com": page("Saguaro Renovations, call 480-555-2002 or email office@saguarorenovations.test"),
   });
@@ -120,6 +109,7 @@ describe("who Room Designer 3D never pitches", () => {
     ["Valley Tile Showroom", [], "a supply house or showroom"],
     ["Valley Plumbing", ["Plumbing"], "a plumber, supply house or showroom, not a remodeler"],
     ["Cabinet Gallery", ["Kitchen & Bath", "Cabinetry"], "a plumber, supply house or showroom, not a remodeler"],
+    ["Mesa Cabinet Outlet", ["Cabinet store", "Kitchen supply store"], "a plumber, supply house or showroom, not a remodeler"],
   ])("leaves out %s", (name, categories, reason) => {
     expect(remodelerExclusion({ name, categories })).toBe(reason);
   });
@@ -128,6 +118,7 @@ describe("who Room Designer 3D never pitches", () => {
     expect(remodelerExclusion({ name: "Desert Bath Remodel", categories: ["Contractors", "Kitchen & Bath"] })).toBeNull();
     expect(remodelerExclusion({ name: "Valley Plumbing & Remodel", categories: ["Plumbing", "Contractors"] })).toBeNull();
     expect(remodelerExclusion({ name: "Saguaro Renovations", categories: [] })).toBeNull();
+    expect(remodelerExclusion({ name: "Saguaro Baths", categories: ["Bathroom remodeler", "Plumber"] })).toBeNull();
   });
 
   it("never emails Eddys Remodeling, even by company or email domain", async () => {
@@ -167,7 +158,7 @@ describe("the Room Designer 3D run", () => {
     expect(ROOM_DESIGNER_SENDING_HELD).toBe(true);
     expect(getPipeline("room-designer").sendHold).toBe(ROOM_DESIGNER_HOLD_MESSAGE);
     mail = captureMail();
-    const calls = stubRemodelerSearch();
+    const calls = await stubRemodelerSearch();
     const next = await peekNextRemodelerCity(prisma);
 
     const outcome = await runDailyRoomDesigner(10, { sendDelayMs: 0, maxCities: 1 });
@@ -175,13 +166,13 @@ describe("the Room Designer 3D run", () => {
     expect(outcome.numbers).toMatchObject({ leadsFound: 2, emailsSent: 0 });
     expect(outcome.summary).toMatch(/left out 4 that Room Designer 3D never pitches/);
     expect(mail.messages).toHaveLength(0);
-    expect(calls.calls.find((u) => u.startsWith(YELP_PREFIX))).toContain("term=bathroom+remodeling");
+    expect(calls.calls.some((u) => u.includes("bakery"))).toBe(false);
     const leads = await prisma.remodelerLead.findMany({ orderBy: { name: "asc" } });
     expect(leads.map((l) => [l.name, l.email, l.status, l.source])).toEqual([
       ["Desert Bath Remodel", "info@desertbathremodel.test", "new", ROOM_DESIGNER_DAILY_SOURCE],
       ["Saguaro Renovations", "office@saguarorenovations.test", "new", ROOM_DESIGNER_DAILY_SOURCE],
     ]);
-    expect(leads[0]!.services).toBe("Contractors, Kitchen & Bath");
+    expect(leads[0]!.services).toBe("General Contractor, Bathroom Contractor");
     expect(await prisma.scrapedRemodelerCity.count({ where: { city: next.city, state: next.state } })).toBe(1);
     expect(await prisma.scrapedCity.count()).toBe(0);
   });
@@ -189,7 +180,7 @@ describe("the Room Designer 3D run", () => {
   it("emails the remodelers it found once the hold is lifted", async () => {
     liftHold();
     mail = captureMail();
-    stubRemodelerSearch();
+    await stubRemodelerSearch();
     const outcome = await runDailyRoomDesigner(10, { sendDelayMs: 0, maxCities: 1 });
     expect(outcome).toMatchObject({ status: "succeeded", numbers: { leadsFound: 2, emailsSent: 2 } });
     expect(mail.messages.map((m) => m.subject)).toEqual([
@@ -201,7 +192,7 @@ describe("the Room Designer 3D run", () => {
 
   it("runs from the weekday cron route, starts on at 10 a day, and is skipped when turned off on the page", async () => {
     mail = captureMail();
-    stubRemodelerSearch();
+    await stubRemodelerSearch();
     expect(await getPipelineSchedule(ROOM_DESIGNER_SCHEDULE_ID)).toEqual({ enabled: true, emailsPerDay: 10 });
     const request = () =>
       new NextRequest("http://localhost/api/cron/room-designer-daily", { headers: { authorization: "Bearer test-cron-secret" } });
@@ -221,7 +212,7 @@ describe("the Room Designer 3D run", () => {
 
 describe("the Find remodelers buttons", () => {
   it("search the next city or a chosen one, and add a remodeler by hand", async () => {
-    stubRemodelerSearch();
+    await stubRemodelerSearch();
     const next = await runRemodelerScrapeAction();
     expect(next.ok && next.message).toMatch(/added 2 new remodelers/);
 

@@ -1,14 +1,14 @@
 "use client";
 
 // Settings → Connections "Test connection": proves a service's credentials
-// work (mail: log in without sending; Yelp: one tiny search) and shows the
+// work (mail: log in without sending) and shows the
 // result in plain words. The list above re-reads the stored result.
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { testConnectionAction } from "@/lib/actions/settings";
 import ActionMessage, { type Feedback } from "@/components/ActionMessage";
 
-export default function TestConnectionButton({ service, label }: { service: "mail" | "yelp"; label: string }) {
+export default function TestConnectionButton({ service, label }: { service: "mail"; label: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);

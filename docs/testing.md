@@ -18,8 +18,9 @@ The suite runs against a real, disposable Postgres. It uses `TEST_DATABASE_URL` 
 External services are always fakes:
 
 - **Email** goes to a capturing transport, which can be told to fail like a real SMTP server.
-- **`fetch`** is stubbed per test with fixture pages and Yelp responses. Any call a test didn't stub fails
-  the test.
+- **`fetch`** is stubbed per test with fixture pages. Any call a test didn't stub fails the test.
+- **The business list** (the `Place` table) is seeded per test (`seedPlaces` in `tests/helpers.ts`); it starts
+  empty, as on a fresh install.
 
 What's covered, by file:
 
@@ -28,7 +29,7 @@ What's covered, by file:
 | `tests/send.test.ts` | One pitch per address, overlapping sends (including the same lead from two tabs), crash-after-claim, pause, SMTP failure handling; the "ready to email" count equals the bulk-send preview for every skip reason in all three pipelines and takes one query however many leads there are |
 | `tests/inbound.test.ts`, `tests/reply-classifier.test.ts` | Reply and opt-out classification |
 | `tests/room-designer.test.ts`, `tests/room-designer-pages.test.tsx` | Room Designer 3D: Thomas's pitch word for word, who it never pitches (Eddys Remodeling, franchises, plumbers, supply houses, showrooms), its stages, its weekday run (ships held: finds remodelers, emails nobody; sends once the hold is lifted), the cron route and schedule switch, the Find remodelers buttons and its pages |
-| `tests/garbage-ai.test.ts`, `tests/garbage-ai-pages.test.tsx` | Garbage AI: the pitch, who it never pitches (clients, national haulers, agencies, Mountain High Disposal's area) and where it never searches; its daily run through the shared runner (finds, screens and emails haulers; refused/failed send outcomes; skipped with no Yelp call under the Settings pause and `OUTBOUND_EMAIL_DISABLED`); the send hold; its pages, including "Never emailed" in place of Send and on the list row |
+| `tests/garbage-ai.test.ts`, `tests/garbage-ai-pages.test.tsx` | Garbage AI: the pitch, who it never pitches (clients, national haulers, agencies, Mountain High Disposal's area) and where it never searches; its daily run through the shared runner (finds, screens and emails haulers; refused/failed send outcomes; skipped with no search under the Settings pause and `OUTBOUND_EMAIL_DISABLED`); the send hold; its pages, including "Never emailed" in place of Send and on the list row |
 | `tests/auto-mail.test.ts` | Automatic replies (headers, subjects, wording) change nothing but the history and still reach the call deck; bounce notices in Postfix/Gmail/Exchange/DSN form mark the send bounced; unmatched bounces; the Stats reply/opt-out/automatic figures in both pipelines |
 | `tests/call-deck.test.ts` | Call-deck cards (company, place, emailed date, latest history) and an order a saved call doesn't reshuffle |
 | `tests/connections.test.ts` | Settings → Connections: "Not confirmed yet" on a fresh install, "Working" only after a reply/send/search/test, the no-replies warning for old sends, Test connection passing and failing (no email sent), failed and overdue runs, missing secrets, no setting names in the copy (including while the hosting's switch is on, whose variable only appears in a separate developer line) |
@@ -45,8 +46,8 @@ What's covered, by file:
 | `tests/adre.test.ts` | Resumable ADRE import; a roster whose columns changed, or that lists nobody in the county, is reported instead of "succeeding" with zero |
 | `tests/cron.test.ts` | The cron routes, including a database outage answered with a code and no database error text |
 | `tests/daily-report.test.ts` | The 10 AM report email: a section per pipeline with the last 24 hours' numbers, time-limit and missed-run flags, one email to the owner, no second send the same day, a failed send retried, the environment stop honored |
-| `tests/daily-run.test.ts` | What "emails to send per day" yields (search until the day's number is found, nothing once it is sent, sends by hand counted); leftovers emailed by the next run, including when Yelp fails (run "partial", city not used up); the 60 s budget (fake clock); skipped leads don't fail a run |
-| `tests/dataleadsell-daily-run.test.ts` | The dataleadsell daily run: what "agents to check per run" yields, leftovers emailed by the next run (never hand-added agents or Cold Outreach leads), Yelp failures, its schedule (off with 10 per run until saved) and its cron route (skipped when off or paused, runs and records when on, database outage) |
+| `tests/daily-run.test.ts` | What "emails to send per day" yields (search until the day's number is found, nothing once it is sent, sends by hand counted); leftovers emailed by the next run, including when the search fails (run "partial", city not used up); the 60 s budget (fake clock); skipped leads don't fail a run |
+| `tests/dataleadsell-daily-run.test.ts` | The dataleadsell daily run: what "agents to check per run" yields, leftovers emailed by the next run (never hand-added agents or Cold Outreach leads), failed searches, its schedule (off with 10 per run until saved) and its cron route (skipped when off or paused, runs and records when on, database outage) |
 | `tests/dataleadsell-page-daily.test.tsx`, `tests/components/daily-run-settings.test.tsx` | The dataleadsell page's Daily automation panel: off by default, worded in agents, its own runs and stale-run warning, saved through its own action |
 | `tests/replies.test.ts` | Replies after the stale-contacts move, Lost-lead review flag, Mark replied, duplicate delivery, database outage and retry, stale-contacts race |
 | `tests/worker-contract.test.ts` | The reference Email Worker (`workers/email-inbound`) against the real route: MIME parsing, headers and `messageId` forwarded, bypass header, resend on 503/no response and on 401/403/404 (kept until the configuration is fixed, alerting each time), none on 400, 72-hour give-up |
@@ -60,7 +61,7 @@ What's covered, by file:
 | `tests/unmatched-replies.test.ts` | Replies from unknown addresses: listed, attached to a lead, dismissed; the "no replies lately" warning |
 | `tests/greeting.test.ts` | dataleadsell greets agents by first name; the preview is what's sent |
 | `tests/e2e.test.ts` | One run per pipeline through the same server actions the pages use |
-| `tests/actions.test.ts` | Every server action in `src/lib/actions/`: validation, happy path, Yelp and database failures |
+| `tests/actions.test.ts` | Every server action in `src/lib/actions/`: validation, happy path, business-list and database failures |
 | `tests/review-findings.test.ts` | Plain opt-out phrasings end to end, "needs a look" replies, reply/call history vs. the notes limit, unreachable websites, Find email guards, bouncing after the stale-contacts move, correction counts |
 | `tests/rules.test.ts` | Brokerage-site address matching, where mail goes, phones, states, money, forms |
 | `tests/heuristics-eval.test.ts` | The reply classifier's outcomes (unsafe, needs a look, handled automatically) and precision/recall of the other heuristics (automatic replies, bounces, brokerage addresses, guessed sites) on the development sets in `tests/corpus/` (synthetic and real, printed case by case) and the frozen held-out set of real replies in `tests/corpus/held-out/` (aggregate only); every real case sits in the split its export id assigns (see below) |

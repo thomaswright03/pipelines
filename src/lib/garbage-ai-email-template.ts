@@ -13,7 +13,7 @@ type PitchOptions = {
 };
 
 /**
- * The first name to greet a hauler by. Yelp only gives the business name, so
+ * The first name to greet a hauler by. The business list only gives the business name, so
  * a name is used only when the lead has a separate company and its own name
  * reads as a person's; otherwise "there".
  */

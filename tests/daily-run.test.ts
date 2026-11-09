@@ -10,16 +10,16 @@ import { getPipeline } from "@/lib/outreach/pipelines";
 import { displayRunStatus } from "@/lib/outreach/runs";
 import { GET as dailyGET } from "@/app/api/cron/vault-daily/route";
 import { NextRequest } from "next/server";
-import { YELP_SHAPE_CHANGED } from "@/lib/yelp-discovery";
-import { getConnectionStatus } from "@/lib/integration-status";
-import { captureMail, makeColdLead, page, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeColdLead, page, seedNoneOf, seedPlaces, stubFetch } from "./helpers";
+import { DAILY_RUN_SOURCE, LEGACY_DAILY_RUN_SOURCE } from "@/lib/outreach/daily-run";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Yelp lists 50 businesses; every fifth one (20%) has a site with an address on it. */
-function stubYelpFifty() {
-  const businesses = Array.from({ length: 50 }, (_, i) => ({ name: `Shop ${pad(i + 1)}`, phone: `+1480555${1000 + i}` }));
-  const routes: Parameters<typeof stubFetch>[0] = { [YELP_PREFIX]: () => yelpResponse(businesses) };
+/** Every city lists 50 businesses; every fifth one (20%) has a site with an address on it. */
+async function stubFifty() {
+  const businesses = Array.from({ length: 50 }, (_, i) => ({ name: `Shop ${pad(i + 1)}`, phone: `(480) 555-${1000 + i}` }));
+  await seedPlaces(businesses);
+  const routes: Parameters<typeof stubFetch>[0] = {};
   for (let n = 5; n <= 50; n += 5) {
     routes[`https://www.shop${pad(n)}.com`] = page(`Shop ${pad(n)} — call 480-555-${1000 + n - 1} or write to owner@shop${pad(n)}.test`);
   }
@@ -32,7 +32,7 @@ afterEach(() => mail?.restore());
 describe("daily run yield", () => {
   it("checks businesses until it has found the day's number, and emails them", async () => {
     mail = captureMail();
-    stubYelpFifty();
+    await stubFifty();
 
     const outcome = await runDailyColdOutreach(6, { sendDelayMs: 0 });
 
@@ -42,13 +42,13 @@ describe("daily run yield", () => {
     expect(outcome.numbers!.businessesChecked).toBeLessThan(40);
     expect(mail.messages).toHaveLength(6);
     expect(outcome.summary).toMatch(
-      /Yelp listed 50 businesses, checked \d+ for an email, found 6 new addresses, emailed 6, 6 of today's 6 sent\./,
+      /the business list had 50 businesses, checked \d+ for an email, found 6 new addresses, emailed 6, 6 of today's 6 sent\./,
     );
   });
 
   it("checks the whole city when the day needs more than it has", async () => {
     mail = captureMail();
-    stubYelpFifty();
+    await stubFifty();
     const outcome = await runDailyColdOutreach(30, { sendDelayMs: 0, maxCities: 1 });
     expect(outcome.numbers).toEqual({ businessesChecked: 50, leadsFound: 10, emailsSent: 10 });
     expect(outcome.summary).toContain("10 of today's 30 sent.");
@@ -56,7 +56,7 @@ describe("daily run yield", () => {
 
   it("does nothing once the day's number is sent, counting emails sent by hand", async () => {
     mail = captureMail();
-    const { calls } = stubYelpFifty();
+    const { calls } = await stubFifty();
     for (let i = 0; i < 3; i++) {
       const lead = await makeColdLead({ name: `By hand ${i}`, email: `hand${i}@shop.test` });
       await prisma.leadEmailSendLog.create({ data: { leadId: lead.id, email: lead.email! } });
@@ -72,7 +72,7 @@ describe("daily run yield", () => {
 
   it("only sends what the day still needs", async () => {
     mail = captureMail();
-    stubYelpFifty();
+    await stubFifty();
     const lead = await makeColdLead({ name: "Earlier today", email: "earlier@shop.test" });
     await prisma.leadEmailSendLog.create({ data: { leadId: lead.id, email: lead.email! } });
 
@@ -86,7 +86,7 @@ describe("daily run yield", () => {
 describe("leads a daily run didn't get to", () => {
   it("are emailed by the next run, and the page's 'not yet emailed' count follows", async () => {
     mail = captureMail();
-    stubYelpFifty();
+    await stubFifty();
     const manual = await makeColdLead({ source: "Added by hand" }); // not the daily run's to send
 
     // Run 1 runs out of time before sending anything.
@@ -99,7 +99,7 @@ describe("leads a daily run didn't get to", () => {
     expect(await countUnsentDailyLeads()).toBe(6);
 
     // Run 2 has enough waiting, so it searches no city and emails the six left over.
-    const { calls } = stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    const { calls } = stubFetch({});
     const second = await runDailyColdOutreach(6, { sendDelayMs: 0 });
     expect(second.summary).toBe(
       "Enough leads were already waiting, so no city was searched, 6 left over from earlier runs, emailed 6, 6 of today's 6 sent.",
@@ -114,26 +114,26 @@ describe("leads a daily run didn't get to", () => {
   it("retries a lead whose send failed with nothing sent", async () => {
     mail = captureMail();
     mail.fail(Object.assign(new Error("connect ECONNREFUSED"), { code: "ESOCKET", syscall: "connect" }));
-    stubYelpFifty();
+    await stubFifty();
     const first = await runDailyColdOutreach(2, { sendDelayMs: 0 });
     expect(first.status).toBe("failed");
     expect(await prisma.lead.count({ where: { status: "new" } })).toBe(2);
 
     mail.restore();
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    stubFetch({});
     const second = await runDailyColdOutreach(2, { sendDelayMs: 0 });
     expect(second.numbers?.emailsSent).toBe(2);
     expect(await prisma.lead.count({ where: { status: "contacted" } })).toBe(2);
   });
 });
 
-describe("a daily run whose Yelp search fails", () => {
-  it("still emails the leads earlier runs found, records the Yelp error and is 'partial'", async () => {
+describe("a daily run whose search fails", () => {
+  it("still emails the leads earlier runs found (Yelp's included), records the error and is 'partial'", async () => {
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
+    stubFetch({});
     const leftover = await makeColdLead({
-      source: "Yelp search (daily automated run)",
+      source: LEGACY_DAILY_RUN_SOURCE,
       address: "1 Main St, Phoenix, AZ 85001",
       createdAt: new Date(Date.now() - 86_400_000),
     });
@@ -151,50 +151,36 @@ describe("a daily run whose Yelp search fails", () => {
     );
     const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
     expect(run.status).toBe("partial");
-    expect(run.errors).toMatch(/^Search of .+ failed: Yelp wasn't responding, so no new leads were found/);
+    expect(run.errors).toMatch(/^Search of .+ failed: The business list hasn't been loaded yet/);
     // The city wasn't searched, so it stays available for a later run.
     expect(await prisma.scrapedCity.count()).toBe(0);
   });
 
-  it("names a change in Yelp's response shape in the run log and in Settings → Connections", async () => {
+  it("names an unreadable business list in the run log, and says what happens next, not to 'try again'", async () => {
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => ({ contentType: "application/json", body: JSON.stringify({ businesses: {} }) }) });
+    stubFetch({});
+    await seedNoneOf();
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // The table going missing stands in for any database failure.
+    await prisma.$executeRawUnsafe('ALTER TABLE "Place" RENAME TO "PlaceAway"');
+    let outcome;
+    let logged = false;
+    try {
+      outcome = await runDailyColdOutreach(10, { sendDelayMs: 0 });
+    } finally {
+      await prisma.$executeRawUnsafe('ALTER TABLE "PlaceAway" RENAME TO "Place"');
+      logged = errors.mock.calls.some(([line]) => /\[places\.search\]/.test(String(line)));
+      errors.mockRestore();
+    }
 
-    const res = await dailyGET(
-      new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }),
-    );
-
-    expect((await res.json()).status).toBe("failed");
-    const run = await prisma.pipelineRun.findFirstOrThrow({ where: { kind: "daily" } });
-    expect(run.errors).toContain(YELP_SHAPE_CHANGED);
-    const yelp = (await getConnectionStatus(process.env, new Date())).find((c) => c.key === "yelp");
-    expect(yelp).toMatchObject({ tone: "error", summary: expect.stringContaining("Yelp's response changed") });
-    expect(errors.mock.calls.some(([line]) => /\[yelp\.search\] .*Unexpected response shape — businesses:/.test(String(line)))).toBe(true);
-    expect(await prisma.scrapedCity.count()).toBe(0);
-  });
-
-  it("is 'failed' when the search fails and there is nothing left to email", async () => {
-    mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "<html>502 Bad Gateway</html>" }) });
-    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0 });
     expect(outcome.status).toBe("failed");
-    expect(outcome.errors?.[0]).toMatch(/Yelp wasn't responding, so no new leads were found/);
-    expect(mail.messages).toHaveLength(0);
-  });
-
-  it("tells the operator what happens next when Yelp can't be reached, not to 'try again'", async () => {
-    mail = captureMail();
-    stubFetch({
-      [YELP_PREFIX]: () => {
-        throw new TypeError("fetch failed");
-      },
-    });
-    const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0 });
     const error = outcome.errors?.[0] ?? "";
-    expect(error).toMatch(/Couldn't reach Yelp, so no new leads were found this time/);
+    expect(error).toMatch(/Couldn't read the business list, so no new leads were found this time/);
     expect(error).toMatch(/The next daily run tries again automatically; if this happens two days in a row, tell your developer\.$/);
-    expect(error).not.toMatch(/Check the connection|try again\./);
+    expect(error).not.toMatch(/try again in a minute/);
+    expect(logged).toBe(true);
+    expect(await prisma.scrapedCity.count()).toBe(0);
+    expect(mail.messages).toHaveLength(0);
   });
 });
 
@@ -204,8 +190,8 @@ describe("the daily run's time budget", () => {
     // SMTP worst case). The run must still be done by 55 s.
     let clock = 0;
     const now = () => clock;
-    const businesses = Array.from({ length: 10 }, (_, i) => ({ name: `Slow ${pad(i + 1)}`, phone: `+1480555${2000 + i}` }));
-    const routes: Parameters<typeof stubFetch>[0] = { [YELP_PREFIX]: () => yelpResponse(businesses) };
+    await seedPlaces(Array.from({ length: 10 }, (_, i) => ({ name: `Slow ${pad(i + 1)}`, phone: `(480) 555-${2000 + i}` })));
+    const routes: Parameters<typeof stubFetch>[0] = {};
     for (let n = 1; n <= 10; n++) {
       routes[`https://www.slow${pad(n)}.com`] = () => {
         clock += 5_000;
@@ -221,7 +207,7 @@ describe("the daily run's time budget", () => {
     };
     // Three leads left over from earlier runs are queued first.
     for (let i = 0; i < 3; i++) {
-      await makeColdLead({ source: "Yelp search (daily automated run)", createdAt: new Date(Date.now() - 86_400_000) });
+      await makeColdLead({ source: DAILY_RUN_SOURCE, createdAt: new Date(Date.now() - 86_400_000) });
     }
 
     // The 60 s budgets dataleadsell and Garbage AI run with.
@@ -239,25 +225,19 @@ describe("the daily run's time budget", () => {
 
 describe("Cold Outreach's once-a-day run", () => {
   it("searches more cities until the day's number is found, and sends it all within its 300 s", async () => {
-    // Every Yelp search lists the same 4 businesses, but the phone numbers
-    // differ per search so each city's are new; each page fetch takes 5 s
+    // Each city lists 4 businesses of its own; each page fetch takes 5 s
     // and each send 3 s.
     let clock = 0;
     const now = () => clock;
-    let search = 0;
-    const routes: Parameters<typeof stubFetch>[0] = {
-      [YELP_PREFIX]: () => {
-        search++;
-        return yelpResponse(
-          Array.from({ length: 4 }, (_, i) => ({ name: `Town${search} ${pad(i + 1)}`, phone: `+1480556${search}${i}00` })),
-        );
-      },
-    };
-    for (let c = 1; c <= 6; c++) {
-      for (let n = 1; n <= 4; n++) {
-        routes[`https://www.town${c}${pad(n)}.com`] = () => {
+    const town = (c: number, i: number) => ({ name: `Town${c} ${pad(i + 1)}`, phone: `(480) ${300 + c}-${1000 + i}` });
+    const cities = await seedPlaces((c) => Array.from({ length: 4 }, (_, i) => town(c, i)));
+    const routes: Parameters<typeof stubFetch>[0] = {};
+    for (let c = 0; c < cities / 4; c++) {
+      for (let i = 0; i < 4; i++) {
+        const { name, phone } = town(c, i);
+        routes[`https://www.${name.toLowerCase().replace(/ /g, "")}.com`] = () => {
           clock += 5_000;
-          return page(`Town${c} ${pad(n)} — 480-556-${c}${n - 1}00 — hi@town${c}${pad(n)}.test`);
+          return page(`${name} — ${phone} — hi@town${c}${pad(i + 1)}.test`);
         };
       }
     }
@@ -271,7 +251,7 @@ describe("Cold Outreach's once-a-day run", () => {
 
     const outcome = await runDailyColdOutreach(10, { sendDelayMs: 0, now });
 
-    expect(search).toBeGreaterThan(1);
+    expect(await prisma.scrapedCity.count()).toBeGreaterThan(1);
     expect(outcome.numbers!.emailsSent).toBe(10);
     expect(outcome.summary).toMatch(/10 of today's 10 sent/);
     expect(clock).toBeLessThanOrEqual(285_000);
@@ -281,9 +261,10 @@ describe("Cold Outreach's once-a-day run", () => {
 describe("the daily run's status", () => {
   it("is 'succeeded' (HTTP 200) when the only queued lead was skipped because its address was already pitched", async () => {
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    stubFetch({});
+    await seedNoneOf();
     await prisma.outreachRecipient.create({ data: { pipeline: "dataleadsell", email: "dup@x.test", state: "sent", sentAt: new Date() } });
-    await makeColdLead({ email: "dup@x.test", source: "Yelp search (daily automated run)" });
+    await makeColdLead({ email: "dup@x.test", source: DAILY_RUN_SOURCE });
 
     const res = await dailyGET(
       new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }),

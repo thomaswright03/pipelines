@@ -1,0 +1,41 @@
+# Reloads the business list every pipeline searches (the Place table) from
+# Foursquare's open places data, once a month and whenever run by hand
+# (Actions → Import business list → Run workflow). See scripts/import-places.py.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   PIPELINES_DIRECT_URL  the production database's unpooled address (required)
+#   HF_TOKEN              a Hugging Face read token, for the newest monthly
+#                         release (optional; without it, the February 2025
+#                         public mirror is used)
+name: Import business list
+
+on:
+  schedule:
+    # 10:00 UTC on the 20th (3:00 AM Arizona), a few days after Foursquare's mid-month release.
+    - cron: "0 10 20 * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print the counts; don't change the database"
+        type: boolean
+        default: false
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install duckdb==1.5.6 "psycopg[binary]==3.2.12"
+      - name: Import
+        env:
+          PIPELINES_DIRECT_URL: ${{ secrets.PIPELINES_DIRECT_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python3 scripts/import-places.py ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -219,9 +219,9 @@ test("a lead is marked Lost in one place, and only with a reason", async ({ page
 
 test("starting another control clears the previous control's message", async ({ page }) => {
   await page.goto("/vault-pipeline");
-  // No Yelp key in the browser tests, so this fails straight away with a message.
+  // The business list is empty in the browser tests, so this fails straight away with a message.
   await page.getByRole("button", { name: "Find leads in the next city" }).click();
-  await expect(page.locator(".notice-error", { hasText: "Yelp isn't set up yet" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".notice-error", { hasText: "The business list hasn't been loaded yet" })).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("button", { name: "Search a specific city" }).click();
   await page.getByRole("region", { name: "Pipeline controls" }).getByRole("button", { name: "Search", exact: true }).click();
@@ -481,9 +481,9 @@ test("Settings shows whether each connection is working", async ({ page }) => {
   const connections = page.getByRole("region", { name: "Connections" });
   await expect(connections.locator('[data-connection="daily-run"]')).toHaveAttribute("data-tone", "error");
   await expect(connections.locator('[data-connection="daily-run"]')).toContainText("The run stopped with an error.");
-  // The browser tests use the local outbox and no Yelp key.
+  // The browser tests use the local outbox and an empty business list.
   await expect(connections.locator('[data-connection="mail"]')).toContainText("Test mode");
-  await expect(connections.locator('[data-connection="yelp"]')).toHaveAttribute("data-tone", "error");
+  await expect(connections.locator('[data-connection="places"]')).toHaveAttribute("data-tone", "error");
   // Nothing has proved reply forwarding works (and its secret isn't set here), so it isn't shown as working.
   await expect(connections.locator('[data-connection="replies"]')).not.toHaveAttribute("data-tone", "ok");
 

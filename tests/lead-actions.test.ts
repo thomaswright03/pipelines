@@ -112,7 +112,7 @@ describe("daily automation settings", () => {
     expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: true, emailsPerDay: 30 });
   });
 
-  it("caps a count saved before the 50-business limit at what Yelp can return", async () => {
+  it("caps a count saved before the 50-business limit at what one search can return", async () => {
     await prisma.pipelineSchedule.create({ data: { id: VAULT_SCHEDULE_ID, enabled: true, leadCount: 100 } });
     expect(await getPipelineSchedule(VAULT_SCHEDULE_ID)).toEqual({ enabled: true, emailsPerDay: 50 });
   });

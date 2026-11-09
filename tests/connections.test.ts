@@ -13,10 +13,10 @@ import path from "node:path";
 import { CRON_JOBS } from "@/lib/integration-status";
 import { savePipelineSchedule } from "@/lib/pipeline-schedule";
 import { DAILY_RUNS, DATALEADSELL_SCHEDULE_ID } from "@/lib/pipeline-schedule-rules";
-import { captureMail, makeColdLead, smtpError, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeColdLead, seedPlaces, smtpError } from "./helpers";
 
 const DAY_MS = 86_400_000;
-const ENV = { EMAIL_TRANSPORT: "zeptomail", EMAIL_INBOUND_SECRET: "s", YELP_API_KEY: "k", CRON_SECRET: "c", VERCEL: "1" };
+const ENV = { EMAIL_TRANSPORT: "zeptomail", EMAIL_INBOUND_SECRET: "s", CRON_SECRET: "c", VERCEL: "1" };
 
 let mail: ReturnType<typeof captureMail> | undefined;
 afterEach(() => mail?.restore());
@@ -30,7 +30,33 @@ describe("Settings → Connections", () => {
     const s = await statusOf();
     expect(s.replies).toMatchObject({ tone: "warn", badge: "Not confirmed yet", next: expect.stringMatching(/mark the reply by hand/) });
     expect(s.mail).toMatchObject({ tone: "warn", badge: "Not confirmed yet", testable: true });
-    expect(s.yelp).toMatchObject({ tone: "warn", badge: "Not confirmed yet", testable: true });
+    expect(s.places).toMatchObject({ tone: "error", summary: expect.stringMatching(/business list is empty/), testable: false });
+  });
+
+  it("shows how much of the business list is loaded, and warns once the monthly import is overdue", async () => {
+    await seedPlaces([{ name: "One" }, { name: "Two" }], {
+      cities: [
+        { city: "Mesa", state: "AZ" },
+        { city: "Provo", state: "UT" },
+      ],
+    });
+    expect((await statusOf()).places).toMatchObject({
+      tone: "ok",
+      summary: expect.stringMatching(/^4 businesses in 2 cities, loaded /),
+      next: null,
+    });
+    await prisma.place.create({
+      data: { id: "g:0x1:0x2", name: "Mesa Dumpsters", city: "Mesa", state: "AZ", kinds: ["hauler"], refreshedAt: new Date() },
+    });
+    expect((await statusOf()).places).toMatchObject({
+      summary: expect.stringMatching(/^5 businesses \(1 from Google Maps\) in 2 cities, loaded /),
+    });
+    const later = new Date(Date.now() + 40 * DAY_MS);
+    expect((await statusOf(ENV, later)).places).toMatchObject({
+      tone: "warn",
+      summary: expect.stringMatching(/monthly import seems to have stopped/),
+      next: expect.stringMatching(/Import business list/),
+    });
   });
 
   it("shows replies as working once one arrives, with its time", async () => {
@@ -51,7 +77,7 @@ describe("Settings → Connections", () => {
     expect((await statusOf()).replies).toMatchObject({ tone: "warn", summary: expect.stringMatching(/no reply of any kind/) });
   });
 
-  it("Test connection: a rejected email login and a rejected Yelp key are shown as failures, in plain words", async () => {
+  it("Test connection: a rejected email login is shown as a failure, in plain words", async () => {
     mail = captureMail();
     mail.fail(smtpError("Invalid login: 535 Authentication Failed", { code: "EAUTH", responseCode: 535 }));
     const mailResult = await testConnectionAction("mail");
@@ -61,31 +87,18 @@ describe("Settings → Connections", () => {
     });
     expect(mail.messages).toHaveLength(0);
     expect((await statusOf()).mail).toMatchObject({ tone: "error", summary: expect.stringMatching(/connection test .* failed/) });
-
-    stubFetch({
-      [YELP_PREFIX]: () => ({ status: 401, contentType: "application/json", body: JSON.stringify({ error: { code: "TOKEN_INVALID" } }) }),
-    });
-    expect(await testConnectionAction("yelp")).toMatchObject({
-      ok: false,
-      error: expect.stringMatching(/^Yelp: Yelp rejected our access key/),
-    });
-    expect((await statusOf()).yelp).toMatchObject({ tone: "error", summary: expect.stringMatching(/rejected our access key/) });
   });
 
-  it("Test connection: success turns each service green with the time, without sending anything", async () => {
+  it("Test connection: success turns email green with the time, without sending anything", async () => {
     mail = captureMail();
     expect(await testConnectionAction("mail")).toMatchObject({
       ok: true,
       message: expect.stringMatching(/logged in at .* No email was sent/),
     });
     expect(mail.messages).toHaveLength(0);
-    const { calls } = stubFetch({ [YELP_PREFIX]: () => yelpResponse([{ name: "One Shop" }]) });
-    expect(await testConnectionAction("yelp")).toMatchObject({ ok: true });
-    expect(calls[0]).toContain("limit=1");
 
     const s = await statusOf();
     expect(s.mail).toMatchObject({ tone: "ok", summary: expect.stringMatching(/Connection test passed/) });
-    expect(s.yelp).toMatchObject({ tone: "ok", summary: expect.stringMatching(/^Yelp last answered/) });
   });
 
   it("shows the missing replies and a failed daily run in plain words, with what to do", async () => {
@@ -112,7 +125,6 @@ describe("Settings → Connections", () => {
     });
     expect(s["daily-run"]).toMatchObject({ tone: "error", summary: expect.stringMatching(/failed — The run stopped with an error/) });
     expect(s["stale-contacts"]).toMatchObject({ tone: "warn", summary: expect.stringMatching(/^Has never run/) });
-    expect(s.yelp.badge).toBe("Not confirmed yet");
   });
 
   it("goes green after a successful send, a posted reply and good runs", async () => {
@@ -126,8 +138,7 @@ describe("Settings → Connections", () => {
         body: JSON.stringify({ from: "ok@x.test", subject: "Re: hi", text: "Sounds good" }),
       }),
     );
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
-    await testConnectionAction("yelp");
+    await seedPlaces([{ name: "One Shop" }], { cities: [{ city: "Mesa", state: "AZ" }] });
     for (const [pipeline, kind] of [
       ["cold-outreach", "daily"],
       ["all", "stale-contacts"],
@@ -137,7 +148,7 @@ describe("Settings → Connections", () => {
 
     const s = await statusOf();
 
-    for (const key of ["mail", "replies", "daily-run", "stale-contacts", "yelp"]) expect(s[key]!.tone, key).toBe("ok");
+    for (const key of ["mail", "replies", "daily-run", "stale-contacts", "places"]) expect(s[key]!.tone, key).toBe("ok");
     expect(s.mail!.summary).toMatch(/Last email sent/);
     expect(s.replies!.summary).toMatch(/Last reply received/);
   });
@@ -162,7 +173,6 @@ describe("Settings → Connections", () => {
     const s = await statusOf({ VERCEL: "1", EMAIL_TRANSPORT: "outbox" });
     expect(s.replies).toMatchObject({ tone: "error", summary: expect.stringMatching(/Reply forwarding isn't switched on/) });
     expect(s["daily-run"]).toMatchObject({ tone: "error", summary: expect.stringMatching(/password isn't set on the server/) });
-    expect(s.yelp).toMatchObject({ tone: "error", summary: expect.stringMatching(/Yelp isn't set up/) });
     expect(s.mail).toMatchObject({ tone: "warn", summary: expect.stringMatching(/Test mode/) });
   });
 

@@ -73,11 +73,11 @@ export default async function RoomDesigner({ searchParams }: PageProps<"/room-de
         <div className="mt-1">
           <HowThisWorks>
             <p>
-              Remodelers come from a Yelp search for bathroom remodeling, one new US city at a time, each weekday at 9:00 AM Arizona time;
-              an email address is looked for on each one&apos;s website, and every address gets one pitch at most (none another pipeline
-              already emailed). National franchises, big-box installers, plumbing-only listings, supply houses and showrooms, and Eddys
-              Remodeling are left out. Remodelers that don&apos;t reply within a week move to the call deck. Offer a 15-minute walkthrough,
-              then the free-week sign-up: <a href={ROOM_DESIGNER_SIGNUP_URL}>{ROOM_DESIGNER_SIGNUP_URL}</a>.
+              Remodelers come from a business list (Foursquare) of bathroom remodelers, one new US city at a time, each weekday at 9:00 AM
+              Arizona time; an email address is looked for on each one&apos;s website, and every address gets one pitch at most (none
+              another pipeline already emailed). National franchises, big-box installers, plumbing-only listings, supply houses and
+              showrooms, and Eddys Remodeling are left out. Remodelers that don&apos;t reply within a week move to the call deck. Offer a
+              15-minute walkthrough, then the free-week sign-up: <a href={ROOM_DESIGNER_SIGNUP_URL}>{ROOM_DESIGNER_SIGNUP_URL}</a>.
             </p>
           </HowThisWorks>
         </div>

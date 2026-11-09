@@ -1,5 +1,5 @@
 // US phone numbers, stored and shown in one format: "(480) 555-0101".
-// Yelp returns E.164 ("+14805550101"), ADRE and people type anything, so
+// Yelp returned E.164 ("+14805550101"), the business list "(208) 555-0101", ADRE and people type anything, so
 // every save path goes through normalizePhone().
 
 /** The 10-digit national number, dropping a leading US country code. */

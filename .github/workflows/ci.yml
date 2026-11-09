@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     # A throwaway Postgres for the test suite. Tests never reach the real
-    # database, ZeptoMail, Yelp or any other network service: mail goes to
+    # database, ZeptoMail, Foursquare or any other network service: mail goes to
     # a capturing transport and fetch is stubbed (see tests/setup.ts).
     services:
       postgres:

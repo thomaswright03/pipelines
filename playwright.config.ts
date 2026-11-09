@@ -38,7 +38,6 @@ export default defineConfig({
       OUTBOX_DIR,
       VERCEL: "",
       ZEPTOMAIL_SMTP_PASSWORD: "",
-      YELP_API_KEY: "",
     },
   },
 });

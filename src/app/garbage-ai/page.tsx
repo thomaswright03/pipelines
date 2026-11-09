@@ -72,7 +72,7 @@ export default async function GarbageAi({ searchParams }: PageProps<"/garbage-ai
         <div className="mt-1">
           <HowThisWorks>
             <p>
-              Haulers come from a Yelp search for garbage collection, one new US city a day; an email address is looked for on each
+              Haulers come from a business list (Foursquare) of waste haulers, one new US city a day; an email address is looked for on each
               one&apos;s website, and every address gets one pitch at most (none that Cold Outreach already emailed). Current clients,
               national haulers, city departments and Mountain High Disposal&apos;s service area are left out. Haulers that don&apos;t reply
               within a week move to the call deck. Demo requests go to Max to book.

@@ -48,7 +48,6 @@ export default defineConfig({
       OUTBOX_DIR: path.resolve(__dirname, "node_modules/.cache/test-outbox"),
       EMAIL_INBOUND_SECRET: "test-inbound-secret",
       CRON_SECRET: "test-cron-secret",
-      YELP_API_KEY: "test-yelp-key",
       ZEPTOMAIL_SMTP_PASSWORD: "",
       VERCEL: "",
     },

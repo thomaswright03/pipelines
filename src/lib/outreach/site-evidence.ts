@@ -1,11 +1,11 @@
 // Is a guessed website really this lead's?
 //
-// Yelp and ADRE don't give a website, so discovery guesses one from the
+// When the business list or ADRE gives no website, discovery guesses one from the
 // name (www.<name>.com). A site that merely mentions a word of the name
 // ("pizza", "smith") can belong to any business or person with a similar
 // name — pitching them wastes the lead's one pitch and risks complaints.
 // So an address found on a guessed site is only used when the site also
-// shows something we already know about the lead from Yelp/ADRE: its phone
+// shows something we already know about the lead from the business list or ADRE: its phone
 // number or its street address. A mention of the lead's city alone isn't
 // enough — a chain, a franchise or a same-named business in the same big
 // city passes that — so the city only counts together with a second,
@@ -20,7 +20,7 @@ import { digitsOnly, formatPhone } from "@/lib/phone";
 import { rulesVersion } from "@/lib/outreach/rules-version";
 
 export type LeadFacts = {
-  /** The lead's name as Yelp/ADRE gave it, for the page-title check. */
+  /** The lead's name as the business list or ADRE gave it, for the page-title check. */
   name?: string | null;
   /**
    * The address found is recognisably the lead's own (an agent's name on

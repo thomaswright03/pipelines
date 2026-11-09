@@ -1,6 +1,6 @@
 // The server actions behind every button and form, called the way the
 // pages call them: validation messages, the happy path, and what the
-// operator sees when the database or Yelp fails part-way. (next/cache is
+// operator sees when the database or the business list fails part-way. (next/cache is
 // mocked in tests/setup.ts; nothing reaches the network.)
 import { DATABASE_UNAVAILABLE_MESSAGE } from "@/lib/db-health";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -47,7 +47,7 @@ import {
 } from "@/lib/actions/outreach";
 import { getAppSettings } from "@/lib/outreach/settings";
 import { getPipeline } from "@/lib/outreach/pipelines";
-import { captureMail, makeAgentLead, makeColdLead, page, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeAgentLead, makeColdLead, page, seedNoneOf, seedPlaces, stubFetch } from "./helpers";
 
 const DB_DOWN = new Error("connect ECONNREFUSED 127.0.0.1:5432");
 
@@ -265,35 +265,45 @@ describe("Cold Outreach lead actions", () => {
     });
   });
 
-  it("searches Yelp for a city, with validation and Yelp outages explained", async () => {
+  it("searches the business list for a city, with validation and an unloaded city explained", async () => {
     expect(await searchLeadsAction({}, form({ city: "", state: "AZ", businessType: "" }))).toEqual({ error: "Enter a city" });
     expect(await searchLeadsAction({}, form({ city: "Mesa", state: "Narnia", businessType: "" }))).toEqual({
       error: "State must be a US state, like UT or Utah",
     });
 
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    expect((await searchLeadsAction({}, form({ city: "Mesa", state: "AZ", businessType: "" }))).error).toMatch(
+      /^The business list hasn't been loaded yet/,
+    );
+
+    const mesa = [{ city: "Mesa", state: "AZ" }];
+    await seedPlaces([{ name: "Mesa Bakery", categories: ["Bakery"] }], { cities: mesa });
+    stubFetch({});
     expect(await searchLeadsAction({}, form({ city: "Mesa", state: "az", businessType: "plumber" }))).toEqual({
-      error: "Yelp found no businesses in Mesa, AZ.",
+      error: "The business list has no businesses in Mesa, AZ.",
     });
+    expect((await searchLeadsAction({}, form({ city: "Mesaa", state: "AZ", businessType: "" }))).error).toMatch(
+      /^Mesaa, AZ isn't in the loaded business list/,
+    );
 
-    stubFetch({
-      [YELP_PREFIX]: () => yelpResponse([{ name: "Mesa Plumbing", phone: "+14805550111", address: "1 Main St" }]),
-      "https://www.mesaplumbing.com": page("Mesa Plumbing, Mesa AZ — (480) 555-0111 — hello@mesaplumbing.test"),
+    // Free words match a category ("Plumber") as well as a name.
+    await seedPlaces([{ name: "Mesa Pipe Pros", phone: "(480) 555-0111", address: "1 Main St", categories: ["Plumber"] }], {
+      kind: "agent",
+      cities: mesa,
     });
-    const found = await searchLeadsAction({}, form({ city: "Mesa", state: "AZ", businessType: "plumber" }));
-    expect(found.message).toMatch(/^Found 1 businesses in Mesa, AZ and added 1 new lead/);
-
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 502, body: "bad gateway" }) });
-    expect((await searchLeadsAction({}, form({ city: "Mesa", state: "AZ", businessType: "" }))).error).toMatch(/Yelp/);
+    stubFetch({ "https://www.mesapipepros.com": page("Mesa Pipe Pros, Mesa AZ — (480) 555-0111 — hello@mesapipepros.test") });
+    const found = await searchLeadsAction({}, form({ city: "Mesa", state: "AZ", businessType: "plumbers" }));
+    expect(found.error).toBeUndefined();
+    expect((await searchLeadsAction({}, form({ city: "mesa", state: "AZ", businessType: "plumber" }))).message).toMatch(
+      /^Found 1 businesses in mesa, AZ/,
+    );
+    expect(await prisma.lead.findFirstOrThrow({ where: { name: "Mesa Pipe Pros" } })).toMatchObject({ email: "hello@mesapipepros.test" });
   });
 
   it("'Run pipeline' picks the next city and reports what it added", async () => {
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    expect(await runPipelineScrapeAction()).toMatchObject({ ok: false, error: expect.stringMatching(/hasn't been loaded yet/) });
+    await seedNoneOf();
     expect(await runPipelineScrapeAction()).toMatchObject({ ok: true, message: expect.stringMatching(/^Found 0 businesses in /) });
     expect(await prisma.scrapedCity.count()).toBe(1);
-
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 500, body: "down" }) });
-    expect(await runPipelineScrapeAction()).toMatchObject({ ok: false });
   });
 
   it("sets an appointment only from a sensible stage and with a date", async () => {
@@ -357,26 +367,26 @@ describe("dataleadsell actions", () => {
     expect(await prisma.agentLead.findUniqueOrThrow({ where: { id: created.leadId! } })).toMatchObject({ state: "UT", email: null });
   });
 
-  it("searches Yelp for agents in a sold county", async () => {
+  it("searches the business list for agents in a sold county", async () => {
     expect(await searchAgentsAction({}, form({ county: "Pima", city: "Tucson" }))).toEqual({
       error: "Pick one of the counties dataleadsell sells",
     });
     expect(await searchAgentsAction({}, form({ county: "Maricopa", city: "Provo" }))).toEqual({ error: "Pick a city in that county" });
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
+    await seedNoneOf("agent");
     expect(await searchAgentsAction({}, form({ county: "Maricopa", city: "Mesa" }))).toEqual({
-      error: "Yelp found no real estate agents in Mesa, AZ.",
+      error: "The business list has no real estate agents in Mesa, AZ.",
     });
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([{ name: "Sam Seller - HomeSmart" }]) });
+    await seedPlaces([{ name: "Sam Seller - HomeSmart" }], { kind: "agent", cities: [{ city: "Mesa", state: "AZ" }] });
+    stubFetch({});
     expect((await searchAgentsAction({}, form({ county: "Maricopa", city: "Mesa" }))).message).toMatch(
       /^Found 1 agents in Mesa, Maricopa County/,
     );
   });
 
-  it("'Run pipeline' for agents reports Yelp outages", async () => {
-    stubFetch({ [YELP_PREFIX]: () => yelpResponse([]) });
-    expect(await runAgentPipelineScrapeAction()).toMatchObject({ ok: true });
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 503, body: "down" }) });
+  it("'Run pipeline' for agents reports an unloaded business list", async () => {
     expect(await runAgentPipelineScrapeAction()).toMatchObject({ ok: false });
+    await seedNoneOf("agent");
+    expect(await runAgentPipelineScrapeAction()).toMatchObject({ ok: true });
   });
 
   it("explains an ADRE roster download failure and processes chunks", async () => {

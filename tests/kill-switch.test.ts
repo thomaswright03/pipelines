@@ -14,7 +14,7 @@ import { getAppSettings } from "@/lib/outreach/settings";
 import { sendBulkChunk, sendFirstTouch } from "@/lib/outreach/send";
 import { sendOutreachEmail } from "@/lib/send-email";
 import { DAILY_RUN_SOURCE } from "@/lib/vault-daily-run";
-import { captureMail, makeAgentLead, makeColdLead, stubFetch, YELP_PREFIX, yelpResponse } from "./helpers";
+import { captureMail, makeAgentLead, makeColdLead, seedPlaces, stubFetch } from "./helpers";
 
 let mail: ReturnType<typeof captureMail>;
 beforeEach(() => {
@@ -79,7 +79,8 @@ describe("every send path refuses while it is set", () => {
   });
 
   it("the daily cron run: skipped before it searches or sends", async () => {
-    const fetchStub = stubFetch({ [YELP_PREFIX]: () => yelpResponse([{ name: "Omega Bakery", phone: "+14805550101" }]) });
+    await seedPlaces([{ name: "Omega Bakery", phone: "(480) 555-0101", website: "https://www.omegabakery.com" }]);
+    const fetchStub = stubFetch({});
     await makeColdLead({ email: "queued@shop.test", source: DAILY_RUN_SOURCE });
     const res = await dailyGET(
       new NextRequest("http://localhost/api/cron/vault-daily", { headers: { authorization: "Bearer test-cron-secret" } }),
@@ -88,6 +89,7 @@ describe("every send path refuses while it is set", () => {
     expect(json).toMatchObject({ status: "skipped" });
     expect(JSON.stringify(json)).toMatch(/OUTBOUND_EMAIL_DISABLED/);
     expect(fetchStub.calls).toEqual([]);
+    expect(await prisma.lead.count({ where: { name: "Omega Bakery" } })).toBe(0);
     expect(mail.messages).toHaveLength(0);
   });
 

@@ -32,6 +32,3 @@ export const GARBAGE_AI_SIGNUP_URL = "https://hauler-signup.vercel.app";
 // send-email.ts) — must be a verified sender for wright-ai-solutions.com.
 // Override with GARBAGE_AI_SENDER_EMAIL.
 export const GARBAGE_AI_SENDER_EMAIL = process.env.GARBAGE_AI_SENDER_EMAIL ?? "thomas@wright-ai-solutions.com";
-
-/** The Yelp search term for each city. "dumpster rental" is a possible second term later. */
-export const GARBAGE_AI_YELP_TERM = "garbage collection";

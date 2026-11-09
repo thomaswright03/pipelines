@@ -9,7 +9,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/log";
 import { normalizeState } from "@/lib/us-states";
-import { YelpError } from "@/lib/yelp-discovery";
+import { PlaceSearchError } from "@/lib/place-discovery";
 import { markRemodelerCityUsed, pickNextRemodelerCity } from "@/lib/room-designer-city-picker";
 import { describeRemodelerSearch, searchRemodelers } from "@/lib/room-designer-daily-run";
 import { withRetry } from "@/lib/with-retry";
@@ -75,15 +75,15 @@ export async function searchRemodelersAction(_prev: RemodelerSearchState, formDa
   const city = parsed.data.city;
   try {
     const outcome = await searchRemodelers(city, state, {
-      source: "Yelp search",
+      source: "Business list search",
       maxCreate: MAX_PER_RUN,
       deadline: Date.now() + RUN_TIME_BUDGET_MS,
     });
     revalidate();
-    if (outcome.listed === 0) return { error: `Yelp found no bathroom remodeling businesses in ${city}, ${state}.` };
+    if (outcome.listed === 0) return { error: `The business list has no bathroom remodeling businesses in ${city}, ${state}.` };
     return { message: describeRemodelerSearch(`${city}, ${state}`, outcome) };
   } catch (err) {
-    if (err instanceof YelpError) return { error: err.message };
+    if (err instanceof PlaceSearchError) return { error: err.message };
     logError("action.searchRemodelers", err);
     return { error: failureMessage(err, "The search stopped because of an unexpected error. Any remodelers already added are saved.") };
   }
@@ -94,7 +94,7 @@ export async function runRemodelerScrapeAction(): Promise<ActionResult> {
   try {
     const target = await withRetry(() => pickNextRemodelerCity(prisma));
     const outcome = await searchRemodelers(target.city, target.state, {
-      source: "Yelp search (Find remodelers button)",
+      source: "Business list (Find remodelers button)",
       maxCreate: MAX_PER_RUN,
       deadline: startedAt + RUN_TIME_BUDGET_MS,
     });
@@ -102,7 +102,7 @@ export async function runRemodelerScrapeAction(): Promise<ActionResult> {
     revalidate();
     return { ok: true, message: describeRemodelerSearch(`${target.city}, ${target.state}`, outcome) };
   } catch (err) {
-    if (err instanceof YelpError) return { ok: false, error: err.message };
+    if (err instanceof PlaceSearchError) return { ok: false, error: err.message };
     logError("action.runRemodelerScrape", err);
     return {
       ok: false,

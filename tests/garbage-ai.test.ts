@@ -19,42 +19,27 @@ import { allowedTransitions, coldCallResult, GARBAGE_AI_STATUSES, statusLabel } 
 import { US_CITIES } from "@/lib/us-cities";
 import { setOutboundPaused } from "@/lib/outreach/settings";
 import { OUTBOUND_DISABLED_ENV } from "@/lib/outbound-switch";
-import { captureMail, makeHaulerLead, page, smtpError, stubFetch, YELP_PREFIX } from "./helpers";
+import { captureMail, makeHaulerLead, page, seedNoneOf, seedPlaces, smtpError, stubFetch } from "./helpers";
 
-type Route = { status?: number; body: string; contentType?: string };
-
-type YelpBusiness = { name: string; phone?: string; address?: string; categories?: string[] };
-
-function yelpHaulers(businesses: YelpBusiness[]): Route {
-  return {
-    contentType: "application/json",
-    body: JSON.stringify({
-      businesses: businesses.map((b) => ({
-        name: b.name,
-        phone: b.phone ?? "",
-        location: { display_address: (b.address ?? "1 Main St, Phoenix, AZ 85001").split(", ") },
-        categories: (b.categories ?? ["Garbage Collection"]).map((title) => ({ alias: title.toLowerCase(), title })),
-      })),
-    }),
-  };
-}
-
-/** A Yelp answer with two sendable haulers and one of each kind Garbage AI never pitches. */
-function stubHaulerSearch() {
-  const calls = stubFetch({
-    [YELP_PREFIX]: () =>
-      yelpHaulers([
-        { name: "Desert Roll Off", phone: "+14805551001", categories: ["Dumpster Rental", "Garbage Collection"] },
-        { name: "Saguaro Hauling", phone: "+14805551002" },
-        { name: "Waste Management", phone: "+14805551003" },
-        { name: "City of Phoenix Public Works", phone: "+14805551004" },
-        { name: "Mountain High Disposal", phone: "+14805551005" },
-        { name: "Front Range Hauling", phone: "+19705551006", address: "9 Elm St, Greeley, CO 80631" },
-      ]),
+/** Every city lists two sendable haulers and one of each kind Garbage AI never pitches. */
+async function stubHaulerSearch() {
+  await seedPlaces(
+    [
+      { name: "Desert Roll Off", phone: "(480) 555-1001", categories: ["Dumpster Rental", "Garbage Collection"] },
+      { name: "Saguaro Hauling", phone: "(480) 555-1002", categories: ["Waste Management Service"] },
+      { name: "Waste Management", phone: "(480) 555-1003" },
+      { name: "City of Phoenix Public Works", phone: "(480) 555-1004" },
+      { name: "Mountain High Disposal", phone: "(480) 555-1005" },
+      { name: "Front Range Hauling", phone: "(970) 555-1006", address: "9 Elm St, Greeley, CO 80631" },
+    ],
+    { kind: "hauler" },
+  );
+  // Other businesses in the same cities are never searched for haulers.
+  await seedPlaces([{ name: "Saguaro Bakery", website: "https://www.saguarobakery.test" }], { kind: "business" });
+  return stubFetch({
     "https://www.desertrolloff.com": page("Desert Roll Off — call 480-555-1001 or email office@desertrolloff.test"),
     "https://www.saguarohauling.com": page("Saguaro Hauling — 480-555-1002 — info@saguarohauling.test"),
   });
-  return calls;
 }
 
 let mail: ReturnType<typeof captureMail> | undefined;
@@ -143,18 +128,18 @@ describe("who Garbage AI never pitches", () => {
 describe("the daily Garbage AI run", () => {
   it("finds and saves haulers, leaves out the ones it never pitches, and emails the new ones", async () => {
     mail = captureMail();
-    const calls = stubHaulerSearch();
+    const calls = await stubHaulerSearch();
     const next = await peekNextHaulerCity(prisma);
 
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
 
     expect(outcome.status).toBe("succeeded");
     expect(outcome.numbers).toEqual({ businessesChecked: 2, leadsFound: 2, emailsSent: 2 });
-    expect(outcome.summary).toMatch(/Yelp listed 6 businesses, left out 4 that Garbage AI never pitches/);
+    expect(outcome.summary).toMatch(/the business list had 6 businesses, left out 4 that Garbage AI never pitches/);
     expect(outcome.summary).toMatch(/emailed 2/);
     expect(mail.messages).toHaveLength(2);
     expect(mail.messages[0]!.subject).toBe("quick question about your leads");
-    expect(calls.calls.find((u) => u.startsWith(YELP_PREFIX))).toContain("term=garbage+collection");
+    expect(calls.calls.some((u) => u.includes("bakery"))).toBe(false);
 
     const haulers = await prisma.haulerLead.findMany({ orderBy: { name: "asc" } });
     expect(haulers.map((h) => [h.name, h.company, h.email, h.status, h.source])).toEqual([
@@ -169,7 +154,7 @@ describe("the daily Garbage AI run", () => {
 
   it("skips a hauler whose address Cold Outreach already pitched", async () => {
     mail = captureMail();
-    stubHaulerSearch();
+    await stubHaulerSearch();
     await prisma.outreachRecipient.create({ data: { pipeline: "cold-outreach", email: "info@saguarohauling.test", state: "sent" } });
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     expect(outcome.numbers?.leadsFound).toBe(1);
@@ -178,17 +163,20 @@ describe("the daily Garbage AI run", () => {
   });
 
   it("records a failed search and doesn't use up the city", async () => {
-    stubFetch({ [YELP_PREFIX]: () => ({ status: 500, body: "{}" }) });
+    stubFetch({});
     const outcome = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     expect(outcome.status).toBe("failed");
     expect(outcome.errors?.[0]).toMatch(/^Search of .+ failed:/);
-    expect(outcome.summary).toMatch(/^Couldn't search .+ on Yelp, so no new haulers were found, emailed 0, 0 of today's \d+ sent\.$/);
+    expect(outcome.summary).toMatch(
+      /^Couldn't search .+ in the business list, so no new haulers were found, emailed 0, 0 of today's \d+ sent\.$/,
+    );
     expect(await prisma.scrapedHaulerCity.count()).toBe(0);
   });
 
   it("reports send outcomes like the other daily runs: a refused address, a failed send, and a run where every send failed", async () => {
     mail = captureMail();
-    stubFetch({ [YELP_PREFIX]: () => yelpHaulers([]) });
+    await seedNoneOf("hauler");
+    stubFetch({});
     const old = new Date(Date.now() - 86_400_000);
     await makeHaulerLead({ name: "Bad Address Hauling", email: "nobody@bad.test", source: GARBAGE_AI_DAILY_SOURCE, createdAt: old });
     await makeHaulerLead({ name: "Good Hauling", email: "office@good.test", source: GARBAGE_AI_DAILY_SOURCE });
@@ -211,7 +199,7 @@ describe("the daily Garbage AI run", () => {
 
   it("runs from the cron route, and is skipped when turned off on the page", async () => {
     mail = captureMail();
-    stubHaulerSearch();
+    await stubHaulerSearch();
     const request = () =>
       new NextRequest("http://localhost/api/cron/garbage-ai-daily", { headers: { authorization: "Bearer test-cron-secret" } });
     expect((await garbageDailyGET(new NextRequest("http://localhost/api/cron/garbage-ai-daily"))).status).toBe(401);
@@ -238,7 +226,7 @@ describe("the daily Garbage AI run", () => {
     ],
   ])("is skipped by %s: no search, no lookups, no sends", async (stop, summary) => {
     mail = captureMail();
-    const calls = stubHaulerSearch();
+    const calls = await stubHaulerSearch();
     await makeHaulerLead({ email: "queued@hauler.test", source: GARBAGE_AI_DAILY_SOURCE });
     if (stop === "the Settings pause") await setOutboundPaused(true);
     else vi.stubEnv(OUTBOUND_DISABLED_ENV, "1");
@@ -259,7 +247,7 @@ describe("the daily Garbage AI run", () => {
 
 describe("the Find haulers buttons", () => {
   it("search the next city, or a chosen one, and refuse Mountain High's area", async () => {
-    stubHaulerSearch();
+    await stubHaulerSearch();
     const next = await runHaulerScrapeAction();
     expect(next).toMatchObject({ ok: true });
     expect(next.ok && next.message).toMatch(/added 2 new haulers/);
@@ -338,7 +326,7 @@ describe("sending", () => {
     expect(await prisma.outreachRecipient.count()).toBe(0);
     expect((await prisma.haulerLead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("new");
 
-    stubHaulerSearch();
+    await stubHaulerSearch();
     const run = await runDailyGarbageAi(30, { sendDelayMs: 0 });
     expect(run.numbers?.emailsSent).toBe(0);
     expect(run.summary).toMatch(/sending is on hold, so nobody was emailed\.$/);

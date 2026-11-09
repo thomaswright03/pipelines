@@ -1,5 +1,5 @@
 // The daily automated Cold Outreach run, once each weekday morning: search
-// new cities on Yelp until enough businesses with an email address are
+// new cities in the business list until enough businesses with an email address are
 // found for the day's number, then pitch them, plus any an earlier run
 // found but didn't get to. It has up to 300 s (LONG_RUN_BUDGETS) so the
 // whole day's number goes out in one run. The run itself (time budgets, failure
@@ -23,7 +23,7 @@ export function runDailyColdOutreach(emailsPerDay: number = DEFAULT_EMAILS_PER_D
   return runDailyDiscoveryAndSend(
     {
       pipeline: "cold-outreach",
-      searchTerm: "",
+      search: { kind: "business" },
       listedNoun: { one: "business", many: "businesses" },
       foundNoun: "leads",
       pickTarget: () => pickNextCity(prisma),

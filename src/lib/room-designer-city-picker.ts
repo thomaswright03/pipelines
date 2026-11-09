@@ -1,4 +1,4 @@
-// The next city for the Room Designer 3D Yelp search (city-rotation.ts): the
+// The next city for the Room Designer 3D business-list search (city-rotation.ts): the
 // same pool and order as Cold Outreach, tracked separately in
 // ScrapedRemodelerCity.
 import type { PrismaClient } from "@/generated/prisma/client";

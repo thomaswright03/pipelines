@@ -196,8 +196,9 @@ export default function HelpPage() {
           </Link>{" "}
           pitches trash, recycling and dumpster-rental <strong>haulers</strong> an AI that texts back every online lead they get, day or
           night, and points them to a short video and signup form or a 15-minute walkthrough. Its runs, {GARBAGE_AI_DAILY_RUN_TIME_LABEL},
-          search Yelp in a new US city each, find each hauler&apos;s address on its own website and email the ones they found. It follows
-          every rule the other pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the emergency stop.
+          search the business list in a new US city each, find each hauler&apos;s address on its own website and email the ones they found.
+          It follows every rule the other pipelines do: one pitch per address, the do-not-email list, replies that need a look, and the
+          emergency stop.
         </p>
         <p>
           <strong>Who it never emails.</strong> These haulers are left out of every search, and if one is added by hand its page shows{" "}
@@ -225,8 +226,8 @@ export default function HelpPage() {
             Room Designer 3D
           </Link>{" "}
           pitches independent bathroom <strong>remodelers</strong> the 3D bathroom designer and estimator, with a free first week. Its run,{" "}
-          {ROOM_DESIGNER_DAILY_RUN_TIME_LABEL}, searches Yelp for bathroom remodeling in new US cities, finds each remodeler&apos;s address
-          on its own website and emails the ones it found. It follows every rule the other pipelines do.
+          {ROOM_DESIGNER_DAILY_RUN_TIME_LABEL}, searches the business list for bathroom remodelers in new US cities, finds each
+          remodeler&apos;s address on its own website and emails the ones it found. It follows every rule the other pipelines do.
         </p>
         <p>
           <strong>Who it never emails.</strong> Eddys Remodeling; national franchises and big-box installers (Bath Fitter, Re-Bath, Five
@@ -245,9 +246,9 @@ export default function HelpPage() {
             <strong>Working</strong> — it has actually worked recently (a send, a search, a reply, or a test).
           </li>
           <li>
-            <strong>Not confirmed yet</strong> — it&apos;s set up but nothing has proved it works. For email and Yelp, press{" "}
-            <strong>Test connection</strong>: the email test logs in without sending anything, and the Yelp test runs one tiny search. For
-            replies, it turns green when the first reply arrives; mark replies by hand until then.
+            <strong>Not confirmed yet</strong> — it&apos;s set up but nothing has proved it works. For email, press{" "}
+            <strong>Test connection</strong>: it logs in without sending anything. For replies, it turns green when the first reply arrives;
+            mark replies by hand until then.
           </li>
           <li>
             <strong>Check the reply loop</strong> (under the list) proves sending and replies together: enter an address you can read, press{" "}

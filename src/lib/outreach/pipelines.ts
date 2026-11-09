@@ -534,7 +534,7 @@ const garbageAi = makeAdapter({
   leads: (db) => db.haulerLead as unknown as LeadTable,
   sendLogs: (db) => db.haulerEmailSendLog as unknown as SendLogTable,
   activities: (db) => db.haulerLeadActivity as unknown as ActivityTable,
-  // Yelp gives only the business name, so it is the company too.
+  // The business list gives only the business name, so it is the company too.
   ownColumns: (data) => ({ company: data.company ?? data.name, services: data.services ?? null }),
   searchColumns: ["company", "city"],
 });

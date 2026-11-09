@@ -6,15 +6,15 @@ Thomas Wright's internal dashboard for Wright AI Solutions' email outreach. One 
 access is gated by Vercel Deployment Protection (SSO). Three pipelines live here:
 
 - **dataleadsell.com** (`/dataleadsell`) finds real estate agents in Maricopa (AZ), Salt Lake and Utah (UT)
-  counties via Yelp and Arizona's ADRE license roster, finds each agent's own email address and pitches a
+  counties via a business list (Foursquare) and Arizona's ADRE license roster, finds each agent's own email address and pitches a
   Probate Property Leads subscription.
-- **Cold Outreach** (`/vault-pipeline`) finds local businesses via Yelp and emails each one a single pitch,
+- **Cold Outreach** (`/vault-pipeline`) finds local businesses via the business list and emails each one a single pitch,
   automatically, up to its "emails to send per day" number.
-- **Garbage AI** (`/garbage-ai`) finds trash, recycling and dumpster-rental haulers via Yelp, a new US city
+- **Garbage AI** (`/garbage-ai`) finds trash, recycling and dumpster-rental haulers via the business list, a new US city
   each run, and pitches them a demo of an AI that texts back their online leads. It never emails current
   clients, national haulers, city/county departments or any hauler in Mountain High Disposal's Colorado
   service area (`src/lib/garbage-ai-targeting.ts`).
-- **Room Designer 3D** (`/room-designer`) finds independent bathroom remodelers via Yelp, new US cities each
+- **Room Designer 3D** (`/room-designer`) finds independent bathroom remodelers via the business list, new US cities each
   weekday, and pitches them Room Designer 3D (a 3D bathroom designer and estimator) with a free week. It never
   emails Eddys Remodeling, national franchises, big-box installers, plumbers, supply houses or showrooms
   (`src/lib/room-designer-targeting.ts`). Sending is held in code until Thomas says go
@@ -48,7 +48,7 @@ Vercel Cron ──► /api/cron/*  ─────┤                          �
 Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach  ──► Postgres (Prisma)
                                                         │      │
                                                         │      └──► ZeptoMail SMTP (nodemailer)
-                                                        └──► Yelp API, ADRE roster, business websites
+                                                        └──► ADRE roster, business websites
 ```
 
 - **Request flow.** Pages are server components that read through `src/lib` and Prisma. Every change the
@@ -77,7 +77,8 @@ Cloudflare Email Worker ──► /api/email-inbound ──►  src/lib/outreach
   city-rotation tables. Nothing else is stored: no cache, queue or file store (the Worker's retry queue
   lives in Cloudflare).
 - **External services.** ZeptoMail (SMTP, sending), Cloudflare Email Routing + Worker (receiving),
-  Yelp Fusion (discovery), ADRE (public roster download), the businesses' own websites (address lookup),
+  Foursquare's open places data and Google Maps listings (discovery, loaded monthly into the `Place` table
+  by two GitHub Actions workflows; see docs/deployment.md → "Business list"), ADRE (public roster download), the businesses' own websites (address lookup),
   Vercel (hosting, cron, SSO). Local development and CI use none of them: mail goes to an outbox or a local
   catcher, and `fetch` is stubbed in tests.
 - **UI.** React 19 server components with small client components in `src/components/`, Tailwind v4.
@@ -111,8 +112,9 @@ saved, not delivered**, **Mail captured locally (127.0.0.1:1025)**, or, in amber
 host:port** when `SMTP_HOST` is another machine that may deliver to real people. Never put the production
 ZeptoMail password in a local `.env`.
 
-**Discovery locally.** The search buttons call Yelp, which needs a real `YELP_API_KEY` and uses up real
-quota. Leave the key empty to work on everything else, and use **+ Add lead by hand**.
+**Discovery locally.** The search buttons read the `Place` table, which starts empty. Load it with
+`PIPELINES_DIRECT_URL=<your dev database> python3 scripts/import-places.py` (about 15 minutes; see
+docs/deployment.md → "Business list"), or use **+ Add lead by hand**.
 
 **When the database is down,** every page shows "Can't reach the database right now" and a **Try again**
 button; page requests get HTTP 503 (`src/proxy.ts`, which reuses its probe for 5 s). `GET /api/health`
@@ -146,8 +148,20 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
   emailed to such an address until the operator resolves it (docs/outreach-safety.md). A plain "no thanks" closes the lead and a "Thanks" /
   "Got it" changes nothing, without the operator; both also stop further email to the address, and neither
   is treated as an opt-out. The Unmatched replies page and the lead list show how many are waiting.
-- **Email finding is a heuristic.** Neither Yelp nor ADRE gives a business's website, so
-  `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly (no
+- **The business list is a monthly snapshot of the rotation's cities.** Searches only find businesses in the
+  cities the pipelines rotate through, as of the last import, and only places Foursquare confirmed since 2020.
+  Some will have closed since; a manual search of any other city says the city isn't loaded.
+- **Google Maps listings are scraped, against Google's terms (owner decision, 2026-10-29).** Haulers,
+  remodelers and real estate agencies also come from Google Maps, via gosom/google-maps-scraper's fast mode
+  (up to 20 listings per search, five or six searches per city). Google's terms don't allow scraping Maps or
+  using its data for outreach; the owner chose to anyway. Google can block the searches at any time: the
+  import then keeps the previous month's Google listings and the Foursquare list still works. Many Google
+  dumpster listings are lead-generation pages with no website of their own, so they rarely yield an address.
+- **Leads found on Yelp before October 2026 are still stored** (their `source` starts "Yelp search") and
+  still emailed by daily runs if waiting. Yelp's API terms say Yelp content must be deleted once access ends
+  and can't be used for direct marketing; what to do with them is an owner decision, not yet made.
+- **Email finding is a heuristic.** The business list has a website for most businesses (about 60%);
+  for the rest, and for ADRE agents, `src/lib/website-finder.ts` guesses a few plausible domains from the name and checks them directly (no
   search engine: those block automated queries or charge for them). A guessed site is only used when it
   shows the lead's phone or street, or its city plus the lead's name in the page title, which trades yield
   for not pitching the wrong business. Expect well under a quarter of results to yield a usable address.
@@ -163,7 +177,8 @@ is a GitHub setting only the owner can turn on (docs/deployment.md → "Owner-on
   header; the HTTPS one-click form needs a public endpoint outside Vercel Deployment Protection (an owner
   decision, docs/deployment.md).
 - **Where the outreach data comes from is a business/legal question, not a code one.** All three pipelines email
-  people found through Yelp's API and Arizona's public ADRE roster, without prior opt-in. What CAN-SPAM
+  people found through Foursquare's open places data and Google Maps (before October 2026, Yelp's API) and Arizona's public
+  ADRE roster, without prior opt-in. What CAN-SPAM
   explicitly requires is handled (a mailing address and a working opt-out in every email, opt-outs enforced
   before every send); whether sourcing addresses this way has a sound lawful basis has not been reviewed.
 - `docs/archive/LEAD_GEN_PIPELINE_SPEC.md` is the historical spec the Cold Outreach pipeline was first built

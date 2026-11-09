@@ -1,5 +1,5 @@
 // The daily Room Designer 3D run and its "Find remodelers" buttons: search
-// one city on Yelp for bathroom remodelers, drop the ones Room Designer 3D
+// one city in the business list for bathroom remodelers, drop the ones Room Designer 3D
 // must never pitch (see room-designer-targeting.ts), check the rest for an
 // email address on their own website, and save the ones an address was
 // found for. The daily run then pitches the remodelers daily runs found. It
@@ -9,24 +9,25 @@
 // (LONG_RUN_BUDGETS). While sending is held in code (room-designer-config.ts)
 // the run still finds remodelers but emails nobody.
 import { prisma } from "@/lib/db";
-import { findBusinessesViaYelp, type YelpCandidate } from "@/lib/yelp-discovery";
+import { findBusinesses, type PlaceCandidate } from "@/lib/place-discovery";
 import { markRemodelerCityUsed, pickNextRemodelerCity } from "@/lib/room-designer-city-picker";
 import { remodelerExclusion } from "@/lib/room-designer-targeting";
-import { ROOM_DESIGNER_YELP_TERM } from "@/lib/room-designer-config";
 import { createLeadsFromCandidates, describeDiscovery, type DiscoveryCandidate, type DiscoveryResult } from "@/lib/outreach/discovery";
 import { LONG_RUN_BUDGETS, runDailyDiscoveryAndSend, type DailyRunOptions } from "@/lib/outreach/daily-run";
 import type { RunOutcome } from "@/lib/outreach/runs";
 
-export const ROOM_DESIGNER_DAILY_SOURCE = "Yelp search (daily Room Designer 3D run)";
+export const ROOM_DESIGNER_DAILY_SOURCE = "Business list (daily Room Designer 3D run)";
+/** Every `source` a daily run has saved, including leads found on Yelp before October 2026. */
+export const ROOM_DESIGNER_DAILY_SOURCES = [ROOM_DESIGNER_DAILY_SOURCE, "Yelp search (daily Room Designer 3D run)"];
 const DEFAULT_EMAILS_PER_DAY = 10;
 
 const LEFT_OUT_WHY = "franchises, big-box installers, plumbers, supply houses, showrooms or Thomas's client";
 
 /**
- * Splits Yelp results into the remodelers Room Designer 3D may pitch (with
- * their Yelp categories as "services") and a count of the ones it never pitches.
+ * Splits search results into the remodelers Room Designer 3D may pitch (with
+ * their Foursquare categories as "services") and a count of the ones it never pitches.
  */
-function screenRemodelers(results: YelpCandidate[]): { kept: DiscoveryCandidate[]; excluded: number } {
+function screenRemodelers(results: PlaceCandidate[]): { kept: DiscoveryCandidate[]; excluded: number } {
   const kept = results.filter((r) => remodelerExclusion(r) === null).map((r) => ({ ...r, services: r.categories.join(", ") || null }));
   return { kept, excluded: results.length - kept.length };
 }
@@ -39,7 +40,7 @@ type SearchOutcome = {
 
 /**
  * Searches one city for remodelers and saves the ones an address was found
- * for, leaving out every one Room Designer 3D must never pitch. Yelp and
+ * for, leaving out every one Room Designer 3D must never pitch. The business list and
  * the lookups are the only outside calls; nothing is emailed here. (The
  * "Find remodelers" buttons; the daily run goes through runDailyRoomDesigner.)
  */
@@ -48,7 +49,7 @@ export async function searchRemodelers(
   state: string,
   ctx: { source: string; maxCreate: number; deadline: number; now?: () => number },
 ): Promise<SearchOutcome> {
-  const results = await findBusinessesViaYelp(ROOM_DESIGNER_YELP_TERM, `${city}, ${state}`);
+  const results = await findBusinesses({ kind: "remodeler" }, city, state);
   const { kept, excluded } = screenRemodelers(results);
   const discovery = await createLeadsFromCandidates("room-designer", kept.slice(0, ctx.maxCreate), {
     city,
@@ -67,7 +68,7 @@ export function describeRemodelerSearch(where: string, outcome: SearchOutcome): 
   return outcome.excluded ? `${line} Left out ${outcome.excluded} that Room Designer 3D never pitches (${LEFT_OUT_WHY}).` : line;
 }
 
-const UNSENT_DAILY = { source: ROOM_DESIGNER_DAILY_SOURCE, status: "new", email: { not: null }, sendBlockedReason: null } as const;
+const UNSENT_DAILY = { source: { in: ROOM_DESIGNER_DAILY_SOURCES }, status: "new", email: { not: null }, sendBlockedReason: null } as const;
 
 /** How many remodelers daily runs found that haven't been emailed. */
 export function countUnsentDailyRemodelers(): Promise<number> {
@@ -78,7 +79,7 @@ export function runDailyRoomDesigner(emailsPerDay: number = DEFAULT_EMAILS_PER_D
   return runDailyDiscoveryAndSend(
     {
       pipeline: "room-designer",
-      searchTerm: ROOM_DESIGNER_YELP_TERM,
+      search: { kind: "remodeler" },
       listedNoun: { one: "business", many: "businesses" },
       foundNoun: "remodelers",
       source: ROOM_DESIGNER_DAILY_SOURCE,

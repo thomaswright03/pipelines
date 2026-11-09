@@ -28,9 +28,9 @@ the bulk send, and the daily cron.
   **Settings → Connections**; they are named in the bulk-send summary and the run summary. Every failed
   or delivery-unknown attempt adds an entry to the lead's History and a **Last send failed** marker to its
   row in the lead list, until a send succeeds.
-- **Only addresses tied to the lead.** Discovery guesses a website from the lead's name (Yelp and ADRE
-  don't give one). An address found on a guessed site is saved only if that site also shows the lead's
-  phone number or street address from Yelp/ADRE, or its city together with a second, independent sign
+- **Only addresses tied to the lead.** When the business list gives no website (and ADRE never does),
+  discovery guesses one from the lead's name. An address found on a guessed site is saved only if that site also shows the lead's
+  phone number or street address from the business list or ADRE, or its city together with a second, independent sign
   that the site is this lead's — the lead's distinctive name words in the page title, or (for an agent on
   their brokerage's site) an address carrying the agent's own name — on a site that lists no other
   locations (`src/lib/outreach/site-evidence.ts`). A mention of the city alone isn't enough: a chain, a

@@ -53,7 +53,7 @@ describe("DailyRunSettings for dataleadsell", () => {
     );
     expect(
       screen.getByText(
-        /^On: runs every hour from 9:03 AM to 4:03 PM Arizona time\. Each run sends first pitches until 10 have gone out today, searching the next city on Yelp for real estate agents/,
+        /^On: runs every hour from 9:03 AM to 4:03 PM Arizona time\. Each run sends first pitches until 10 have gone out today, searching the next city in the business list for real estate agents/,
       ),
     ).toBeTruthy();
     const line = screen.getByText(/Last run \(Sep 27\)/).closest("p")!;
